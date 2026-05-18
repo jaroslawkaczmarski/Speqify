@@ -4,28 +4,29 @@ compatibility_date = "2026-05-01"
 compatibility_flags = ["nodejs_compat"]
 
 # ---------------------------------------------------------------------------
-# Bindings — placeholders. Create resources after `wrangler login`, then fill
-# ids and uncomment (IMPLEMENTATION_PLAN.md §6 Phase 0).
+# Bindings. Secrets (SUPERADMIN_*, SESSION_SECRET) are NOT here — local dev via
+# apps/api/.dev.vars, production via Cloudflare Secrets Store (§9).
 # ---------------------------------------------------------------------------
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "speqify"
-# database_id = "TODO"
+[[d1_databases]]
+binding = "DB"
+database_name = "speqify"
+database_id = "61034a64-138c-4c1a-9c85-7cde9af9c600"
 
-# [[r2_buckets]]
-# binding = "MEDIA"
-# bucket_name = "speqify-media"
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "speqify-media"
 
+# Phase 6 (needs Workers Paid):
 # [[queues.producers]]
 # binding = "TRANSCRIPTION_QUEUE"
 # queue = "speqify-transcription"
-
 # [[queues.consumers]]
 # queue = "speqify-transcription"
 # max_batch_size = 10
 
+# Phase 6 (default Whisper transcription):
 # [ai]
-# binding = "AI"   # Workers AI (default Whisper transcription)
+# binding = "AI"
 
 [observability]
 enabled = true
