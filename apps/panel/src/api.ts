@@ -60,4 +60,23 @@ export const api = {
       `/admin/projects/${projectId}/panels`,
       { method: "POST", body: JSON.stringify({ audience, environmentUrl }) },
     ),
+  setPanelStatus: (panelId: string, status: "open" | "closed") =>
+    call<{ id: string; status: string }>(`/admin/panels/${panelId}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }),
+  deletePanel: (panelId: string) =>
+    call<{ deleted: boolean }>(`/admin/panels/${panelId}`, { method: "DELETE" }),
 };
+
+/** SDK loader snippet for a panel (Install tab, IMPLEMENTATION_PLAN §7.3). */
+export function sdkSnippet(secretToken: string): string {
+  return [
+    "<!-- Speqify overlay - load ONLY on non-production / review envs -->",
+    "<script",
+    "  defer",
+    '  src="https://speqify.app/sdk/v1/loader.js"',
+    `  data-speqify-token="${secretToken}"`,
+    "></script>",
+  ].join("\n");
+}

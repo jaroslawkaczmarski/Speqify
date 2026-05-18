@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { Panel, Project, User } from "@speqify/shared";
-import { api, auth } from "./api.js";
+import { api, auth, sdkSnippet } from "./api.js";
 
 /* SuperAdmin panel (Phase 2). Internal tool — Convergence-styled, accessible,
    single-column forms, labels above inputs (DESIGN.md). */
@@ -307,34 +307,62 @@ function Panels(props: { projects: Project[] }) {
 
       {projectId ? (
         <>
-          <div className="card">
-            <table>
-              <thead>
-                <tr>
-                  <th>Audience</th>
-                  <th>Status</th>
-                  <th>Environment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {panels.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="muted">
-                      No panels yet.
-                    </td>
-                  </tr>
-                ) : (
-                  panels.map((p) => (
-                    <tr key={p.id}>
-                      <td>{p.audience}</td>
-                      <td>{p.status}</td>
-                      <td>{p.environmentUrl}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          {panels.length === 0 ? (
+            <p className="card muted">No panels yet.</p>
+          ) : (
+            panels.map((p) => (
+              <div className="card" key={p.id}>
+                <div className="row">
+                  <div>
+                    <strong>{p.audience}</strong> · {p.status} ·{" "}
+                    <span className="muted">{p.environmentUrl}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          await api.setPanelStatus(p.id, p.status === "open" ? "closed" : "open");
+                          setPanels((await api.listPanels(projectId)).panels);
+                        })
+                      }
+                    >
+                      {p.status === "open" ? "Close" : "Reopen"}
+                    </button>
+                    <button
+                      className="btn"
+                      type="button"
+                      style={{ background: "var(--danger)" }}
+                      disabled={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          if (
+                            !window.confirm("Delete this panel? The link is revoked permanently.")
+                          )
+                            return;
+                          await api.deletePanel(p.id);
+                          setPanels((await api.listPanels(projectId)).panels);
+                        })
+                      }
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                <details style={{ marginTop: 12 }}>
+                  <summary>Install snippet &amp; token</summary>
+                  <p className="muted" style={{ marginTop: 8 }}>
+                    Token: <code>{p.secretToken}</code>
+                  </p>
+                  <pre style={{ overflowX: "auto" }}>
+                    <code>{sdkSnippet(p.secretToken)}</code>
+                  </pre>
+                </details>
+              </div>
+            ))
+          )}
           <form onSubmit={submit} className="card" noValidate>
             <div className="row">
               <strong>Create panel</strong>

@@ -335,6 +335,32 @@ export class D1Repository implements Repository {
     return rows.map(toPanel);
   }
 
+  async getPanelById(panelId: string): Promise<Panel | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.panels)
+      .where(eq(schema.panels.id, panelId))
+      .limit(1);
+    return rows[0] ? toPanel(rows[0]) : null;
+  }
+
+  async updatePanelStatus(panelId: string, status: PanelStatus): Promise<Panel | null> {
+    const updated = await this.db
+      .update(schema.panels)
+      .set({ status })
+      .where(eq(schema.panels.id, panelId))
+      .returning();
+    return updated[0] ? toPanel(updated[0]) : null;
+  }
+
+  async deletePanel(panelId: string): Promise<boolean> {
+    const deleted = await this.db
+      .delete(schema.panels)
+      .where(eq(schema.panels.id, panelId))
+      .returning();
+    return deleted.length > 0;
+  }
+
   async getProjectByOwner(ownerId: string): Promise<Project | null> {
     const rows = await this.db
       .select()

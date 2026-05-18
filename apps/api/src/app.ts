@@ -62,6 +62,8 @@ const createPanelSchema = z.object({
   environmentUrl: z.string().url(),
 });
 
+const panelStatusSchema = z.object({ status: z.enum(["open", "closed"]) });
+
 const exportConfigSchema = z.object({
   target: z.enum(["jira", "github", "json", "csv"]),
   credentials: z.record(z.string().max(4096)).optional(),
@@ -149,6 +151,21 @@ export function createApp(deps: { repo: Repository; config: AppConfig }): Hono<A
       { id: panel.id, secretToken, panelUrl: `${b.environmentUrl}${sep}speqify=${secretToken}` },
       201,
     );
+  });
+
+  admin.post("/panels/:panelId/status", validateJson(panelStatusSchema), async (c) => {
+    const panel = await repo.getPanelById(c.req.param("panelId"));
+    if (!panel) throw new ApiException("not_found", "Panel not found");
+    const { status } = body<z.infer<typeof panelStatusSchema>>(c);
+    const updated = await repo.updatePanelStatus(panel.id, status);
+    if (!updated) throw new ApiException("not_found", "Panel not found");
+    return c.json({ id: updated.id, status: updated.status });
+  });
+
+  admin.delete("/panels/:panelId", async (c) => {
+    const ok = await repo.deletePanel(c.req.param("panelId"));
+    if (!ok) throw new ApiException("not_found", "Panel not found");
+    return c.json({ deleted: true });
   });
 
   app.route("/admin", admin);

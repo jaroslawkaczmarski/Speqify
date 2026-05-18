@@ -302,13 +302,43 @@ describe("superadmin (Phase 2)", () => {
       body: JSON.stringify({ audience: "client", environmentUrl: "https://staging.acme.test" }),
     });
     expect(panelRes.status).toBe(201);
-    const panel = (await panelRes.json()) as { secretToken: string; panelUrl: string };
+    const panel = (await panelRes.json()) as {
+      id: string;
+      secretToken: string;
+      panelUrl: string;
+    };
     expect(panel.panelUrl).toContain(panel.secretToken);
 
     // The admin-created token works on the public SDK route.
     const validate = await app.request(`/panels/${panel.secretToken}`);
     expect(validate.status).toBe(200);
     expect((await validate.json()) as { status: string }).toMatchObject({ status: "open" });
+
+    // Phase 4: close the panel -> still visible but ingest blocked.
+    const closed = await app.request(`/admin/panels/${panel.id}/status`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ status: "closed" }),
+    });
+    expect(closed.status).toBe(200);
+    const afterClose = await app.request(`/panels/${panel.secretToken}`);
+    expect((await afterClose.json()) as { status: string }).toMatchObject({
+      status: "closed",
+    });
+    const blocked = await app.request(`/panels/${panel.secretToken}/annotations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(annotationBody()),
+    });
+    expect(blocked.status).toBe(423);
+
+    // Phase 4: delete the panel -> token revoked (404).
+    const del = await app.request(`/admin/panels/${panel.id}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${sa}` },
+    });
+    expect(del.status).toBe(200);
+    expect((await app.request(`/panels/${panel.secretToken}`)).status).toBe(404);
   });
 });
 

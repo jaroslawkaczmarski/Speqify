@@ -4,6 +4,7 @@ import type {
   ExportTarget,
   Panel,
   PanelAudience,
+  PanelStatus,
   Project,
   ProjectTemplate,
   Submission,
@@ -180,6 +181,27 @@ export class InMemoryRepository implements Repository {
 
   async listPanels(projectId: string): Promise<Panel[]> {
     return [...this.panels.values()].filter((p) => p.projectId === projectId);
+  }
+
+  async getPanelById(panelId: string): Promise<Panel | null> {
+    return [...this.panels.values()].find((p) => p.id === panelId) ?? null;
+  }
+
+  async updatePanelStatus(panelId: string, status: PanelStatus): Promise<Panel | null> {
+    const found = [...this.panels.values()].find((p) => p.id === panelId);
+    if (!found) return null;
+    found.status = status;
+    return found;
+  }
+
+  async deletePanel(panelId: string): Promise<boolean> {
+    for (const [token, p] of this.panels) {
+      if (p.id === panelId) {
+        this.panels.delete(token);
+        return true;
+      }
+    }
+    return false;
   }
 
   async getProjectByOwner(ownerId: string): Promise<Project | null> {

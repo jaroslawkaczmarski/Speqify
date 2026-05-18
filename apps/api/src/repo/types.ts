@@ -5,6 +5,7 @@ import type {
   ExportTarget,
   PanelAudience,
   Panel,
+  PanelStatus,
   Project,
   ProjectTemplate,
   Submission,
@@ -72,6 +73,14 @@ export interface Repository {
   }): Promise<Panel>;
 
   listPanels(projectId: string): Promise<Panel[]>;
+
+  getPanelById(panelId: string): Promise<Panel | null>;
+
+  /** Open/close a panel for submissions (§14). */
+  updatePanelStatus(panelId: string, status: PanelStatus): Promise<Panel | null>;
+
+  /** Revoke a panel (deletes the capability token) (§9, §14). */
+  deletePanel(panelId: string): Promise<boolean>;
 
   // --- Product Owner config (Phase 3) ---
 
