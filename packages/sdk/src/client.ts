@@ -1,5 +1,5 @@
 /** Minimal API client for the SDK -> Speqify ingest boundary. */
-import type { CreateAnnotationInput } from "@speqify/shared";
+import type { CreateAnnotationInput, MediaRef } from "@speqify/shared";
 
 export interface PanelInfo {
   panelId: string;
@@ -32,6 +32,16 @@ export class SpeqifyClient {
     });
     if (!r.ok) throw new Error(`Speqify ingest failed (${r.status})`);
     return (await r.json()) as { id: string };
+  }
+
+  async upload(kind: "screenshot" | "voice", blob: Blob): Promise<MediaRef> {
+    const r = await fetch(`${this.base}/panels/${this.token}/uploads?kind=${kind}`, {
+      method: "POST",
+      headers: { "content-type": blob.type || "application/octet-stream" },
+      body: blob,
+    });
+    if (!r.ok) throw new Error(`Speqify upload failed (${r.status})`);
+    return (await r.json()) as MediaRef;
   }
 
   async submit(submissionId: string, clientId: string): Promise<void> {

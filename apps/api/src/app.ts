@@ -12,7 +12,8 @@ import { authenticate, requireRole } from "./auth/auth.js";
 import type { AppConfig } from "./env.js";
 import { b64url, encryptJson, hashPassword } from "./lib/crypto.js";
 import { ApiException, errorEnvelope } from "./lib/http.js";
-import { newSecretToken } from "./lib/ids.js";
+import { newId, newSecretToken } from "./lib/ids.js";
+import { MEDIA_LIMITS, type MediaStore } from "./media/types.js";
 import { requestContext } from "./middleware/context.js";
 import { requireOpenPanel, withPanel } from "./middleware/panel.js";
 import { body, validateJson } from "./middleware/validate.js";
@@ -71,13 +72,32 @@ const exportConfigSchema = z.object({
   defaults: z.record(z.string().max(200)).default({}),
 });
 
-export function createApp(deps: { repo: Repository; config: AppConfig }): Hono<AppEnv> {
-  const { repo, config } = deps;
+export function createApp(deps: {
+  repo: Repository;
+  config: AppConfig;
+  mediaStore: MediaStore;
+}): Hono<AppEnv> {
+  const { repo, config, mediaStore } = deps;
   const app = new Hono<AppEnv>();
 
   app.use("*", requestContext);
 
   app.get("/health", (c) => c.json({ status: "ok", service: "speqify-api" }));
+
+  // Public media (unguessable keys are the access control, §14). Stable URLs
+  // so links embedded in exported tickets never rot.
+  app.get("/media/*", async (c) => {
+    const key = c.req.path.slice("/media/".length);
+    const media = await mediaStore.get(key);
+    if (!media) throw new ApiException("not_found", "Media not found");
+    return new Response(media.body, {
+      headers: {
+        "content-type": media.contentType,
+        "cache-control": "public, max-age=31536000, immutable",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  });
 
   // --- Admin / auth ---
   app.post("/admin/login", validateJson(loginSchema), async (c) => {
@@ -301,6 +321,23 @@ export function createApp(deps: { repo: Repository; config: AppConfig }): Hono<A
     });
     if (!ok) throw new ApiException("not_found", "Submission not found");
     return c.json({ complete: true });
+  });
+
+  // Media upload: raw body, ?kind=, size-capped. Returns a MediaRef the SDK
+  // then attaches to the annotation. Public URL is stable for ticket links.
+  panel.post("/:token/uploads", requireOpenPanel, async (c) => {
+    const p = c.get("panel");
+    const kind = c.req.query("kind") ?? "";
+    const limit = MEDIA_LIMITS[kind];
+    if (limit === undefined) throw new ApiException("bad_request", "Unknown media kind");
+    const buf = await c.req.arrayBuffer();
+    if (buf.byteLength === 0) throw new ApiException("bad_request", "Empty upload");
+    if (buf.byteLength > limit) throw new ApiException("bad_request", "Media too large");
+    const contentType = c.req.header("content-type") ?? "application/octet-stream";
+    const bucketKey = `panels/${p.id}/${kind}/${newId()}`;
+    await mediaStore.put(bucketKey, buf, contentType);
+    const publicUrl = new URL(`/media/${bucketKey}`, c.req.url).href;
+    return c.json({ bucketKey, contentType, bytes: buf.byteLength, publicUrl }, 201);
   });
 
   app.route("/panels", panel);

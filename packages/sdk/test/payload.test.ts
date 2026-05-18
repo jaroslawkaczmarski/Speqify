@@ -60,4 +60,20 @@ describe("buildAnnotationPayload", () => {
     });
     expect(createAnnotationSchema.safeParse(body).success).toBe(true);
   });
+
+  it("carries an uploaded voice MediaRef and stays contract-valid", () => {
+    const body = buildAnnotationPayload({
+      submissionId: "s",
+      clientId: "c",
+      pageUrl: "https://x.test/",
+      voice: {
+        bucketKey: "panels/p1/voice/abc",
+        contentType: "audio/webm",
+        bytes: 1024,
+        publicUrl: "https://api.speqify.app/media/panels/p1/voice/abc",
+      },
+    });
+    expect(body.voice?.bytes).toBe(1024);
+    expect(createAnnotationSchema.safeParse(body).success).toBe(true);
+  });
 });

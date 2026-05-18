@@ -16,6 +16,8 @@ export interface Env {
   readonly ENVELOPE_MASTER_KEY?: string;
   /** D1 binding — present once the database is provisioned (Phase 0/1 cloud). */
   readonly DB?: D1Database;
+  /** R2 binding for media (screenshots/voice/recordings). */
+  readonly MEDIA?: R2Bucket;
 }
 
 export interface AppConfig {

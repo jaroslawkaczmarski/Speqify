@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import type { AppConfig } from "../src/env.js";
 import { hashPassword } from "../src/lib/crypto.js";
+import { InMemoryMediaStore } from "../src/media/memory.js";
 import { InMemoryRepository } from "../src/repo/memory.js";
 
 const ENV_URL = "https://app.example.com";
@@ -86,7 +87,8 @@ function makeApp(extra?: Panel[]) {
     ],
     projects: [poProject],
   });
-  return { app: createApp({ repo, config }), repo };
+  const mediaStore = new InMemoryMediaStore();
+  return { app: createApp({ repo, config, mediaStore }), repo, mediaStore };
 }
 
 async function login(
@@ -405,5 +407,72 @@ describe("product owner config (Phase 3)", () => {
     });
     expect(test.status).toBe(200);
     expect((await test.json()) as { ok: boolean }).toMatchObject({ ok: true });
+  });
+});
+
+describe("media upload (Phase 5c)", () => {
+  it("uploads voice, serves it back, and the MediaRef ingests", async () => {
+    const { app } = makeApp();
+    const bytes = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+
+    const up = await app.request("/panels/open-tok/uploads?kind=voice", {
+      method: "POST",
+      headers: { "content-type": "audio/webm" },
+      body: bytes,
+    });
+    expect(up.status).toBe(201);
+    const ref = (await up.json()) as {
+      bucketKey: string;
+      contentType: string;
+      bytes: number;
+      publicUrl: string;
+    };
+    expect(ref.bytes).toBe(8);
+    expect(ref.publicUrl).toContain(`/media/${ref.bucketKey}`);
+
+    const got = await app.request(`/media/${ref.bucketKey}`);
+    expect(got.status).toBe(200);
+    expect(got.headers.get("content-type")).toBe("audio/webm");
+    expect(new Uint8Array(await got.arrayBuffer())).toEqual(bytes);
+
+    // The returned MediaRef must satisfy the annotation ingest contract.
+    const ann = await app.request("/panels/open-tok/annotations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(annotationBody({ type: "voice", voice: ref })),
+    });
+    expect(ann.status).toBe(201);
+  });
+
+  it("rejects unknown kind, empty and oversize uploads, and closed panels", async () => {
+    const { app } = makeApp();
+    expect(
+      (
+        await app.request("/panels/open-tok/uploads?kind=bogus", {
+          method: "POST",
+          body: new Uint8Array([1]),
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await app.request("/panels/open-tok/uploads?kind=voice", {
+          method: "POST",
+          body: new Uint8Array(0),
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await app.request("/panels/closed-tok/uploads?kind=voice", {
+          method: "POST",
+          headers: { "content-type": "audio/webm" },
+          body: new Uint8Array([1, 2, 3]),
+        })
+      ).status,
+    ).toBe(423);
+
+    const missing = await app.request("/media/panels/nope/voice/x");
+    expect(missing.status).toBe(404);
   });
 });

@@ -5,6 +5,7 @@
 import type {
   CreateAnnotationInput,
   HostAppContext,
+  MediaRef,
   NavigationStep,
   TechnicalContext,
 } from "@speqify/shared";
@@ -28,6 +29,7 @@ export function buildAnnotationPayload(args: {
   pageUrl: string;
   element?: ElementCapture | null;
   textNote?: string | null;
+  voice?: MediaRef | null;
   structured?: StructuredInput | null;
   technical?: TechnicalContext | null;
   hostApp?: HostAppContext | null;
@@ -42,7 +44,7 @@ export function buildAnnotationPayload(args: {
     breadcrumb: args.breadcrumb ?? [],
     element: args.element ?? null,
     screenshot: null,
-    voice: null,
+    voice: args.voice ?? null,
     recordingVideo: null,
     recordingAudio: null,
     textNote: args.textNote ?? null,

@@ -6,6 +6,7 @@
  */
 import type { HostAppContext, NavigationStep, TechnicalContext } from "@speqify/shared";
 import type { SpeqifyClient } from "./client.js";
+import { startVoiceRecording, type VoiceRecorder } from "./media.js";
 import { buildAnnotationPayload, type ElementCapture, type StructuredInput } from "./payload.js";
 import { captureElement } from "./selector.js";
 import { getClientId, getSubmissionId, resetSubmission } from "./session.js";
@@ -53,6 +54,8 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   let picked: ElementCapture | null = null;
   let pickedEl: Element | null = null;
   let count = 0;
+  let voiceBlob: Blob | null = null;
+  let recorder: VoiceRecorder | null = null;
 
   const fab = document.createElement("button");
   fab.className = "fab";
@@ -93,6 +96,10 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         <select data-kind><option value="bug">Bug</option><option value="change">Change</option></select>
         <select data-sev><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select>
       </div>
+      <div>
+        <button class="act" data-rec>Record voice</button>
+        <span class="muted" data-vstat></span>
+      </div>
       <textarea data-note placeholder="What should change here?"></textarea>
       <div>
         <button class="act primary" data-add>Add</button>
@@ -107,7 +114,29 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     const sev = q<HTMLSelectElement>("[data-sev]");
     const msg = q<HTMLElement>("[data-msg]");
     const counter = q<HTMLElement>("[data-count]");
+    const vstat = q<HTMLElement>("[data-vstat]");
+    const recBtn = q<HTMLButtonElement>("[data-rec]");
     counter.textContent = String(count);
+    if (voiceBlob) vstat.textContent = "voice attached";
+
+    recBtn.addEventListener("click", () => {
+      void (async () => {
+        if (recorder) {
+          voiceBlob = await recorder.stop();
+          recorder = null;
+          recBtn.textContent = "Record voice";
+          vstat.textContent = "voice attached";
+        } else {
+          try {
+            recorder = await startVoiceRecording();
+            recBtn.textContent = "Stop ●";
+            vstat.textContent = "recording…";
+          } catch {
+            vstat.textContent = "mic blocked";
+          }
+        }
+      })();
+    });
 
     const clearHl = (): void => pickedEl?.classList.remove("hl");
     const onPick = (e: Event): void => {
@@ -136,12 +165,14 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
             kind: kind.value === "change" ? "change" : "bug",
             severity: sev.value === "low" ? "low" : sev.value === "high" ? "high" : "medium",
           };
+          const voice = voiceBlob ? await client.upload("voice", voiceBlob) : null;
           const body = buildAnnotationPayload({
             submissionId: getSubmissionId(),
             clientId: getClientId(),
             pageUrl: location.href,
             element: picked,
             textNote: note.value.trim() || null,
+            voice,
             structured,
             technical: deps.technical?.() ?? null,
             hostApp: deps.hostApp ?? null,
@@ -152,6 +183,8 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
           counter.textContent = String(count);
           note.value = "";
           picked = null;
+          voiceBlob = null;
+          vstat.textContent = "";
           clearHl();
           sel.textContent = "No element selected";
           msg.className = "ok";
