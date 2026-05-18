@@ -4,7 +4,7 @@
 > relevant phase. Record every meaningful change in the **Revision Log** at the bottom.
 > Keep this file in sync with reality — it is the single source of truth for scope and status.
 
-- **Status:** In progress — Phases 0–7 shipped (logic); Phase 8 (Review) next. Plan kept in sync per phase.
+- **Status:** In progress — Phases 0–7 shipped (logic) + full SA/PO panel UI; Phase 8 (Review) next. Plan kept in sync per phase.
 - **Last updated:** 2026-05-19
 - **Owner:** TBD
 - **Related docs:** [`DESIGN.md`](./DESIGN.md) (Convergence design system — landing page authority)
@@ -180,13 +180,14 @@ Task:        generated ──Review──▶ accepted ──export──▶ expo
 - [x] CRUD projects + environment URL(s); list users
 - [x] Create PO account → generated password surfaced once
 - [~] Platform provider config: transcription via env wired; AI-provider config-as-entity lands with Phase 7; export creds envelope-encrypted (§9)
-- [x] Minimal SA UI in `apps/panel` (login, POs, projects, panels, Install snippet)
+- [x] SA UI in `apps/panel` — app shell (sidebar + subpages, hash router), Convergence design system via shared `@speqify/tokens` (§8.3 single source), role-branched, accessible hover/focus
 
-### Phase 3 — Product Owner: project config  ✅ backend done (PO UI deferred)
+### Phase 3 — Product Owner: project config  ✅ done (backend + UI)
 - [x] PO scoping (session → own project; SA via `?projectId`)
-- [x] Task template editor — backend (`PUT /po/project/template`); dedicated PO UI deferred
-- [x] Export target config: Jira | GitHub | JSON/CSV + envelope-encrypted credentials + field mapping
-- [x] **Test task**: config validation (`POST /po/project/export/test`); live Jira/GitHub probe in Phase 9
+- [x] Task template editor — backend + **PO UI** (Overview, Task template form)
+- [x] Export target config UI: Jira | GitHub | JSON/CSV, per-target credential/defaults inputs, envelope-encrypted, secrets never shown back
+- [x] **Test task** UI: `POST /po/project/export/test` with per-check result; live Jira/GitHub probe in Phase 9
+- [x] PO Tasks page: list + "Run AI analysis" trigger (accept/reject = Phase 8)
 
 ### Phase 4 — Panels management  ✅ done
 - [x] CRUD panels: audience, bound env URL, generated secret token, `open`/`closed`
@@ -568,3 +569,4 @@ surface than requirements gathering).
 | 2026-05-18 | — | Screen recording promoted to V1 (parallel-audio design). Full edge-case review: rewrote Phases 5–9 for correctness/resilience; strengthened §9 (consent, scrubbing, erasure, cost, traceability, API versioning, recovery, DR); added §14 edge-case & correctness reference. |
 | 2026-05-18 | — | Implementation Phases 0–6 shipped & pushed (private repo, CI green): monorepo+CI, Convergence landing, D1(EU)+R2 provisioned, core API (Hono/D1/Drizzle), SuperAdmin (backend+UI), PO config (template+encrypted export), panel lifecycle, full overlay SDK 0.5.0 (capture/redaction/recording/offline), transcription logic. 43 tests. Roadmap §6 checkboxes reconciled; deferred items flagged. Manual prerequisites still outstanding: Workers Paid (Queues/Workflows runtime) + LLM provider key (Phase 7 e2e). |
 | 2026-05-19 | — | Phase 7 (AI analysis) logic shipped: LLM port + prompt (injection-hardened) + `runAnalysis` with §14 correctness (single in-flight lock, snapshot, structured-output validate+repair, persist-then-process, no mutation of existing tasks); `POST /po/analyze` + `GET /po/tasks`. 47 tests, cloud-free. §6 Phase 7 reconciled. |
+| 2026-05-19 | — | Panel UI rebuilt on Convergence: extracted tokens to shared `@speqify/tokens` (landing re-exports; §8.3 single source), Tailwind in panel, app shell (sidebar + hash-routed subpages), role-branched SA/PO, accessible buttons (fixed dark-on-dark hover) + labelled forms. Phase 3 PO UI delivered (Overview/Template/Export+Test/Tasks). Added CORS for the SPA↔API cross-origin (real Phase 2/3 gap) + Node dev server. Phases 2/3 reconciled. |

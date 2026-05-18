@@ -52,6 +52,7 @@ beforeAll(async () => {
     superAdminPasswordHash: await hashPassword("s3cret-pass"),
     sessionSecret: "test-session-secret",
     envelopeKey: "zHuQuTjauJQTlfnNRsm8vtB3GxPm5PmqK_sTqHM9e1A",
+    panelOrigins: ["http://localhost:5174"],
   };
   poHash = await hashPassword("po-pass");
 });

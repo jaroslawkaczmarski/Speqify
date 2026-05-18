@@ -1,5 +1,5 @@
-/** Thin API client for the SA/PO panel. Bearer token kept in sessionStorage. */
-import type { Panel, Project, User } from "@speqify/shared";
+/** API client for the SA/PO panel. Bearer token in sessionStorage. */
+import type { Panel, Project, ProjectTemplate, Task, User } from "@speqify/shared";
 
 const API_BASE =
   (import.meta.env as Record<string, string | undefined>).VITE_API_BASE ?? "http://127.0.0.1:8787";
@@ -34,6 +34,20 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+export interface PoProjectView {
+  project: {
+    id: string;
+    name: string;
+    environmentUrls: string[];
+    template: ProjectTemplate;
+  };
+  export: {
+    target: string;
+    fieldMapping: Record<string, string>;
+    defaults: Record<string, string>;
+  } | null;
+}
+
 export const api = {
   login: (email: string, password: string) =>
     call<{ token: string; role: string }>("/admin/login", {
@@ -41,6 +55,8 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   me: () => call<{ sub: string; role: string; exp: number }>("/admin/me"),
+
+  // SuperAdmin
   listUsers: () => call<{ users: User[] }>("/admin/users"),
   createUser: (email: string, displayName: string) =>
     call<{ id: string; email: string; password: string }>("/admin/users", {
@@ -67,6 +83,34 @@ export const api = {
     }),
   deletePanel: (panelId: string) =>
     call<{ deleted: boolean }>(`/admin/panels/${panelId}`, { method: "DELETE" }),
+
+  // Product Owner
+  poProject: () => call<PoProjectView>("/po/project"),
+  putTemplate: (template: ProjectTemplate) =>
+    call<Project>("/po/project/template", {
+      method: "PUT",
+      body: JSON.stringify(template),
+    }),
+  putExport: (body: {
+    target: string;
+    credentials?: Record<string, string>;
+    fieldMapping?: Record<string, string>;
+    defaults?: Record<string, string>;
+  }) =>
+    call<{ configured: boolean; target: string }>("/po/project/export", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  testExport: () =>
+    call<{ ok: boolean; target: string; checks: { name: string; ok: boolean }[] }>(
+      "/po/project/export/test",
+      { method: "POST" },
+    ),
+  analyze: () =>
+    call<{ status: string; annotations: number; tasksCreated: number }>("/po/analyze", {
+      method: "POST",
+    }),
+  listTasks: () => call<{ tasks: Task[] }>("/po/tasks"),
 };
 
 /** SDK loader snippet for a panel (Install tab, IMPLEMENTATION_PLAN §7.3). */

@@ -1,178 +1,195 @@
-/* Internal SA/PO panel. Convergence tokens (subset of DESIGN.md) as CSS vars —
-   utilitarian, high-contrast, accessible (WCAG 2.2 AA). */
-:root {
-  --primary: #0f172a;
-  --on-primary: #ffffff;
-  --primary-hover: #1e293b;
-  --accent: #dc2626;
-  --danger: #b91c1c;
-  --success: #15803d;
-  --neutral: #f8fafc;
-  --surface: #ffffff;
-  --surface-muted: #f1f5f9;
-  --on-surface: #0f172a;
-  --secondary: #475569;
-  --muted: #64748b;
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
-  --border-focus: #1d4ed8;
-  --radius-sm: 6px;
-  --radius-md: 12px;
-  --sp-xs: 4px;
-  --sp-sm: 8px;
-  --sp-md: 16px;
-  --sp-lg: 24px;
-  --sp-xl: 32px;
-  font-family:
-    Inter,
-    -apple-system,
-    system-ui,
-    sans-serif;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-* {
-  box-sizing: border-box;
-}
-body {
-  margin: 0;
-  background: var(--neutral);
-  color: var(--on-surface);
-  font-size: 16px;
-  line-height: 1.6;
-}
-:where(a, button, input, select, [tabindex]):focus-visible {
-  outline: 2px solid var(--border-focus);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-@media (prefers-reduced-motion: reduce) {
-  * {
-    transition-duration: 0.001ms !important;
+/* Convergence — internal admin. Utilitarian, high-contrast, WCAG 2.2 AA. */
+@layer base {
+  body {
+    @apply bg-neutral font-sans text-body-md text-on-surface antialiased;
+  }
+  /* Visible focus: 2px, ≥3:1, offset (DESIGN.md §Borders & focus). */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid theme("colors.border-focus");
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition-duration: 0.001ms !important;
+    }
   }
 }
 
-.wrap {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: var(--sp-lg) var(--sp-md);
-}
-.center {
-  max-width: 380px;
-  margin: 10vh auto;
-  padding: 0 var(--sp-md);
-}
-h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  margin: 0 0 var(--sp-md);
-}
-h2 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: var(--sp-xl) 0 var(--sp-md);
-}
-.muted {
-  color: var(--muted);
-  font-size: 0.875rem;
-}
-.row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-md);
-}
+@layer components {
+  /* Layout ------------------------------------------------------------- */
+  .app-shell {
+    @apply grid min-h-screen;
+    grid-template-columns: 248px 1fr;
+    grid-template-rows: 64px 1fr;
+    grid-template-areas: "brand top" "side main";
+  }
+  @media (max-width: 768px) {
+    .app-shell {
+      grid-template-columns: 1fr;
+      grid-template-rows: 64px auto 1fr;
+      grid-template-areas: "top" "side" "main";
+    }
+  }
+  .shell-brand {
+    grid-area: brand;
+    @apply flex items-center gap-sm border-b border-r border-border bg-primary px-lg
+      text-h4 font-semibold text-on-primary;
+  }
+  .shell-top {
+    grid-area: top;
+    @apply flex items-center justify-between border-b border-border bg-surface px-lg;
+  }
+  .shell-side {
+    grid-area: side;
+    @apply border-r border-border bg-surface p-md;
+  }
+  .shell-main {
+    grid-area: main;
+    @apply overflow-y-auto bg-neutral p-xl;
+  }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: var(--sp-lg);
-  margin-bottom: var(--sp-md);
-}
+  .nav-link {
+    @apply flex items-center gap-sm rounded-md px-md py-sm text-label text-secondary
+      no-underline;
+  }
+  .nav-link:hover {
+    @apply bg-surface-muted text-primary;
+  }
+  .nav-link[aria-current="page"] {
+    @apply bg-primary text-on-primary;
+  }
+  .nav-group {
+    @apply mb-xs mt-lg px-md text-caption uppercase text-muted;
+  }
 
-label {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
-  margin: var(--sp-md) 0 var(--sp-xs);
-}
-input,
-select {
-  width: 100%;
-  height: 44px;
-  padding: 0 var(--sp-md);
-  font: inherit;
-  color: var(--on-surface);
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-}
+  /* Buttons — filled primary; hover never inverts contrast --------------- */
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-sm rounded-md
+      px-5 text-button transition-colors;
+    min-height: 44px;
+  }
+  .btn:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-primary text-on-primary;
+  }
+  .btn-primary:hover:not(:disabled) {
+    @apply bg-primary-hover text-on-primary;
+  }
+  .btn-secondary {
+    @apply btn border border-border-strong bg-surface text-primary;
+  }
+  .btn-secondary:hover:not(:disabled) {
+    @apply bg-surface-muted text-primary;
+  }
+  .btn-danger {
+    @apply btn bg-danger text-on-danger;
+  }
+  .btn-danger:hover:not(:disabled) {
+    @apply bg-accent-hover text-on-danger;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-secondary;
+  }
+  .btn-ghost:hover:not(:disabled) {
+    @apply bg-surface-muted text-primary;
+  }
+  .btn-sm {
+    min-height: 36px;
+    @apply px-3 text-body-sm;
+  }
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 0 var(--sp-lg);
-  font: inherit;
-  font-weight: 600;
-  border: 0;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  background: var(--primary);
-  color: var(--on-primary);
-}
-.btn:hover {
-  background: var(--primary-hover);
-}
-.btn[disabled] {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.btn-secondary {
-  background: var(--surface);
-  color: var(--primary);
-  border: 1px solid var(--border-strong);
-}
-.btn-link {
-  background: none;
-  color: var(--border-focus);
-  min-height: auto;
-  padding: var(--sp-xs);
-  text-decoration: underline;
-}
+  /* Forms — labels above inputs (DESIGN.md §Form-label rules) ------------ */
+  .field {
+    @apply mb-md;
+  }
+  .field > label {
+    @apply mb-xs block text-label text-primary;
+  }
+  .input,
+  .select,
+  .textarea {
+    @apply w-full rounded-sm border border-border-strong bg-surface px-md
+      text-body-md text-on-surface;
+  }
+  .input,
+  .select {
+    height: 44px;
+  }
+  .textarea {
+    @apply py-sm;
+    min-height: 96px;
+  }
+  .hint {
+    @apply mt-xs text-caption text-muted;
+  }
 
-.alert {
-  padding: var(--sp-sm) var(--sp-md);
-  border-radius: var(--radius-sm);
-  font-size: 0.875rem;
-  margin: var(--sp-md) 0;
-}
-.alert-error {
-  background: #fef2f2;
-  color: var(--danger);
-}
-.alert-ok {
-  background: #f0fdf4;
-  color: var(--success);
-}
+  /* Surfaces — border OR shadow, never both ----------------------------- */
+  .card {
+    @apply rounded-md border border-border bg-surface;
+  }
+  .card-pad {
+    @apply p-lg;
+  }
+  .page-title {
+    @apply text-h2 text-primary;
+  }
+  .page-sub {
+    @apply mt-xs text-body-sm text-muted;
+  }
+  .section-title {
+    @apply mb-md mt-2xl text-h4 text-primary;
+  }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-th,
-td {
-  text-align: left;
-  padding: var(--sp-sm);
-  border-bottom: 1px solid var(--border);
-}
-code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  background: var(--surface-muted);
-  padding: 2px 6px;
-  border-radius: 4px;
-  word-break: break-all;
+  .alert {
+    @apply flex gap-sm rounded-md px-md py-sm text-body-sm;
+  }
+  .alert-info {
+    background: #eff6ff;
+    @apply text-info;
+  }
+  .alert-success {
+    background: #f0fdf4;
+    @apply text-success;
+  }
+  .alert-warning {
+    background: #fffbeb;
+    @apply text-warning;
+  }
+  .alert-danger {
+    background: #fef2f2;
+    @apply text-danger;
+  }
+
+  .table {
+    @apply w-full border-collapse text-body-sm;
+  }
+  .table th {
+    @apply border-b border-border bg-surface-muted px-md py-sm text-left text-label
+      text-secondary;
+  }
+  .table td {
+    @apply border-b border-border px-md py-sm align-top;
+  }
+  .table tbody tr:hover {
+    @apply bg-surface-muted;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full bg-surface-muted px-3 py-1
+      text-caption uppercase text-secondary;
+  }
+  .code-block {
+    @apply overflow-x-auto rounded-md bg-primary p-md font-mono text-body-sm
+      text-on-primary;
+  }
+  .pill-code {
+    @apply rounded-sm bg-surface-muted px-2 py-1 font-mono text-caption text-on-surface;
+  }
 }

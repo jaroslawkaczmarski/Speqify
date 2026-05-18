@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { cors } from "hono/cors";
 import { z } from "zod";
 import {
   createAnnotationSchema,
@@ -89,6 +90,17 @@ export function createApp(deps: {
   const app = new Hono<AppEnv>();
 
   app.use("*", requestContext);
+
+  // CORS for the SA/PO SPA (separate origin from the API, §3). Panel
+  // capability-token ingest keeps its own per-project Origin allowlist.
+  const spaCors = cors({
+    origin: config.panelOrigins,
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["content-type", "authorization"],
+  });
+  app.use("/health", spaCors);
+  app.use("/admin/*", spaCors);
+  app.use("/po/*", spaCors);
 
   app.get("/health", (c) => c.json({ status: "ok", service: "speqify-api" }));
 

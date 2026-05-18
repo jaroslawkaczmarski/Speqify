@@ -30,6 +30,8 @@ export interface Env {
   readonly LLM_ENDPOINT?: string;
   readonly LLM_API_KEY?: string;
   readonly LLM_MODEL?: string;
+  /** Comma-separated allowed origins for the SA/PO SPA (CORS). */
+  readonly PANEL_ORIGINS?: string;
 }
 
 export interface AppConfig {
@@ -37,7 +39,15 @@ export interface AppConfig {
   superAdminPasswordHash: string;
   sessionSecret: string;
   envelopeKey: string;
+  panelOrigins: string[];
 }
+
+const DEFAULT_PANEL_ORIGINS = [
+  "http://localhost:5174",
+  "http://127.0.0.1:5174",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
 
 export function resolveConfig(env: Env): AppConfig {
   const superAdminEmail = env.SUPERADMIN_EMAIL;
@@ -49,5 +59,10 @@ export function resolveConfig(env: Env): AppConfig {
       "Missing required config: SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD_HASH, SESSION_SECRET, ENVELOPE_MASTER_KEY",
     );
   }
-  return { superAdminEmail, superAdminPasswordHash, sessionSecret, envelopeKey };
+  const panelOrigins = env.PANEL_ORIGINS
+    ? env.PANEL_ORIGINS.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : DEFAULT_PANEL_ORIGINS;
+  return { superAdminEmail, superAdminPasswordHash, sessionSecret, envelopeKey, panelOrigins };
 }
