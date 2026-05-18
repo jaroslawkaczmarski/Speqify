@@ -19,6 +19,7 @@ import {
   type VoiceRecorder,
 } from "./media.js";
 import { buildAnnotationPayload, type ElementCapture, type StructuredInput } from "./payload.js";
+import { redactBlob, type Rect } from "./redact.js";
 import { captureScreenshot } from "./screenshot.js";
 import { captureElement } from "./selector.js";
 import { getClientId, getSubmissionId, resetSubmission } from "./session.js";
@@ -73,6 +74,91 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   let recorder: VoiceRecorder | null = null;
   let screenRec: ScreenRecorder | null = null;
   let screenOut: ScreenRecording | null = null;
+  let redactedShot: Blob | null = null;
+
+  /** Modal canvas: drag black boxes over a screenshot before it's uploaded. */
+  const openRedactor = (source: Blob): void => {
+    void (async () => {
+      const bitmap = await createImageBitmap(source);
+      const maxW = 300;
+      const ratio = bitmap.width > maxW ? maxW / bitmap.width : 1;
+      const dw = Math.round(bitmap.width * ratio);
+      const dh = Math.round(bitmap.height * ratio);
+
+      const layer = document.createElement("div");
+      layer.style.cssText =
+        "position:fixed;inset:0;z-index:2147483001;background:rgba(15,23,42,.6);" +
+        "display:flex;align-items:center;justify-content:center";
+      const box = document.createElement("div");
+      box.style.cssText =
+        "background:#fff;border-radius:12px;padding:16px;font:14px Inter,system-ui,sans-serif";
+      const canvas = document.createElement("canvas");
+      canvas.width = dw;
+      canvas.height = dh;
+      canvas.style.cssText = "cursor:crosshair;display:block;touch-action:none";
+      const bar = document.createElement("div");
+      bar.style.cssText = "margin-top:12px;display:flex;gap:8px";
+      bar.innerHTML =
+        '<button class="act primary" data-ap>Apply</button>' +
+        '<button class="act" data-ca>Cancel</button>' +
+        '<span class="muted" style="align-self:center">Drag to hide sensitive areas</span>';
+      box.appendChild(canvas);
+      box.appendChild(bar);
+      layer.appendChild(box);
+      root.appendChild(layer);
+
+      const ctx = canvas.getContext("2d");
+      const rects: Rect[] = [];
+      let start: { x: number; y: number } | null = null;
+      let cur: Rect | null = null;
+      const draw = (): void => {
+        if (!ctx) return;
+        ctx.drawImage(bitmap, 0, 0, dw, dh);
+        ctx.fillStyle = "rgba(0,0,0,.85)";
+        for (const r of rects) ctx.fillRect(r.x, r.y, r.w, r.h);
+        if (cur) ctx.fillRect(cur.x, cur.y, cur.w, cur.h);
+      };
+      draw();
+      const norm = (a: { x: number; y: number }, b: { x: number; y: number }): Rect => ({
+        x: Math.min(a.x, b.x),
+        y: Math.min(a.y, b.y),
+        w: Math.abs(a.x - b.x),
+        h: Math.abs(a.y - b.y),
+      });
+      canvas.addEventListener("pointerdown", (e) => {
+        start = { x: e.offsetX, y: e.offsetY };
+      });
+      canvas.addEventListener("pointermove", (e) => {
+        if (!start) return;
+        cur = norm(start, { x: e.offsetX, y: e.offsetY });
+        draw();
+      });
+      canvas.addEventListener("pointerup", () => {
+        if (cur && cur.w > 2 && cur.h > 2) rects.push(cur);
+        start = null;
+        cur = null;
+        draw();
+      });
+
+      bar.querySelector("[data-ca]")?.addEventListener("click", () => {
+        bitmap.close();
+        layer.remove();
+      });
+      bar.querySelector("[data-ap]")?.addEventListener("click", () => {
+        void (async () => {
+          const natural = rects.map((r) => ({
+            x: r.x / ratio,
+            y: r.y / ratio,
+            w: r.w / ratio,
+            h: r.h / ratio,
+          }));
+          redactedShot = await redactBlob(source, natural);
+          bitmap.close();
+          layer.remove();
+        })();
+      });
+    })();
+  };
 
   const fab = document.createElement("button");
   fab.className = "fab";
@@ -116,6 +202,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       <label class="muted" style="display:block;margin:8px 0">
         <input type="checkbox" data-shot checked /> Attach screenshot of selection
       </label>
+      <button class="act" data-redact>Redact screenshot…</button>
       <div>
         <button class="act" data-rec>Record voice</button>
         <button class="act" data-screen>Record screen</button>
@@ -139,7 +226,19 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     const recBtn = q<HTMLButtonElement>("[data-rec]");
     const screenBtn = q<HTMLButtonElement>("[data-screen]");
     const shot = q<HTMLInputElement>("[data-shot]");
+    const redactBtn = q<HTMLButtonElement>("[data-redact]");
     counter.textContent = String(count);
+
+    redactBtn.addEventListener("click", () => {
+      void (async () => {
+        try {
+          const base = await captureScreenshot(pickedEl, deps.screenshotUrl);
+          openRedactor(base);
+        } catch {
+          vstat.textContent = "screenshot failed";
+        }
+      })();
+    });
     if (voiceBlob) vstat.textContent = "voice attached";
     if (screenOut) vstat.textContent = "recording attached";
 
@@ -210,7 +309,9 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
           };
           const voice = voiceBlob ? await client.upload("voice", voiceBlob) : null;
           let screenshot = null;
-          if (shot.checked) {
+          if (redactedShot) {
+            screenshot = await client.upload("screenshot", redactedShot);
+          } else if (shot.checked) {
             try {
               const blob = await captureScreenshot(pickedEl, deps.screenshotUrl);
               screenshot = await client.upload("screenshot", blob);
@@ -253,6 +354,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
           picked = null;
           voiceBlob = null;
           screenOut = null;
+          redactedShot = null;
           screenBtn.textContent = "Record screen";
           vstat.textContent = "";
           clearHl();

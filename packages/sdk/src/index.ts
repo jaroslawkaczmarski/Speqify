@@ -2,10 +2,10 @@
  * @speqify/sdk — overlay SDK.
  *
  * Done: token validation, consent gate, element pick, structured fields,
- * text note, voice, screenshot, narrated screen recording (parallel mic
- * audio for transcription), automatic technical + breadcrumb + host-app
- * context, idempotent add + Send, offline-resilient outbox (retry/backoff).
- * Later Phase 5 sub-step (§14): screenshot redaction/blur tool.
+ * text note, voice, screenshot + redaction tool, narrated screen recording
+ * (parallel mic audio for transcription), automatic technical + breadcrumb +
+ * host-app context, idempotent add + Send, offline-resilient outbox. Phase 5
+ * complete.
  */
 import type { HostAppContext } from "@speqify/shared";
 import { startBreadcrumb } from "./breadcrumb.js";
@@ -71,6 +71,6 @@ export async function init(options: SpeqifyInitOptions): Promise<SpeqifyInstance
   };
 }
 
-export const SDK_VERSION = "0.4.0";
+export const SDK_VERSION = "0.5.0";
 export { SpeqifyClient } from "./client.js";
 export { buildAnnotationPayload } from "./payload.js";
