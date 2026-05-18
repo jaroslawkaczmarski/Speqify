@@ -104,6 +104,8 @@ export function createApp(deps: { repo: Repository; config: AppConfig }): Hono<A
     }
   });
 
+  admin.get("/users", async (c) => c.json({ users: await repo.listUsers() }));
+
   admin.get("/projects", async (c) => c.json({ projects: await repo.listProjects() }));
 
   admin.post("/projects", validateJson(createProjectSchema), async (c) => {

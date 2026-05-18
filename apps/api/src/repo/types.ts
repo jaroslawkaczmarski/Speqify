@@ -42,6 +42,8 @@ export interface Repository {
 
   // --- SuperAdmin (Phase 2) ---
 
+  listUsers(): Promise<User[]>;
+
   createUser(args: {
     role: UserRole;
     email: string;

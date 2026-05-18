@@ -248,6 +248,17 @@ export class D1Repository implements Repository {
     };
   }
 
+  async listUsers(): Promise<User[]> {
+    const rows = await this.db.select().from(schema.users);
+    return rows.map((r) => ({
+      id: r.id,
+      role: r.role as UserRole,
+      email: r.email,
+      displayName: r.displayName,
+      createdAt: r.createdAt,
+    }));
+  }
+
   async listProjects(): Promise<Project[]> {
     const rows = await this.db.select().from(schema.projects);
     return rows.map(toProject);

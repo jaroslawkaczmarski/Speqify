@@ -125,6 +125,10 @@ export class InMemoryRepository implements Repository {
     return safe;
   }
 
+  async listUsers(): Promise<User[]> {
+    return [...this.users.values()].map(({ passwordHash: _ph, ...u }) => u);
+  }
+
   async listProjects(): Promise<Project[]> {
     return [...this.projects.values()];
   }

@@ -251,6 +251,13 @@ describe("superadmin (Phase 2)", () => {
     });
     expect(dup.status).toBe(409);
 
+    const users = await app.request("/admin/users", {
+      headers: { authorization: `Bearer ${sa}` },
+    });
+    const userList = ((await users.json()) as { users: { email: string }[] }).users;
+    expect(userList.some((u) => u.email === "newpo@speqify.app")).toBe(true);
+    expect(userList.every((u) => !("passwordHash" in u))).toBe(true);
+
     const projRes = await app.request("/admin/projects", {
       method: "POST",
       headers: auth,
