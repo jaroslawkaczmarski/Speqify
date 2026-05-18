@@ -8,6 +8,7 @@ import type { HostAppContext, NavigationStep, TechnicalContext } from "@speqify/
 import type { SpeqifyClient } from "./client.js";
 import { startVoiceRecording, type VoiceRecorder } from "./media.js";
 import { buildAnnotationPayload, type ElementCapture, type StructuredInput } from "./payload.js";
+import { captureScreenshot } from "./screenshot.js";
 import { captureElement } from "./selector.js";
 import { getClientId, getSubmissionId, resetSubmission } from "./session.js";
 
@@ -34,6 +35,7 @@ export interface OverlayDeps {
   technical?: () => TechnicalContext;
   breadcrumb?: () => NavigationStep[];
   hostApp?: HostAppContext;
+  screenshotUrl?: string;
 }
 
 export interface OverlayInstance {
@@ -96,6 +98,9 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         <select data-kind><option value="bug">Bug</option><option value="change">Change</option></select>
         <select data-sev><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select>
       </div>
+      <label class="muted" style="display:block;margin:8px 0">
+        <input type="checkbox" data-shot checked /> Attach screenshot of selection
+      </label>
       <div>
         <button class="act" data-rec>Record voice</button>
         <span class="muted" data-vstat></span>
@@ -116,6 +121,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     const counter = q<HTMLElement>("[data-count]");
     const vstat = q<HTMLElement>("[data-vstat]");
     const recBtn = q<HTMLButtonElement>("[data-rec]");
+    const shot = q<HTMLInputElement>("[data-shot]");
     counter.textContent = String(count);
     if (voiceBlob) vstat.textContent = "voice attached";
 
@@ -166,12 +172,22 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
             severity: sev.value === "low" ? "low" : sev.value === "high" ? "high" : "medium",
           };
           const voice = voiceBlob ? await client.upload("voice", voiceBlob) : null;
+          let screenshot = null;
+          if (shot.checked) {
+            try {
+              const blob = await captureScreenshot(pickedEl, deps.screenshotUrl);
+              screenshot = await client.upload("screenshot", blob);
+            } catch {
+              /* non-fatal: send the annotation without a screenshot */
+            }
+          }
           const body = buildAnnotationPayload({
             submissionId: getSubmissionId(),
             clientId: getClientId(),
             pageUrl: location.href,
             element: picked,
             textNote: note.value.trim() || null,
+            screenshot,
             voice,
             structured,
             technical: deps.technical?.() ?? null,

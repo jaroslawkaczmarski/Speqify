@@ -76,4 +76,20 @@ describe("buildAnnotationPayload", () => {
     expect(body.voice?.bytes).toBe(1024);
     expect(createAnnotationSchema.safeParse(body).success).toBe(true);
   });
+
+  it("carries an uploaded screenshot MediaRef and stays contract-valid", () => {
+    const body = buildAnnotationPayload({
+      submissionId: "s",
+      clientId: "c",
+      pageUrl: "https://x.test/",
+      screenshot: {
+        bucketKey: "panels/p1/screenshot/xyz",
+        contentType: "image/png",
+        bytes: 4096,
+        publicUrl: "https://api.speqify.app/media/panels/p1/screenshot/xyz",
+      },
+    });
+    expect(body.screenshot?.contentType).toBe("image/png");
+    expect(createAnnotationSchema.safeParse(body).success).toBe(true);
+  });
 });

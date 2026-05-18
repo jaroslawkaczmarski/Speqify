@@ -21,6 +21,8 @@ export interface SpeqifyInitOptions {
   enabled: boolean;
   /** Host-app context bundled with every annotation (build/env/user/flags). */
   context?: HostAppContext;
+  /** Override the html2canvas CDN URL (defaults to a pinned jsDelivr build). */
+  html2canvasUrl?: string;
 }
 
 export type SpeqifyInstance = OverlayInstance;
@@ -37,6 +39,7 @@ export async function init(options: SpeqifyInitOptions): Promise<SpeqifyInstance
     technical: technical.snapshot,
     breadcrumb: breadcrumb.steps,
     ...(options.context ? { hostApp: options.context } : {}),
+    ...(options.html2canvasUrl ? { screenshotUrl: options.html2canvasUrl } : {}),
   });
 
   return {
