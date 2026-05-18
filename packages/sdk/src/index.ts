@@ -1,14 +1,16 @@
 /**
- * @speqify/sdk — overlay SDK (Phase 5 foundation).
+ * @speqify/sdk — overlay SDK.
  *
- * Implemented: token validation, element pick, text note, idempotent
- * add + Send. NOT yet (later Phase 5 sub-steps, §14): screenshot, voice,
- * screen recording, technical-context capture, redaction, offline drafts,
- * consent notice, host-app context injection.
+ * Done: token validation, consent gate, element pick, structured fields,
+ * text note, automatic technical + breadcrumb + host-app context, idempotent
+ * add + Send. Later Phase 5 sub-steps (§14): screenshot, voice, screen
+ * recording, redaction tool, offline drafts.
  */
 import type { HostAppContext } from "@speqify/shared";
+import { startBreadcrumb } from "./breadcrumb.js";
 import { SpeqifyClient } from "./client.js";
 import { mountOverlay, type OverlayInstance } from "./overlay.js";
+import { startTechnicalCapture } from "./technical.js";
 
 export interface SpeqifyInitOptions {
   /** Panel capability token (from URL/launcher). SDK stays dormant if invalid. */
@@ -17,7 +19,7 @@ export interface SpeqifyInitOptions {
   apiBaseUrl: string;
   /** Only activate in non-production / review environments. */
   enabled: boolean;
-  /** Reserved — host-app context injection lands in a later Phase 5 sub-step. */
+  /** Host-app context bundled with every annotation (build/env/user/flags). */
   context?: HostAppContext;
 }
 
@@ -28,9 +30,26 @@ export async function init(options: SpeqifyInitOptions): Promise<SpeqifyInstance
   const client = new SpeqifyClient(options.apiBaseUrl, options.token);
   const info = await client.validate();
   if (!info || info.status !== "open") return null;
-  return mountOverlay(client);
+
+  const technical = startTechnicalCapture();
+  const breadcrumb = startBreadcrumb();
+  const overlay = mountOverlay(client, {
+    technical: technical.snapshot,
+    breadcrumb: breadcrumb.steps,
+    ...(options.context ? { hostApp: options.context } : {}),
+  });
+
+  return {
+    open: overlay.open,
+    close: overlay.close,
+    destroy: () => {
+      overlay.destroy();
+      technical.stop();
+      breadcrumb.stop();
+    },
+  };
 }
 
-export const SDK_VERSION = "0.1.0";
+export const SDK_VERSION = "0.2.0";
 export { SpeqifyClient } from "./client.js";
 export { buildAnnotationPayload } from "./payload.js";

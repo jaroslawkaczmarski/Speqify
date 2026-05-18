@@ -38,4 +38,26 @@ describe("buildAnnotationPayload", () => {
     expect(createAnnotationSchema.safeParse(a).success).toBe(true);
     expect(a.clientAnnotationId).not.toBe(b.clientAnnotationId);
   });
+
+  it("stays contract-valid with structured + technical + host-app + breadcrumb", () => {
+    const at = new Date().toISOString();
+    const body = buildAnnotationPayload({
+      submissionId: "s",
+      clientId: "c",
+      pageUrl: "https://x.test/p",
+      textNote: "note",
+      structured: { kind: "bug", severity: "high" },
+      breadcrumb: [{ url: "https://x.test/p", at, action: "load" }],
+      hostApp: { appVersion: "1.2.3", environment: "staging", featureFlags: { beta: true } },
+      technical: {
+        consoleEntries: [{ level: "error", message: "boom", at }],
+        jsErrors: [{ message: "TypeError", at }],
+        network: [{ method: "GET", url: "https://x.test/api", status: 500, at }],
+        browser: "UA",
+        os: "Win32",
+        screen: { w: 1920, h: 1080, dpr: 2 },
+      },
+    });
+    expect(createAnnotationSchema.safeParse(body).success).toBe(true);
+  });
 });
