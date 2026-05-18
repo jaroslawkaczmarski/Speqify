@@ -85,6 +85,8 @@ export const hostAppContextSchema = z.object({
 export const createAnnotationSchema = z.object({
   clientAnnotationId: idSchema,
   submissionId: idSchema,
+  /** Ephemeral per-browser id; binds the annotation's submission batch. */
+  clientId: z.string().min(1).max(64),
   type: z.enum(["element", "global", "voice", "recording"]),
   pageUrl: z.string().url().max(2_048),
   breadcrumb: z.array(navigationStepSchema).max(50).default([]),

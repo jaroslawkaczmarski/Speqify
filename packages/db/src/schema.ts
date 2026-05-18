@@ -3,11 +3,12 @@
  * constraints and migrations. JSON columns hold the structured shapes from
  * `@speqify/shared` (stored as text, typed via `$type`).
  */
-import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { relations, sql } from "drizzle-orm";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import type {
   ElementRef,
   HostAppContext,
+  MediaRef,
   NavigationStep,
   ProjectTemplate,
   TechnicalContext,
@@ -24,6 +25,9 @@ export const users = sqliteTable("users", {
   role: text("role").notNull(),
   email: text("email").notNull().unique(),
   displayName: text("display_name").notNull(),
+  // PBKDF2 hash for Product Owner accounts. SuperAdmin authenticates via a
+  // platform secret (Secrets Store) and may have no hash here (§9, §11).
+  passwordHash: text("password_hash"),
   createdAt: now(),
 });
 
@@ -94,16 +98,18 @@ export const annotations = sqliteTable(
     submissionId: text("submission_id")
       .notNull()
       .references(() => submissions.id),
+    // SDK-generated id — idempotency key for retried Send (§14).
+    clientAnnotationId: text("client_annotation_id").notNull(),
     type: text("type").notNull(),
     status: text("status").notNull().default("draft"),
     audience: text("audience").notNull(),
     pageUrl: text("page_url").notNull(),
     breadcrumb: text("breadcrumb", { mode: "json" }).$type<NavigationStep[]>(),
     element: text("element", { mode: "json" }).$type<ElementRef>(),
-    screenshotKey: text("screenshot_key"),
-    voiceKey: text("voice_key"),
-    recordingVideoKey: text("recording_video_key"),
-    recordingAudioKey: text("recording_audio_key"),
+    screenshot: text("screenshot", { mode: "json" }).$type<MediaRef>(),
+    voice: text("voice", { mode: "json" }).$type<MediaRef>(),
+    recordingVideo: text("recording_video", { mode: "json" }).$type<MediaRef>(),
+    recordingAudio: text("recording_audio", { mode: "json" }).$type<MediaRef>(),
     transcript: text("transcript"),
     transcriptionStatus: text("transcription_status"),
     textNote: text("text_note"),
@@ -120,6 +126,7 @@ export const annotations = sqliteTable(
   (t) => ({
     byPanelStatus: index("annotations_panel_status_idx").on(t.panelId, t.status),
     bySubmission: index("annotations_submission_idx").on(t.submissionId),
+    clientIdUq: uniqueIndex("annotations_panel_client_uq").on(t.panelId, t.clientAnnotationId),
   }),
 );
 
@@ -161,3 +168,71 @@ export const tasks = sqliteTable(
     byProjectStatus: index("tasks_project_status_idx").on(t.projectId, t.status),
   }),
 );
+
+// ---------------------------------------------------------------------------
+// Relations (query-layer convenience; FK columns above are the source of truth)
+// ---------------------------------------------------------------------------
+
+export const usersRelations = relations(users, ({ many }) => ({
+  projects: many(projects),
+}));
+
+export const projectsRelations = relations(projects, ({ one, many }) => ({
+  productOwner: one(users, {
+    fields: [projects.productOwnerId],
+    references: [users.id],
+  }),
+  panels: many(panels),
+  tasks: many(tasks),
+  analysisRuns: many(analysisRuns),
+  exportConfigs: many(exportConfigs),
+}));
+
+export const exportConfigsRelations = relations(exportConfigs, ({ one }) => ({
+  project: one(projects, {
+    fields: [exportConfigs.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const panelsRelations = relations(panels, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [panels.projectId],
+    references: [projects.id],
+  }),
+  submissions: many(submissions),
+  annotations: many(annotations),
+}));
+
+export const submissionsRelations = relations(submissions, ({ one, many }) => ({
+  panel: one(panels, {
+    fields: [submissions.panelId],
+    references: [panels.id],
+  }),
+  annotations: many(annotations),
+}));
+
+export const annotationsRelations = relations(annotations, ({ one }) => ({
+  panel: one(panels, {
+    fields: [annotations.panelId],
+    references: [panels.id],
+  }),
+  submission: one(submissions, {
+    fields: [annotations.submissionId],
+    references: [submissions.id],
+  }),
+}));
+
+export const analysisRunsRelations = relations(analysisRuns, ({ one }) => ({
+  project: one(projects, {
+    fields: [analysisRuns.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const tasksRelations = relations(tasks, ({ one }) => ({
+  project: one(projects, {
+    fields: [tasks.projectId],
+    references: [projects.id],
+  }),
+}));
