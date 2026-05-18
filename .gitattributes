@@ -1,0 +1,19 @@
+# Normalize line endings: LF in the repo, auto on checkout.
+* text=auto eol=lf
+
+# Treat binaries as binary (never eol-convert / diff as text).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.mp3 binary
+*.mp4 binary
+*.webm binary
+*.zip binary
+
+# Lockfile: keep as-is, collapse in diffs.
+pnpm-lock.yaml -diff linguist-generated
