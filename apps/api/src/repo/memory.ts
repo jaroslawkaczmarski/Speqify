@@ -1,5 +1,7 @@
 import type {
   Annotation,
+  ExportConfig,
+  ExportTarget,
   Panel,
   PanelAudience,
   Project,
@@ -21,6 +23,7 @@ export class InMemoryRepository implements Repository {
   private annotations = new Map<string, Annotation>();
   private users = new Map<string, UserWithSecret>();
   private projects = new Map<string, Project>();
+  private exportConfigs = new Map<string, ExportConfig>();
 
   constructor(seed?: { panels?: Panel[]; users?: UserWithSecret[]; projects?: Project[] }) {
     for (const p of seed?.panels ?? []) this.panels.set(p.secretToken, p);
@@ -177,5 +180,45 @@ export class InMemoryRepository implements Repository {
 
   async listPanels(projectId: string): Promise<Panel[]> {
     return [...this.panels.values()].filter((p) => p.projectId === projectId);
+  }
+
+  async getProjectByOwner(ownerId: string): Promise<Project | null> {
+    return [...this.projects.values()].find((p) => p.productOwnerId === ownerId) ?? null;
+  }
+
+  async updateProjectTemplate(
+    projectId: string,
+    template: ProjectTemplate,
+  ): Promise<Project | null> {
+    const project = this.projects.get(projectId);
+    if (!project) return null;
+    project.template = template;
+    return project;
+  }
+
+  async getExportConfig(projectId: string): Promise<ExportConfig | null> {
+    return this.exportConfigs.get(projectId) ?? null;
+  }
+
+  async upsertExportConfig(args: {
+    projectId: string;
+    target: ExportTarget;
+    encryptedCredentialsRef: string | null;
+    fieldMapping: Record<string, string>;
+    defaults: Record<string, string>;
+  }): Promise<ExportConfig> {
+    const existing = this.exportConfigs.get(args.projectId);
+    const cfg: ExportConfig = {
+      id: existing?.id ?? newId(),
+      projectId: args.projectId,
+      target: args.target,
+      encryptedCredentialsRef: args.encryptedCredentialsRef,
+      fieldMapping: args.fieldMapping,
+      defaults: args.defaults,
+    };
+    this.exportConfigs.set(args.projectId, cfg);
+    const project = this.projects.get(args.projectId);
+    if (project) project.exportConfigId = cfg.id;
+    return cfg;
   }
 }

@@ -1,6 +1,8 @@
 import type {
   Annotation,
   CreateAnnotationInput,
+  ExportConfig,
+  ExportTarget,
   PanelAudience,
   Panel,
   Project,
@@ -70,4 +72,20 @@ export interface Repository {
   }): Promise<Panel>;
 
   listPanels(projectId: string): Promise<Panel[]>;
+
+  // --- Product Owner config (Phase 3) ---
+
+  getProjectByOwner(ownerId: string): Promise<Project | null>;
+
+  updateProjectTemplate(projectId: string, template: ProjectTemplate): Promise<Project | null>;
+
+  getExportConfig(projectId: string): Promise<ExportConfig | null>;
+
+  upsertExportConfig(args: {
+    projectId: string;
+    target: ExportTarget;
+    encryptedCredentialsRef: string | null;
+    fieldMapping: Record<string, string>;
+    defaults: Record<string, string>;
+  }): Promise<ExportConfig>;
 }

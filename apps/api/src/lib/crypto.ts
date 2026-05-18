@@ -104,3 +104,35 @@ export async function verifySession(secret: string, token: string): Promise<Sess
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Envelope encryption (AES-GCM) for export credentials at rest (§9, §14).
+// Master key lives in Secrets Store (prod) / .dev.vars (local), never in D1.
+// ---------------------------------------------------------------------------
+
+async function aesKey(masterKeyB64Url: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey("raw", ub64url(masterKeyB64Url), "AES-GCM", false, [
+    "encrypt",
+    "decrypt",
+  ]);
+}
+
+export async function encryptJson(masterKeyB64Url: string, value: unknown): Promise<string> {
+  const key = await aesKey(masterKeyB64Url);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const pt = new TextEncoder().encode(JSON.stringify(value));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, pt));
+  return `v1.${b64url(iv)}.${b64url(ct)}`;
+}
+
+export async function decryptJson<T>(masterKeyB64Url: string, blob: string): Promise<T> {
+  const [v, ivB64, ctB64] = blob.split(".");
+  if (v !== "v1" || !ivB64 || !ctB64) throw new Error("bad ciphertext");
+  const key = await aesKey(masterKeyB64Url);
+  const pt = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: ub64url(ivB64) },
+    key,
+    ub64url(ctB64),
+  );
+  return JSON.parse(new TextDecoder().decode(pt)) as T;
+}

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { z } from "zod";
 import {
   createAnnotationSchema,
@@ -9,7 +10,7 @@ import {
 } from "@speqify/shared";
 import { authenticate, requireRole } from "./auth/auth.js";
 import type { AppConfig } from "./env.js";
-import { b64url, hashPassword } from "./lib/crypto.js";
+import { b64url, encryptJson, hashPassword } from "./lib/crypto.js";
 import { ApiException, errorEnvelope } from "./lib/http.js";
 import { newSecretToken } from "./lib/ids.js";
 import { requestContext } from "./middleware/context.js";
@@ -59,6 +60,13 @@ const createProjectSchema = z.object({
 const createPanelSchema = z.object({
   audience: z.enum(["client", "tester", "po"]),
   environmentUrl: z.string().url(),
+});
+
+const exportConfigSchema = z.object({
+  target: z.enum(["jira", "github", "json", "csv"]),
+  credentials: z.record(z.string().max(4096)).optional(),
+  fieldMapping: z.record(z.string().max(200)).default({}),
+  defaults: z.record(z.string().max(200)).default({}),
 });
 
 export function createApp(deps: { repo: Repository; config: AppConfig }): Hono<AppEnv> {
@@ -144,6 +152,91 @@ export function createApp(deps: { repo: Repository; config: AppConfig }): Hono<A
   });
 
   app.route("/admin", admin);
+
+  // --- Product Owner config (Phase 3) ---
+  const po = new Hono<AppEnv>();
+  po.use("*", requireRole(config, ["product_owner", "superadmin"]));
+
+  const resolvePoProject = async (c: Context<AppEnv>) => {
+    const s = c.get("session");
+    if (s.role === "product_owner") return repo.getProjectByOwner(s.sub);
+    const pid = c.req.query("projectId");
+    return pid ? repo.getProject(pid) : null;
+  };
+
+  po.get("/project", async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    const ec = await repo.getExportConfig(project.id);
+    return c.json({
+      project: {
+        id: project.id,
+        name: project.name,
+        environmentUrls: project.environmentUrls,
+        template: project.template,
+      },
+      export: ec
+        ? { target: ec.target, fieldMapping: ec.fieldMapping, defaults: ec.defaults }
+        : null,
+    });
+  });
+
+  po.put("/project/template", validateJson(templateSchema), async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    const t = body<z.infer<typeof templateSchema>>(c);
+    const updated = await repo.updateProjectTemplate(project.id, t);
+    return c.json(updated);
+  });
+
+  po.put("/project/export", validateJson(exportConfigSchema), async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    const b = body<z.infer<typeof exportConfigSchema>>(c);
+    // Credentials are envelope-encrypted at rest; never returned to clients (§9).
+    const encryptedCredentialsRef =
+      b.credentials && Object.keys(b.credentials).length > 0
+        ? await encryptJson(config.envelopeKey, b.credentials)
+        : null;
+    const ec = await repo.upsertExportConfig({
+      projectId: project.id,
+      target: b.target,
+      encryptedCredentialsRef,
+      fieldMapping: b.fieldMapping,
+      defaults: b.defaults,
+    });
+    return c.json({ configured: true, target: ec.target });
+  });
+
+  po.post("/project/export/test", async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    const ec = await repo.getExportConfig(project.id);
+    if (!ec) throw new ApiException("bad_request", "No export target configured");
+    const needsCreds = ec.target === "jira" || ec.target === "github";
+    const checks = [
+      { name: "target_selected", ok: true },
+      {
+        name: "credentials_present",
+        ok: !needsCreds || ec.encryptedCredentialsRef !== null,
+      },
+    ];
+    if (ec.target === "jira") {
+      checks.push({ name: "jira_project_key", ok: Boolean(ec.defaults["projectKey"]) });
+      checks.push({ name: "jira_issue_type", ok: Boolean(ec.defaults["issueType"]) });
+    }
+    if (ec.target === "github") {
+      checks.push({ name: "github_repo", ok: Boolean(ec.defaults["repo"]) });
+    }
+    return c.json({
+      ok: checks.every((x) => x.ok),
+      target: ec.target,
+      checks,
+      note: "Config validation only — live Jira/GitHub probe lands in Phase 9.",
+    });
+  });
+
+  app.route("/po", po);
 
   // --- Panel (capability-token) ---
   const panel = new Hono<AppEnv>();

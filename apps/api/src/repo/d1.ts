@@ -5,6 +5,8 @@ import type {
   Annotation,
   AnnotationStatus,
   AnnotationType,
+  ExportConfig,
+  ExportTarget,
   PanelAudience,
   PanelStatus,
   Panel,
@@ -23,6 +25,19 @@ type SubmissionRow = typeof schema.submissions.$inferSelect;
 type AnnotationRow = typeof schema.annotations.$inferSelect;
 type UserRow = typeof schema.users.$inferSelect;
 type ProjectRow = typeof schema.projects.$inferSelect;
+
+type ExportConfigRow = typeof schema.exportConfigs.$inferSelect;
+
+function toExportConfig(r: ExportConfigRow): ExportConfig {
+  return {
+    id: r.id,
+    projectId: r.projectId,
+    target: r.target as ExportTarget,
+    encryptedCredentialsRef: r.encryptedCredentialsRef ?? null,
+    fieldMapping: r.fieldMapping,
+    defaults: r.defaults,
+  };
+}
 
 function toProject(r: ProjectRow): Project {
   return {
@@ -318,5 +333,84 @@ export class D1Repository implements Repository {
       .from(schema.panels)
       .where(eq(schema.panels.projectId, projectId));
     return rows.map(toPanel);
+  }
+
+  async getProjectByOwner(ownerId: string): Promise<Project | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.projects)
+      .where(eq(schema.projects.productOwnerId, ownerId))
+      .limit(1);
+    return rows[0] ? toProject(rows[0]) : null;
+  }
+
+  async updateProjectTemplate(
+    projectId: string,
+    template: ProjectTemplate,
+  ): Promise<Project | null> {
+    const updated = await this.db
+      .update(schema.projects)
+      .set({ template })
+      .where(eq(schema.projects.id, projectId))
+      .returning();
+    return updated[0] ? toProject(updated[0]) : null;
+  }
+
+  async getExportConfig(projectId: string): Promise<ExportConfig | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.exportConfigs)
+      .where(eq(schema.exportConfigs.projectId, projectId))
+      .limit(1);
+    return rows[0] ? toExportConfig(rows[0]) : null;
+  }
+
+  async upsertExportConfig(args: {
+    projectId: string;
+    target: ExportTarget;
+    encryptedCredentialsRef: string | null;
+    fieldMapping: Record<string, string>;
+    defaults: Record<string, string>;
+  }): Promise<ExportConfig> {
+    const existing = await this.db
+      .select()
+      .from(schema.exportConfigs)
+      .where(eq(schema.exportConfigs.projectId, args.projectId))
+      .limit(1);
+
+    let row: ExportConfigRow;
+    if (existing[0]) {
+      const updated = await this.db
+        .update(schema.exportConfigs)
+        .set({
+          target: args.target,
+          encryptedCredentialsRef: args.encryptedCredentialsRef,
+          fieldMapping: args.fieldMapping,
+          defaults: args.defaults,
+        })
+        .where(eq(schema.exportConfigs.id, existing[0].id))
+        .returning();
+      row = updated[0] as ExportConfigRow;
+    } else {
+      const inserted = await this.db
+        .insert(schema.exportConfigs)
+        .values({
+          id: newId(),
+          projectId: args.projectId,
+          target: args.target,
+          encryptedCredentialsRef: args.encryptedCredentialsRef,
+          fieldMapping: args.fieldMapping,
+          defaults: args.defaults,
+        })
+        .returning();
+      row = inserted[0] as ExportConfigRow;
+    }
+
+    await this.db
+      .update(schema.projects)
+      .set({ exportConfigId: row.id })
+      .where(eq(schema.projects.id, args.projectId));
+
+    return toExportConfig(row);
   }
 }

@@ -1,4 +1,4 @@
-import type { Panel } from "@speqify/shared";
+import type { Panel, Project } from "@speqify/shared";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import type { AppConfig } from "../src/env.js";
@@ -48,9 +48,28 @@ beforeAll(async () => {
     superAdminEmail: "admin@speqify.app",
     superAdminPasswordHash: await hashPassword("s3cret-pass"),
     sessionSecret: "test-session-secret",
+    envelopeKey: "zHuQuTjauJQTlfnNRsm8vtB3GxPm5PmqK_sTqHM9e1A",
   };
   poHash = await hashPassword("po-pass");
 });
+
+const poProject: Project = {
+  id: "prj_po",
+  name: "PO Project",
+  productOwnerId: "usr_po",
+  environmentUrls: ["https://staging.test"],
+  template: {
+    language: "en",
+    userStory: true,
+    acceptanceCriteria: true,
+    labels: [],
+    components: [],
+    versions: [],
+    customFields: {},
+  },
+  exportConfigId: null,
+  createdAt: new Date().toISOString(),
+};
 
 function makeApp(extra?: Panel[]) {
   const repo = new InMemoryRepository({
@@ -65,6 +84,7 @@ function makeApp(extra?: Panel[]) {
         createdAt: new Date().toISOString(),
       },
     ],
+    projects: [poProject],
   });
   return { app: createApp({ repo, config }), repo };
 }
@@ -273,7 +293,8 @@ describe("superadmin (Phase 2)", () => {
     const list = await app.request("/admin/projects", {
       headers: { authorization: `Bearer ${sa}` },
     });
-    expect(((await list.json()) as { projects: unknown[] }).projects).toHaveLength(1);
+    const projects = ((await list.json()) as { projects: { id: string }[] }).projects;
+    expect(projects.some((p) => p.id === project.id)).toBe(true);
 
     const panelRes = await app.request(`/admin/projects/${project.id}/panels`, {
       method: "POST",
@@ -288,5 +309,71 @@ describe("superadmin (Phase 2)", () => {
     const validate = await app.request(`/panels/${panel.secretToken}`);
     expect(validate.status).toBe(200);
     expect((await validate.json()) as { status: string }).toMatchObject({ status: "open" });
+  });
+});
+
+describe("product owner config (Phase 3)", () => {
+  it("requires auth and scopes to the PO's own project", async () => {
+    const { app } = makeApp();
+    expect((await app.request("/po/project")).status).toBe(401);
+
+    const po = await login(app, "po@speqify.app", "po-pass");
+    const res = await app.request("/po/project", {
+      headers: { authorization: `Bearer ${po}` },
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { project: { id: string }; export: unknown };
+    expect(data.project.id).toBe("prj_po");
+    expect(data.export).toBeNull();
+  });
+
+  it("updates the template and configures an encrypted export target", async () => {
+    const { app } = makeApp();
+    const po = await login(app, "po@speqify.app", "po-pass");
+    const h = { authorization: `Bearer ${po}`, "content-type": "application/json" };
+
+    const tpl = await app.request("/po/project/template", {
+      method: "PUT",
+      headers: h,
+      body: JSON.stringify({
+        language: "pl",
+        userStory: true,
+        acceptanceCriteria: true,
+        labels: ["frontend", "backend"],
+        components: ["Cart"],
+        versions: ["1.0"],
+        customFields: {},
+      }),
+    });
+    expect(tpl.status).toBe(200);
+
+    const exp = await app.request("/po/project/export", {
+      method: "PUT",
+      headers: h,
+      body: JSON.stringify({
+        target: "jira",
+        credentials: { email: "bot@acme.test", apiToken: "super-secret-token" },
+        defaults: { projectKey: "ACME", issueType: "Task" },
+      }),
+    });
+    expect(exp.status).toBe(200);
+    expect((await exp.json()) as { configured: boolean }).toMatchObject({ configured: true });
+
+    // GET must reflect the template and NEVER leak credentials.
+    const get = await app.request("/po/project", { headers: { authorization: `Bearer ${po}` } });
+    const body = (await get.json()) as {
+      project: { template: { language: string } };
+      export: { target: string };
+    };
+    expect(body.project.template.language).toBe("pl");
+    expect(body.export.target).toBe("jira");
+    expect(JSON.stringify(body)).not.toContain("super-secret-token");
+
+    const test = await app.request("/po/project/export/test", {
+      method: "POST",
+      headers: { authorization: `Bearer ${po}` },
+    });
+    expect(test.status).toBe(200);
+    expect((await test.json()) as { ok: boolean }).toMatchObject({ ok: true });
   });
 });
