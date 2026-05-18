@@ -6,6 +6,8 @@ import type { MediaStore } from "./media/types.js";
 import { D1Repository } from "./repo/d1.js";
 import { InMemoryRepository } from "./repo/memory.js";
 import type { Repository } from "./repo/types.js";
+import { HttpTranscriber, NoopTranscriber, WorkersAiTranscriber } from "./transcribe/providers.js";
+import type { Transcriber } from "./transcribe/types.js";
 
 /**
  * Speqify API — Cloudflare Worker entry (IMPLEMENTATION_PLAN.md §6 Phase 1).
@@ -19,7 +21,16 @@ export default {
       const mediaStore: MediaStore = env.MEDIA
         ? new R2MediaStore(env.MEDIA)
         : new InMemoryMediaStore();
-      return createApp({ repo, config, mediaStore }).fetch(request, env, ctx);
+      let transcriber: Transcriber;
+      if (env.AI) transcriber = new WorkersAiTranscriber(env.AI);
+      else if (env.TRANSCRIBE_ENDPOINT && env.TRANSCRIBE_API_KEY)
+        transcriber = new HttpTranscriber(
+          env.TRANSCRIBE_ENDPOINT,
+          env.TRANSCRIBE_API_KEY,
+          env.TRANSCRIBE_MODEL ?? "whisper-1",
+        );
+      else transcriber = new NoopTranscriber();
+      return createApp({ repo, config, mediaStore, transcriber }).fetch(request, env, ctx);
     } catch (err) {
       const correlationId = request.headers.get("x-correlation-id") ?? crypto.randomUUID();
       return Response.json(

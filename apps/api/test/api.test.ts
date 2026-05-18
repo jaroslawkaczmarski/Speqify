@@ -5,6 +5,7 @@ import type { AppConfig } from "../src/env.js";
 import { hashPassword } from "../src/lib/crypto.js";
 import { InMemoryMediaStore } from "../src/media/memory.js";
 import { InMemoryRepository } from "../src/repo/memory.js";
+import type { Transcriber } from "../src/transcribe/types.js";
 
 const ENV_URL = "https://app.example.com";
 
@@ -72,7 +73,7 @@ const poProject: Project = {
   createdAt: new Date().toISOString(),
 };
 
-function makeApp(extra?: Panel[]) {
+function makeApp(extra?: Panel[], transcriberArg?: Transcriber) {
   const repo = new InMemoryRepository({
     panels: [panel("open-tok", "open"), panel("closed-tok", "closed"), ...(extra ?? [])],
     users: [
@@ -88,7 +89,16 @@ function makeApp(extra?: Panel[]) {
     projects: [poProject],
   });
   const mediaStore = new InMemoryMediaStore();
-  return { app: createApp({ repo, config, mediaStore }), repo, mediaStore };
+  const transcriber: Transcriber = transcriberArg ?? okTranscriber();
+  return {
+    app: createApp({ repo, config, mediaStore, transcriber }),
+    repo,
+    mediaStore,
+  };
+}
+
+function okTranscriber(text = "the transcribed text"): Transcriber {
+  return { transcribe: async () => ({ text }) };
 }
 
 async function login(
@@ -486,5 +496,94 @@ describe("media upload (Phase 5c)", () => {
       });
       expect(up.status).toBe(201);
     }
+  });
+});
+
+async function ingestVoiceAndSubmit(app: ReturnType<typeof createApp>): Promise<string> {
+  const up = await app.request("/panels/open-tok/uploads?kind=voice", {
+    method: "POST",
+    headers: { "content-type": "audio/webm" },
+    body: new Uint8Array([1, 2, 3, 4]),
+  });
+  const ref = await up.json();
+  const ann = await app.request("/panels/open-tok/annotations", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(annotationBody({ type: "voice", voice: ref })),
+  });
+  const id = ((await ann.json()) as { id: string }).id;
+  await app.request("/panels/open-tok/submit", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ submissionId: "sub-1", clientId: "browser-1" }),
+  });
+  return id;
+}
+
+describe("transcription (Phase 6)", () => {
+  it("transcribes submitted voice annotations on the SA run", async () => {
+    const { app, repo } = makeApp();
+    const sa = await login(app, "admin@speqify.app", "s3cret-pass");
+    const id = await ingestVoiceAndSubmit(app);
+
+    const run = await app.request("/admin/transcribe/run", {
+      method: "POST",
+      headers: { authorization: `Bearer ${sa}` },
+    });
+    expect(run.status).toBe(200);
+    expect((await run.json()) as { done: number }).toMatchObject({ done: 1 });
+
+    const a = await repo.getAnnotationById(id);
+    expect(a?.transcript).toBe("the transcribed text");
+    expect(a?.transcriptionStatus).toBe("done");
+  });
+
+  it("marks failed then succeeds on the next run (retry)", async () => {
+    let calls = 0;
+    const flaky: Transcriber = {
+      transcribe: async () => {
+        calls++;
+        if (calls < 2) throw new Error("provider down");
+        return { text: "recovered" };
+      },
+    };
+    const { app, repo } = makeApp([], flaky);
+    const sa = await login(app, "admin@speqify.app", "s3cret-pass");
+    const id = await ingestVoiceAndSubmit(app);
+
+    await app.request("/admin/transcribe/run", {
+      method: "POST",
+      headers: { authorization: `Bearer ${sa}` },
+    });
+    expect((await repo.getAnnotationById(id))?.transcriptionStatus).toBe("failed");
+
+    await app.request("/admin/transcribe/run", {
+      method: "POST",
+      headers: { authorization: `Bearer ${sa}` },
+    });
+    const a = await repo.getAnnotationById(id);
+    expect(a?.transcript).toBe("recovered");
+    expect(a?.transcriptionStatus).toBe("done");
+  });
+
+  it("PO transcript edit: 404 unknown, 403 for a foreign annotation", async () => {
+    const { app } = makeApp();
+    const po = await login(app, "po@speqify.app", "po-pass");
+    const h = { authorization: `Bearer ${po}`, "content-type": "application/json" };
+
+    const unknown = await app.request("/po/annotations/nope/transcript", {
+      method: "PUT",
+      headers: h,
+      body: JSON.stringify({ transcript: "x" }),
+    });
+    expect(unknown.status).toBe(404);
+
+    const id = await ingestVoiceAndSubmit(app); // panel 'open-tok' -> project proj-1
+    const foreign = await app.request(`/po/annotations/${id}/transcript`, {
+      method: "PUT",
+      headers: h,
+      body: JSON.stringify({ transcript: "x" }),
+    });
+    expect(foreign.status).toBe(403);
   });
 });

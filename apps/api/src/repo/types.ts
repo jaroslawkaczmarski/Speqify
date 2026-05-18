@@ -9,6 +9,7 @@ import type {
   Project,
   ProjectTemplate,
   Submission,
+  TranscriptionStatus,
   User,
   UserRole,
 } from "@speqify/shared";
@@ -42,6 +43,19 @@ export interface Repository {
   completeSubmission(args: { panelId: string; submissionId: string }): Promise<boolean>;
 
   getUserByEmail(email: string): Promise<UserWithSecret | null>;
+
+  // --- Transcription (Phase 6) ---
+
+  /** Submitted annotations with audio that still need a transcript. */
+  listTranscribable(limit: number): Promise<Annotation[]>;
+
+  getAnnotationById(id: string): Promise<Annotation | null>;
+
+  setTranscription(
+    id: string,
+    transcript: string | null,
+    status: TranscriptionStatus,
+  ): Promise<Annotation | null>;
 
   // --- SuperAdmin (Phase 2) ---
 

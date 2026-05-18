@@ -8,6 +8,7 @@ import type {
   Project,
   ProjectTemplate,
   Submission,
+  TranscriptionStatus,
   User,
   UserRole,
 } from "@speqify/shared";
@@ -106,6 +107,34 @@ export class InMemoryRepository implements Repository {
 
   async getUserByEmail(email: string): Promise<UserWithSecret | null> {
     return this.users.get(email.toLowerCase()) ?? null;
+  }
+
+  async listTranscribable(limit: number): Promise<Annotation[]> {
+    const pending = new Set(["queued", "failed"]);
+    return [...this.annotations.values()]
+      .filter(
+        (a) =>
+          a.status === "submitted" &&
+          (a.voice !== null || a.recordingAudio !== null) &&
+          (a.transcriptionStatus === null || pending.has(a.transcriptionStatus)),
+      )
+      .slice(0, limit);
+  }
+
+  async getAnnotationById(id: string): Promise<Annotation | null> {
+    return [...this.annotations.values()].find((a) => a.id === id) ?? null;
+  }
+
+  async setTranscription(
+    id: string,
+    transcript: string | null,
+    status: TranscriptionStatus,
+  ): Promise<Annotation | null> {
+    const a = [...this.annotations.values()].find((x) => x.id === id);
+    if (!a) return null;
+    a.transcript = transcript;
+    a.transcriptionStatus = status;
+    return a;
   }
 
   async createUser(args: {

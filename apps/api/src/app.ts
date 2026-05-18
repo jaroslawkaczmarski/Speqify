@@ -18,6 +18,8 @@ import { requestContext } from "./middleware/context.js";
 import { requireOpenPanel, withPanel } from "./middleware/panel.js";
 import { body, validateJson } from "./middleware/validate.js";
 import type { Repository } from "./repo/types.js";
+import { runOnce as runTranscription } from "./transcribe/service.js";
+import type { Transcriber } from "./transcribe/types.js";
 import type { AppEnv } from "./types.js";
 
 const loginSchema = z.object({
@@ -65,6 +67,8 @@ const createPanelSchema = z.object({
 
 const panelStatusSchema = z.object({ status: z.enum(["open", "closed"]) });
 
+const transcriptEditSchema = z.object({ transcript: z.string().max(100_000) });
+
 const exportConfigSchema = z.object({
   target: z.enum(["jira", "github", "json", "csv"]),
   credentials: z.record(z.string().max(4096)).optional(),
@@ -76,8 +80,9 @@ export function createApp(deps: {
   repo: Repository;
   config: AppConfig;
   mediaStore: MediaStore;
+  transcriber: Transcriber;
 }): Hono<AppEnv> {
-  const { repo, config, mediaStore } = deps;
+  const { repo, config, mediaStore, transcriber } = deps;
   const app = new Hono<AppEnv>();
 
   app.use("*", requestContext);
@@ -188,6 +193,18 @@ export function createApp(deps: {
     return c.json({ deleted: true });
   });
 
+  // Manual trigger now; a Cloudflare Queue consumer + Cron drives this in
+  // production (needs Workers Paid — operational prerequisite, §6).
+  admin.post("/transcribe/run", async (c) => {
+    const batch = Number(c.req.query("batch")) || 20;
+    const lang = c.req.query("lang");
+    const r = await runTranscription(
+      { repo, mediaStore, transcriber },
+      { batch, ...(lang ? { languageHint: lang } : {}) },
+    );
+    return c.json(r);
+  });
+
   app.route("/admin", admin);
 
   // --- Product Owner config (Phase 3) ---
@@ -271,6 +288,20 @@ export function createApp(deps: {
       checks,
       note: "Config validation only — live Jira/GitHub probe lands in Phase 9.",
     });
+  });
+
+  po.put("/annotations/:id/transcript", validateJson(transcriptEditSchema), async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    const ann = await repo.getAnnotationById(c.req.param("id"));
+    if (!ann) throw new ApiException("not_found", "Annotation not found");
+    const panel = await repo.getPanelById(ann.panelId);
+    if (!panel || panel.projectId !== project.id) {
+      throw new ApiException("forbidden", "Not your annotation");
+    }
+    const b = body<z.infer<typeof transcriptEditSchema>>(c);
+    await repo.setTranscription(ann.id, b.transcript, "done");
+    return c.json({ ok: true });
   });
 
   app.route("/po", po);

@@ -4,6 +4,8 @@
  * Secrets come from Cloudflare Secrets Store in production (§9). Locally they
  * are provided via `.dev.vars`. Never commit real values.
  */
+import type { AiBinding } from "./transcribe/types.js";
+
 export interface Env {
   readonly ENVIRONMENT?: string;
   /** SuperAdmin login email (single shared admin, §11). */
@@ -18,6 +20,12 @@ export interface Env {
   readonly DB?: D1Database;
   /** R2 binding for media (screenshots/voice/recordings). */
   readonly MEDIA?: R2Bucket;
+  /** Workers AI binding (default Whisper transcription). */
+  readonly AI?: AiBinding;
+  /** External transcription provider (OpenAI/Groq-compatible) — optional. */
+  readonly TRANSCRIBE_ENDPOINT?: string;
+  readonly TRANSCRIBE_API_KEY?: string;
+  readonly TRANSCRIBE_MODEL?: string;
 }
 
 export interface AppConfig {

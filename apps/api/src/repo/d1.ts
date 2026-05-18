@@ -13,6 +13,7 @@ import type {
   Project,
   ProjectTemplate,
   Submission,
+  TranscriptionStatus,
   User,
   UserRole,
 } from "@speqify/shared";
@@ -235,6 +236,45 @@ export class D1Repository implements Repository {
       passwordHash: r.passwordHash ?? null,
       createdAt: r.createdAt,
     };
+  }
+
+  async listTranscribable(limit: number): Promise<Annotation[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.annotations)
+      .where(eq(schema.annotations.status, "submitted"))
+      .limit(Math.max(limit * 4, limit));
+    const pending = new Set(["queued", "failed"]);
+    return rows
+      .map(toAnnotation)
+      .filter(
+        (a) =>
+          (a.voice !== null || a.recordingAudio !== null) &&
+          (a.transcriptionStatus === null || pending.has(a.transcriptionStatus)),
+      )
+      .slice(0, limit);
+  }
+
+  async getAnnotationById(id: string): Promise<Annotation | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.annotations)
+      .where(eq(schema.annotations.id, id))
+      .limit(1);
+    return rows[0] ? toAnnotation(rows[0]) : null;
+  }
+
+  async setTranscription(
+    id: string,
+    transcript: string | null,
+    status: TranscriptionStatus,
+  ): Promise<Annotation | null> {
+    const updated = await this.db
+      .update(schema.annotations)
+      .set({ transcript, transcriptionStatus: status })
+      .where(eq(schema.annotations.id, id))
+      .returning();
+    return updated[0] ? toAnnotation(updated[0]) : null;
   }
 
   async createUser(args: {
