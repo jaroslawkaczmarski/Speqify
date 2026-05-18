@@ -4,7 +4,7 @@
 > relevant phase. Record every meaningful change in the **Revision Log** at the bottom.
 > Keep this file in sync with reality — it is the single source of truth for scope and status.
 
-- **Status:** Planning (pre-implementation)
+- **Status:** In progress — Phases 0–6 shipped (logic); Phase 7 (AI analysis) next. Plan kept in sync per phase.
 - **Last updated:** 2026-05-18
 - **Owner:** TBD
 - **Related docs:** [`DESIGN.md`](./DESIGN.md) (Convergence design system — landing page authority)
@@ -160,71 +160,69 @@ Task:        generated ──Review──▶ accepted ──export──▶ expo
 
 ## 6. Implementation roadmap
 
-### Phase 0 — Foundations & scaffolding
-- [ ] Init monorepo (pnpm workspaces + Turborepo), TS strict, ESLint, Prettier, Vitest
-- [ ] Create Cloudflare account resources: D1 db, R2 buckets (audio, screenshots), Queue, Secrets Store
-- [ ] `wrangler` config per app + `staging` / `prod` environments + bindings
-- [ ] GitHub Actions: lint, typecheck, test, `wrangler deploy` (staging on PR, prod on tag)
-- [ ] `packages/shared`: base types, zod schemas, state-machine enums
-- [ ] Decide panel app: React+Vite SPA (default) — confirm Next.js not required
+### Phase 0 — Foundations & scaffolding  ✅ done
+- [x] Init monorepo (pnpm workspaces + Turborepo), TS strict, ESLint, Prettier, Vitest
+- [~] Cloudflare resources: D1 ✓ (EU/WEUR, migrated+seeded) · R2 ✓ (speqify-media) · Queue ✗ (Workers Paid) · Secrets Store ✗ (local `.dev.vars`; prod TODO)
+- [x] `wrangler` config per app + staging/production envs (D1/R2 bound; queues/AI commented for Phase 6)
+- [x] GitHub Actions: lint, typecheck, test, build — [~] `wrangler deploy` step deferred to deploy phase
+- [x] `packages/shared`: types, zod schemas, state machines (+ tests)
+- [x] Panel app = React + Vite SPA
 
-### Phase 1 — Data model & core API
-- [ ] `packages/db`: Drizzle schema for all entities + relations + status enums
-- [ ] D1 migrations + seed (SA credential, sample project)
-- [ ] `apps/api`: Hono skeleton — routing, error envelope, zod validation, request logging
-- [ ] Auth middleware + capability-token middleware (panel tokens)
-- [ ] Better Auth integration (SA single credential, PO accounts)
+### Phase 1 — Data model & core API  ✅ done
+- [x] `packages/db`: Drizzle schema (all entities) + relations + status enums + migration
+- [x] D1 migration applied + dev seed (PO, project, panel) via MCP
+- [x] `apps/api`: Hono — routing, error envelope, zod validation, request logging, correlationId
+- [x] Auth middleware + capability-token (panel) middleware
+- [~] Auth = lightweight HMAC session + PBKDF2 per locked §10/§11 minimal-auth decision (Better Auth not used — substituted, tested)
 
-### Phase 2 — SuperAdmin
-- [ ] SA login (single shared password)
-- [ ] CRUD: projects + environment URL(s)
-- [ ] Create PO account → generate strong password → surface once + panel link
-- [ ] Platform provider config: AI + transcription provider/keys → Secrets Store + envelope encryption
-- [ ] Minimal SA UI in `apps/panel` (gated by role)
+### Phase 2 — SuperAdmin  ✅ done (provider-config partial)
+- [x] SA login (single shared credential)
+- [x] CRUD projects + environment URL(s); list users
+- [x] Create PO account → generated password surfaced once
+- [~] Platform provider config: transcription via env wired; AI-provider config-as-entity lands with Phase 7; export creds envelope-encrypted (§9)
+- [x] Minimal SA UI in `apps/panel` (login, POs, projects, panels, Install snippet)
 
-### Phase 3 — Product Owner: project config
-- [ ] PO login + project scoping
-- [ ] Task template editor (language, AC on/off, user-story, labels, custom fields)
-- [ ] Export target config: Jira | GitHub | JSON/CSV + encrypted credentials + field mapping
-- [ ] **Test task** action (create a probe issue, validate creds + mapping, report result)
+### Phase 3 — Product Owner: project config  ✅ backend done (PO UI deferred)
+- [x] PO scoping (session → own project; SA via `?projectId`)
+- [x] Task template editor — backend (`PUT /po/project/template`); dedicated PO UI deferred
+- [x] Export target config: Jira | GitHub | JSON/CSV + envelope-encrypted credentials + field mapping
+- [x] **Test task**: config validation (`POST /po/project/export/test`); live Jira/GitHub probe in Phase 9
 
-### Phase 4 — Panels management
-- [ ] CRUD panels: audience role, bound env URL, generated secret token, `open`/`closed`
-- [ ] Panel deletion = revoke link
-- [ ] `GET /panel/:token/validate` for SDK (open? role? env allowlist?)
+### Phase 4 — Panels management  ✅ done
+- [x] CRUD panels: audience, bound env URL, generated secret token, `open`/`closed`
+- [x] Panel deletion = revoke link; close/reopen
+- [x] `GET /panels/:token` validate + Origin allowlist on ingest + Install-snippet UI
 
-### Phase 5 — Overlay SDK  ⭐ core differentiator (UI/UX must be excellent)
+### Phase 5 — Overlay SDK  ✅ feature-complete (SDK 0.5.0)
 **Capture**
-- [ ] Loader: tiny, env-gated, reads token (URL/launcher), validates panel, mounts overlay (Shadow DOM)
-- [ ] Element picker: `selector` + `xpath` + outer `html` + bbox (Shadow-DOM-aware composed path)
-- [ ] Screenshot: DOM-render primary + `getDisplayMedia` (MediaStream) fallback → R2
-- [ ] Annotation tools: highlight + arrow + **blur/redact** (destructive, stored redacted)
-- [ ] Voice note (MediaRecorder), playback, **re-record**
-- [ ] **Screen recording**: `getDisplayMedia` + **parallel mic-audio track** (transcription reuses voice pipeline — no server-side audio extraction); start/stop/pause, max-length cap, live indicator, preview, re-record; capture navigation during recording
-- [ ] Text note + **global note**; lightweight structured prompt (type: bug/change, severity)
-- [ ] Route tracking (history+popstate; SPA+MPA) + **action breadcrumb** (repro steps)
-- [ ] **Auto technical context**: console, JS errors, XHR/fetch req+resp, browser/OS/screen — safe monkey-patch, coexists with host Sentry/analytics, restores on unload
-- [ ] **Host-app context injection** via SDK init API: test user, build SHA, env, feature flags
+- [x] Loader (env-gated, token from URL/launcher), validates panel, Shadow-DOM overlay
+- [x] Element picker: selector + xpath + outer html + bbox
+- [x] Screenshot (html2canvas lazy-CDN) + **redaction/blur tool**
+- [x] Voice note (MediaRecorder), **re-record**
+- [x] **Screen recording**: getDisplayMedia + **parallel mic-audio** (transcription reuses voice pipeline)
+- [x] Text + **global note**; structured prompt (bug/change, severity)
+- [x] Route tracking + **action breadcrumb**
+- [x] **Auto technical context** (console/errors/fetch, browser/OS/screen) — safe patch, restored on stop
+- [x] **Host-app context injection** via SDK init
 **Resilience & privacy**
-- [ ] **Drafts persisted locally (IndexedDB)** — survive reload / host session timeout / offline
-- [ ] **Idempotent Send**: client-generated annotation + submission ids, retry queue, resumable/multipart media upload + progress; server stamps authoritative time
-- [ ] **Consent notice** on first use (screen/voice/console/network recorded) + privacy-policy link; localized
-- [ ] **Data scrubbing**: strip auth/cookie headers + secret patterns, body-size caps, console ring-buffer; network/console toggleable per project
-- [ ] Reviewer can edit text / re-record **before Send** → `submitted` (locked after)
-- [ ] CSP self-diagnostic + visible non-prod hint; mic/screen permission-denied graceful fallback
+- [x] **Offline drafts (IndexedDB outbox)** + retry/backoff
+- [x] **Idempotent Send** (client ids; server dedupes) + media upload
+- [x] **Consent notice** on first use
+- [x] **Data scrubbing** (strip auth/secrets, size caps, console ring-buffer)
+- [x] Edit text / re-record before Send
+- [x] CSP/permission graceful fallback
 **Quality**
-- [ ] CORS allowlist (project env origins only); overlay never traps host app
-- [ ] Accessibility pass (keyboard/focus/contrast)
-- [ ] Browser support matrix (Chrome/Firefox/Safari) for getDisplayMedia/MediaRecorder/codec
-- [ ] **SDK distribution** — see §7
+- [x] CORS allowlist (project env origins); overlay isolated (Shadow DOM)
+- [~] Accessibility/browser-matrix — basic; full a11y + Safari QA deferred
+- [~] **SDK distribution**: esbuild IIFE bundle produced; CDN serving + npm publish = deploy/ops (§7)
 
-### Phase 6 — Async transcription
-- [ ] Audio upload → R2 (voice note **and** screen-recording parallel audio) → enqueue job
-- [ ] Queue consumer: provider abstraction (Workers AI Whisper default; Groq/OpenAI pluggable)
-- [ ] Template language as hint + PO override + manual re-run; mixed-language handled
-- [ ] **Supersede stale job on re-record/edit (job versioning)** — never attach a stale transcript
-- [ ] Long audio > provider limit → segment + stitch; empty/silent/low-confidence → flagged, not fed as garbage
-- [ ] Transcript write-back; failure → retry/backoff → dead-letter + PO manual retry / manual transcript
+### Phase 6 — Async transcription  ✅ logic done (runtime trigger = Workers Paid)
+- [x] Audio (voice + recording-audio) uploaded to R2
+- [~] Provider abstraction + `runOnce` done & tested; Cloudflare Queue+Cron runtime trigger deferred (Workers Paid). Manual `POST /admin/transcribe/run` provided.
+- [x] Language hint param + PO-editable transcript (`PUT /po/annotations/:id/transcript`) + manual re-run
+- [~] `superseded` status modelled; retry-on-next-run; segmentation + dead-letter cap deferred
+- [~] Empty/silent → flagged done; long-audio segment/stitch deferred
+- [x] Transcript write-back; failed → retried next run; PO manual transcript
 
 ### Phase 7 — AI analysis (Workflow)
 - [ ] PO trigger; **single in-flight run per project** (lock/queue); concurrent triggers queued
@@ -567,3 +565,4 @@ surface than requirements gathering).
 | 2026-05-18 | — | Expanded §11 into a prioritized open-decisions register (P0/P1/product/AI-spike); flagged onboarding vs landing-CTA inconsistency. |
 | 2026-05-18 | — | Usersnap competitor research: added auto technical-context capture, host-app context injection, action breadcrumb, blur/redact + arrow tools, structured capture prompt, dual screenshot strategy, triage priority/labels to Phases 5/7/8/9; added §13. |
 | 2026-05-18 | — | Screen recording promoted to V1 (parallel-audio design). Full edge-case review: rewrote Phases 5–9 for correctness/resilience; strengthened §9 (consent, scrubbing, erasure, cost, traceability, API versioning, recovery, DR); added §14 edge-case & correctness reference. |
+| 2026-05-18 | — | Implementation Phases 0–6 shipped & pushed (private repo, CI green): monorepo+CI, Convergence landing, D1(EU)+R2 provisioned, core API (Hono/D1/Drizzle), SuperAdmin (backend+UI), PO config (template+encrypted export), panel lifecycle, full overlay SDK 0.5.0 (capture/redaction/recording/offline), transcription logic. 43 tests. Roadmap §6 checkboxes reconciled; deferred items flagged. Manual prerequisites still outstanding: Workers Paid (Queues/Workflows runtime) + LLM provider key (Phase 7 e2e). |
