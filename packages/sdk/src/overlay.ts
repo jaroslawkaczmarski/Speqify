@@ -4,7 +4,12 @@
  * attached automatically. Screenshot/voice/recording, redaction and offline
  * drafts are later Phase 5 sub-steps (§14).
  */
-import type { HostAppContext, NavigationStep, TechnicalContext } from "@speqify/shared";
+import type {
+  CreateAnnotationInput,
+  HostAppContext,
+  NavigationStep,
+  TechnicalContext,
+} from "@speqify/shared";
 import type { SpeqifyClient } from "./client.js";
 import { startVoiceRecording, type VoiceRecorder } from "./media.js";
 import { buildAnnotationPayload, type ElementCapture, type StructuredInput } from "./payload.js";
@@ -36,6 +41,8 @@ export interface OverlayDeps {
   breadcrumb?: () => NavigationStep[];
   hostApp?: HostAppContext;
   screenshotUrl?: string;
+  /** Offline-resilient send (outbox). Falls back to direct create if absent. */
+  sendAnnotation?: (payload: CreateAnnotationInput) => Promise<"sent" | "queued">;
 }
 
 export interface OverlayInstance {
@@ -194,7 +201,12 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
             hostApp: deps.hostApp ?? null,
             breadcrumb: deps.breadcrumb?.() ?? [],
           });
-          await client.createAnnotation(body);
+          let outcome: "sent" | "queued" = "sent";
+          if (deps.sendAnnotation) {
+            outcome = await deps.sendAnnotation(body);
+          } else {
+            await client.createAnnotation(body);
+          }
           count++;
           counter.textContent = String(count);
           note.value = "";
@@ -204,7 +216,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
           clearHl();
           sel.textContent = "No element selected";
           msg.className = "ok";
-          msg.textContent = "Added.";
+          msg.textContent = outcome === "queued" ? "Saved offline — will retry." : "Added.";
         } catch (err) {
           msg.className = "err";
           msg.textContent = err instanceof Error ? err.message : "Failed";

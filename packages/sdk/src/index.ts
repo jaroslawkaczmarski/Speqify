@@ -2,13 +2,15 @@
  * @speqify/sdk — overlay SDK.
  *
  * Done: token validation, consent gate, element pick, structured fields,
- * text note, automatic technical + breadcrumb + host-app context, idempotent
- * add + Send. Later Phase 5 sub-steps (§14): screenshot, voice, screen
- * recording, redaction tool, offline drafts.
+ * text note, voice, screenshot, automatic technical + breadcrumb + host-app
+ * context, idempotent add + Send, offline-resilient outbox (retry/backoff).
+ * Later Phase 5 sub-steps (§14): screen recording, redaction tool.
  */
 import type { HostAppContext } from "@speqify/shared";
 import { startBreadcrumb } from "./breadcrumb.js";
 import { SpeqifyClient } from "./client.js";
+import { createOutboxStore } from "./idb.js";
+import { Outbox, type SendFn } from "./outbox.js";
 import { mountOverlay, type OverlayInstance } from "./overlay.js";
 import { startTechnicalCapture } from "./technical.js";
 
@@ -27,6 +29,8 @@ export interface SpeqifyInitOptions {
 
 export type SpeqifyInstance = OverlayInstance;
 
+const FLUSH_INTERVAL_MS = 30_000;
+
 export async function init(options: SpeqifyInitOptions): Promise<SpeqifyInstance | null> {
   if (!options.enabled || !options.token) return null;
   const client = new SpeqifyClient(options.apiBaseUrl, options.token);
@@ -35,9 +39,20 @@ export async function init(options: SpeqifyInitOptions): Promise<SpeqifyInstance
 
   const technical = startTechnicalCapture();
   const breadcrumb = startBreadcrumb();
+
+  // Offline-resilient send: try now, persist + retry on failure (§14).
+  const outbox = new Outbox(createOutboxStore());
+  const sender: SendFn = (p) => client.createAnnotation(p);
+  const flush = (): void => void outbox.flush(sender).catch(() => undefined);
+  flush();
+  const onOnline = (): void => flush();
+  window.addEventListener("online", onOnline);
+  const timer = window.setInterval(flush, FLUSH_INTERVAL_MS);
+
   const overlay = mountOverlay(client, {
     technical: technical.snapshot,
     breadcrumb: breadcrumb.steps,
+    sendAnnotation: (p) => outbox.send(p, sender),
     ...(options.context ? { hostApp: options.context } : {}),
     ...(options.html2canvasUrl ? { screenshotUrl: options.html2canvasUrl } : {}),
   });
@@ -49,10 +64,12 @@ export async function init(options: SpeqifyInitOptions): Promise<SpeqifyInstance
       overlay.destroy();
       technical.stop();
       breadcrumb.stop();
+      window.removeEventListener("online", onOnline);
+      clearInterval(timer);
     },
   };
 }
 
-export const SDK_VERSION = "0.2.0";
+export const SDK_VERSION = "0.3.0";
 export { SpeqifyClient } from "./client.js";
 export { buildAnnotationPayload } from "./payload.js";
