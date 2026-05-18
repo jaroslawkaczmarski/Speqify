@@ -1,0 +1,130 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   Base — Convergence accessibility floor (DESIGN.md principles 7–10)
+--------------------------------------------------------------------------- */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-neutral font-sans text-body-md text-on-surface antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Visible keyboard focus: 2px, ≥3:1, with offset (W3C SC 2.4.11). */
+  :where(a, button, input, summary, [tabindex]):focus-visible {
+    outline: 2px solid theme("colors.border-focus");
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  a {
+    color: theme("colors.link");
+  }
+
+  ::selection {
+    background: theme("colors.primary");
+    color: theme("colors.on-primary");
+  }
+
+  /* Respect reduced-motion (DESIGN.md A11y do's). */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Components — token compositions mirroring DESIGN.md §Components
+--------------------------------------------------------------------------- */
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-content px-md sm:px-lg lg:px-xl;
+  }
+
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:fixed focus:left-md focus:top-md focus:z-50
+      focus:rounded-sm focus:bg-primary focus:px-md focus:py-sm focus:text-body-sm
+      focus:text-on-primary;
+  }
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-sm rounded-md
+      text-button transition-colors;
+    transition-duration: 150ms;
+  }
+
+  /* Default action — filled, never outlined (DESIGN.md §button-primary). */
+  .btn-primary {
+    @apply btn h-12 bg-primary px-6 text-on-primary hover:bg-primary-hover
+      active:bg-primary-pressed;
+  }
+
+  /* The single hero CTA — accent, one per page (DESIGN.md §button-cta-hero). */
+  .btn-cta-hero {
+    @apply btn h-14 bg-accent px-9 text-body-lg font-semibold text-on-accent
+      hover:bg-accent-hover;
+  }
+
+  .btn-secondary {
+    @apply btn h-12 border border-border-strong bg-surface px-6 text-primary
+      hover:bg-surface-muted;
+  }
+
+  .btn-link {
+    @apply btn h-12 bg-transparent px-2 text-link underline underline-offset-4
+      hover:text-info;
+  }
+
+  /* A surface uses border OR shadow, never both (Apple HIG, DESIGN.md). */
+  .card-flat {
+    @apply rounded-md border border-border bg-surface p-lg;
+  }
+
+  .card-elevated {
+    @apply rounded-md bg-surface p-lg shadow-elevation-2;
+  }
+
+  .benefit-bar {
+    @apply flex h-10 items-center justify-center bg-primary text-body-sm
+      text-on-primary;
+  }
+
+  .eyebrow {
+    @apply inline-flex items-center rounded-full bg-surface-muted px-3 py-1
+      text-caption uppercase text-secondary;
+  }
+
+  .lede {
+    @apply text-body-lg text-secondary;
+  }
+
+  .code-block {
+    @apply overflow-x-auto rounded-md bg-primary p-lg font-mono text-body-sm
+      leading-relaxed text-on-primary;
+  }
+}

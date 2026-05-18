@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.open-next/
+.wrangler/
+.turbo/
+coverage/
+pnpm-lock.yaml
+*.md

@@ -1,0 +1,11 @@
+name = "speqify-landing"
+compatibility_date = "2026-05-01"
+
+[assets]
+directory = "./dist"
+
+[env.staging]
+name = "speqify-landing-staging"
+
+[env.production]
+name = "speqify-landing-production"

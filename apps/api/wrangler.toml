@@ -1,0 +1,37 @@
+name = "speqify-api"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ---------------------------------------------------------------------------
+# Bindings — placeholders. Create resources after `wrangler login`, then fill
+# ids and uncomment (IMPLEMENTATION_PLAN.md §6 Phase 0).
+# ---------------------------------------------------------------------------
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "speqify"
+# database_id = "TODO"
+
+# [[r2_buckets]]
+# binding = "MEDIA"
+# bucket_name = "speqify-media"
+
+# [[queues.producers]]
+# binding = "TRANSCRIPTION_QUEUE"
+# queue = "speqify-transcription"
+
+# [[queues.consumers]]
+# queue = "speqify-transcription"
+# max_batch_size = 10
+
+# [ai]
+# binding = "AI"   # Workers AI (default Whisper transcription)
+
+[observability]
+enabled = true
+
+[env.staging]
+name = "speqify-api-staging"
+
+[env.production]
+name = "speqify-api-production"

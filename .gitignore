@@ -1,0 +1,18 @@
+node_modules/
+dist/
+build/
+.open-next/
+.wrangler/
+.turbo/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+.dev.vars
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+
+# Local Claude Code / preview config (machine-specific absolute paths)
+.claude/
