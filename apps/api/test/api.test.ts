@@ -42,19 +42,44 @@ function annotationBody(over: Record<string, unknown> = {}) {
 }
 
 let config: AppConfig;
+let poHash: string;
 beforeAll(async () => {
   config = {
     superAdminEmail: "admin@speqify.app",
     superAdminPasswordHash: await hashPassword("s3cret-pass"),
     sessionSecret: "test-session-secret",
   };
+  poHash = await hashPassword("po-pass");
 });
 
 function makeApp(extra?: Panel[]) {
   const repo = new InMemoryRepository({
     panels: [panel("open-tok", "open"), panel("closed-tok", "closed"), ...(extra ?? [])],
+    users: [
+      {
+        id: "usr_po",
+        role: "product_owner",
+        email: "po@speqify.app",
+        displayName: "Demo PO",
+        passwordHash: poHash,
+        createdAt: new Date().toISOString(),
+      },
+    ],
   });
   return { app: createApp({ repo, config }), repo };
+}
+
+async function login(
+  app: ReturnType<typeof createApp>,
+  email: string,
+  password: string,
+): Promise<string> {
+  const res = await app.request("/admin/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return ((await res.json()) as { token: string }).token;
 }
 
 describe("health", () => {
@@ -190,5 +215,71 @@ describe("submit", () => {
     });
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ complete: true });
+  });
+});
+
+describe("superadmin (Phase 2)", () => {
+  it("requires a superadmin session", async () => {
+    const { app } = makeApp();
+    expect((await app.request("/admin/projects")).status).toBe(401);
+
+    const poToken = await login(app, "po@speqify.app", "po-pass");
+    const asPo = await app.request("/admin/projects", {
+      headers: { authorization: `Bearer ${poToken}` },
+    });
+    expect(asPo.status).toBe(401);
+  });
+
+  it("creates a PO, a project and a usable panel end to end", async () => {
+    const { app } = makeApp();
+    const sa = await login(app, "admin@speqify.app", "s3cret-pass");
+    const auth = { authorization: `Bearer ${sa}`, "content-type": "application/json" };
+
+    const userRes = await app.request("/admin/users", {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ email: "newpo@speqify.app", displayName: "New PO" }),
+    });
+    expect(userRes.status).toBe(201);
+    const created = (await userRes.json()) as { id: string; password: string };
+    expect(created.password.length).toBeGreaterThanOrEqual(12);
+
+    const dup = await app.request("/admin/users", {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ email: "newpo@speqify.app", displayName: "Dup" }),
+    });
+    expect(dup.status).toBe(409);
+
+    const projRes = await app.request("/admin/projects", {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({
+        name: "Acme App",
+        productOwnerId: created.id,
+        environmentUrls: ["https://staging.acme.test"],
+      }),
+    });
+    expect(projRes.status).toBe(201);
+    const project = (await projRes.json()) as { id: string };
+
+    const list = await app.request("/admin/projects", {
+      headers: { authorization: `Bearer ${sa}` },
+    });
+    expect(((await list.json()) as { projects: unknown[] }).projects).toHaveLength(1);
+
+    const panelRes = await app.request(`/admin/projects/${project.id}/panels`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ audience: "client", environmentUrl: "https://staging.acme.test" }),
+    });
+    expect(panelRes.status).toBe(201);
+    const panel = (await panelRes.json()) as { secretToken: string; panelUrl: string };
+    expect(panel.panelUrl).toContain(panel.secretToken);
+
+    // The admin-created token works on the public SDK route.
+    const validate = await app.request(`/panels/${panel.secretToken}`);
+    expect(validate.status).toBe(200);
+    expect((await validate.json()) as { status: string }).toMatchObject({ status: "open" });
   });
 });

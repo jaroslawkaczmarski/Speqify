@@ -8,7 +8,10 @@ import type {
   PanelAudience,
   PanelStatus,
   Panel,
+  Project,
+  ProjectTemplate,
   Submission,
+  User,
   UserRole,
 } from "@speqify/shared";
 import { newId } from "../lib/ids.js";
@@ -19,6 +22,19 @@ type PanelRow = typeof schema.panels.$inferSelect;
 type SubmissionRow = typeof schema.submissions.$inferSelect;
 type AnnotationRow = typeof schema.annotations.$inferSelect;
 type UserRow = typeof schema.users.$inferSelect;
+type ProjectRow = typeof schema.projects.$inferSelect;
+
+function toProject(r: ProjectRow): Project {
+  return {
+    id: r.id,
+    name: r.name,
+    productOwnerId: r.productOwnerId,
+    environmentUrls: r.environmentUrls,
+    template: r.template,
+    exportConfigId: r.exportConfigId ?? null,
+    createdAt: r.createdAt,
+  };
+}
 
 function toPanel(r: PanelRow): Panel {
   return {
@@ -204,5 +220,92 @@ export class D1Repository implements Repository {
       passwordHash: r.passwordHash ?? null,
       createdAt: r.createdAt,
     };
+  }
+
+  async createUser(args: {
+    role: UserRole;
+    email: string;
+    displayName: string;
+    passwordHash: string;
+  }): Promise<User> {
+    const inserted = await this.db
+      .insert(schema.users)
+      .values({
+        id: newId(),
+        role: args.role,
+        email: args.email,
+        displayName: args.displayName,
+        passwordHash: args.passwordHash,
+      })
+      .returning();
+    const r = inserted[0] as UserRow;
+    return {
+      id: r.id,
+      role: r.role as UserRole,
+      email: r.email,
+      displayName: r.displayName,
+      createdAt: r.createdAt,
+    };
+  }
+
+  async listProjects(): Promise<Project[]> {
+    const rows = await this.db.select().from(schema.projects);
+    return rows.map(toProject);
+  }
+
+  async getProject(id: string): Promise<Project | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.projects)
+      .where(eq(schema.projects.id, id))
+      .limit(1);
+    return rows[0] ? toProject(rows[0]) : null;
+  }
+
+  async createProject(args: {
+    name: string;
+    productOwnerId: string;
+    environmentUrls: string[];
+    template: ProjectTemplate;
+  }): Promise<Project> {
+    const inserted = await this.db
+      .insert(schema.projects)
+      .values({
+        id: newId(),
+        name: args.name,
+        productOwnerId: args.productOwnerId,
+        environmentUrls: args.environmentUrls,
+        template: args.template,
+      })
+      .returning();
+    return toProject(inserted[0] as ProjectRow);
+  }
+
+  async createPanel(args: {
+    projectId: string;
+    audience: PanelAudience;
+    environmentUrl: string;
+    secretToken: string;
+  }): Promise<Panel> {
+    const inserted = await this.db
+      .insert(schema.panels)
+      .values({
+        id: newId(),
+        projectId: args.projectId,
+        audience: args.audience,
+        secretToken: args.secretToken,
+        environmentUrl: args.environmentUrl,
+        status: "open",
+      })
+      .returning();
+    return toPanel(inserted[0] as PanelRow);
+  }
+
+  async listPanels(projectId: string): Promise<Panel[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.panels)
+      .where(eq(schema.panels.projectId, projectId));
+    return rows.map(toPanel);
   }
 }

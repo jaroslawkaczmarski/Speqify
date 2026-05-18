@@ -1,4 +1,13 @@
-import type { Annotation, Panel, Submission } from "@speqify/shared";
+import type {
+  Annotation,
+  Panel,
+  PanelAudience,
+  Project,
+  ProjectTemplate,
+  Submission,
+  User,
+  UserRole,
+} from "@speqify/shared";
 import { newId } from "../lib/ids.js";
 import type { AnnotationCreate, Repository, UserWithSecret } from "./types.js";
 
@@ -11,10 +20,12 @@ export class InMemoryRepository implements Repository {
   private submissions = new Map<string, Submission>();
   private annotations = new Map<string, Annotation>();
   private users = new Map<string, UserWithSecret>();
+  private projects = new Map<string, Project>();
 
-  constructor(seed?: { panels?: Panel[]; users?: UserWithSecret[] }) {
+  constructor(seed?: { panels?: Panel[]; users?: UserWithSecret[]; projects?: Project[] }) {
     for (const p of seed?.panels ?? []) this.panels.set(p.secretToken, p);
     for (const u of seed?.users ?? []) this.users.set(u.email.toLowerCase(), u);
+    for (const p of seed?.projects ?? []) this.projects.set(p.id, p);
   }
 
   async getPanelByToken(token: string): Promise<Panel | null> {
@@ -91,5 +102,76 @@ export class InMemoryRepository implements Repository {
 
   async getUserByEmail(email: string): Promise<UserWithSecret | null> {
     return this.users.get(email.toLowerCase()) ?? null;
+  }
+
+  async createUser(args: {
+    role: UserRole;
+    email: string;
+    displayName: string;
+    passwordHash: string;
+  }): Promise<User> {
+    const key = args.email.toLowerCase();
+    if (this.users.has(key)) throw new Error("email already exists");
+    const user: UserWithSecret = {
+      id: newId(),
+      role: args.role,
+      email: args.email,
+      displayName: args.displayName,
+      passwordHash: args.passwordHash,
+      createdAt: new Date().toISOString(),
+    };
+    this.users.set(key, user);
+    const { passwordHash: _ph, ...safe } = user;
+    return safe;
+  }
+
+  async listProjects(): Promise<Project[]> {
+    return [...this.projects.values()];
+  }
+
+  async getProject(id: string): Promise<Project | null> {
+    return this.projects.get(id) ?? null;
+  }
+
+  async createProject(args: {
+    name: string;
+    productOwnerId: string;
+    environmentUrls: string[];
+    template: ProjectTemplate;
+  }): Promise<Project> {
+    const project: Project = {
+      id: newId(),
+      name: args.name,
+      productOwnerId: args.productOwnerId,
+      environmentUrls: args.environmentUrls,
+      template: args.template,
+      exportConfigId: null,
+      createdAt: new Date().toISOString(),
+    };
+    this.projects.set(project.id, project);
+    return project;
+  }
+
+  async createPanel(args: {
+    projectId: string;
+    audience: PanelAudience;
+    environmentUrl: string;
+    secretToken: string;
+  }): Promise<Panel> {
+    const panel: Panel = {
+      id: newId(),
+      projectId: args.projectId,
+      audience: args.audience,
+      secretToken: args.secretToken,
+      environmentUrl: args.environmentUrl,
+      status: "open",
+      createdAt: new Date().toISOString(),
+    };
+    this.panels.set(panel.secretToken, panel);
+    return panel;
+  }
+
+  async listPanels(projectId: string): Promise<Panel[]> {
+    return [...this.panels.values()].filter((p) => p.projectId === projectId);
   }
 }

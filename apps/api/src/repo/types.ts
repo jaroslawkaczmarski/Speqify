@@ -3,8 +3,11 @@ import type {
   CreateAnnotationInput,
   PanelAudience,
   Panel,
+  Project,
+  ProjectTemplate,
   Submission,
   User,
+  UserRole,
 } from "@speqify/shared";
 
 export type UserWithSecret = User & { passwordHash: string | null };
@@ -36,4 +39,33 @@ export interface Repository {
   completeSubmission(args: { panelId: string; submissionId: string }): Promise<boolean>;
 
   getUserByEmail(email: string): Promise<UserWithSecret | null>;
+
+  // --- SuperAdmin (Phase 2) ---
+
+  createUser(args: {
+    role: UserRole;
+    email: string;
+    displayName: string;
+    passwordHash: string;
+  }): Promise<User>;
+
+  listProjects(): Promise<Project[]>;
+
+  getProject(id: string): Promise<Project | null>;
+
+  createProject(args: {
+    name: string;
+    productOwnerId: string;
+    environmentUrls: string[];
+    template: ProjectTemplate;
+  }): Promise<Project>;
+
+  createPanel(args: {
+    projectId: string;
+    audience: PanelAudience;
+    environmentUrl: string;
+    secretToken: string;
+  }): Promise<Panel>;
+
+  listPanels(projectId: string): Promise<Panel[]>;
 }
