@@ -11,12 +11,16 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "eslint src"
+    "test": "vitest run",
+    "lint": "eslint src",
+    "bundle": "esbuild src/loader.ts --bundle --format=iife --minify --target=es2020 --outfile=dist/loader.js"
   },
   "dependencies": {
     "@speqify/shared": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.7.3"
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
   }
 }

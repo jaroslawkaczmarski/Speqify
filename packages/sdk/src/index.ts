@@ -1,11 +1,14 @@
 /**
- * @speqify/sdk — overlay SDK (loader + overlay UI).
+ * @speqify/sdk — overlay SDK (Phase 5 foundation).
  *
- * SKELETON ONLY (Phase 5). This file pins the public init contract so host apps
- * can integrate against a stable surface while the implementation is built out
- * (see IMPLEMENTATION_PLAN.md §6 Phase 5 and §7 distribution).
+ * Implemented: token validation, element pick, text note, idempotent
+ * add + Send. NOT yet (later Phase 5 sub-steps, §14): screenshot, voice,
+ * screen recording, technical-context capture, redaction, offline drafts,
+ * consent notice, host-app context injection.
  */
 import type { HostAppContext } from "@speqify/shared";
+import { SpeqifyClient } from "./client.js";
+import { mountOverlay, type OverlayInstance } from "./overlay.js";
 
 export interface SpeqifyInitOptions {
   /** Panel capability token (from URL/launcher). SDK stays dormant if invalid. */
@@ -14,18 +17,20 @@ export interface SpeqifyInitOptions {
   apiBaseUrl: string;
   /** Only activate in non-production / review environments. */
   enabled: boolean;
-  /** Host-app context bundled with every annotation (build/env/user/flags). */
+  /** Reserved — host-app context injection lands in a later Phase 5 sub-step. */
   context?: HostAppContext;
 }
 
-export interface SpeqifyInstance {
-  open(): void;
-  close(): void;
-  destroy(): void;
+export type SpeqifyInstance = OverlayInstance;
+
+export async function init(options: SpeqifyInitOptions): Promise<SpeqifyInstance | null> {
+  if (!options.enabled || !options.token) return null;
+  const client = new SpeqifyClient(options.apiBaseUrl, options.token);
+  const info = await client.validate();
+  if (!info || info.status !== "open") return null;
+  return mountOverlay(client);
 }
 
-export function init(_options: SpeqifyInitOptions): SpeqifyInstance {
-  throw new Error("Not implemented yet — Phase 5 (IMPLEMENTATION_PLAN.md §6).");
-}
-
-export const SDK_VERSION = "0.0.0";
+export const SDK_VERSION = "0.1.0";
+export { SpeqifyClient } from "./client.js";
+export { buildAnnotationPayload } from "./payload.js";
