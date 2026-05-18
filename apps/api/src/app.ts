@@ -8,6 +8,8 @@ import {
   type ProjectTemplate,
   type SubmitInput,
 } from "@speqify/shared";
+import { runAnalysis } from "./analysis/service.js";
+import type { LlmProvider } from "./analysis/types.js";
 import { authenticate, requireRole } from "./auth/auth.js";
 import type { AppConfig } from "./env.js";
 import { b64url, encryptJson, hashPassword } from "./lib/crypto.js";
@@ -81,8 +83,9 @@ export function createApp(deps: {
   config: AppConfig;
   mediaStore: MediaStore;
   transcriber: Transcriber;
+  llm: LlmProvider;
 }): Hono<AppEnv> {
-  const { repo, config, mediaStore, transcriber } = deps;
+  const { repo, config, mediaStore, transcriber, llm } = deps;
   const app = new Hono<AppEnv>();
 
   app.use("*", requestContext);
@@ -302,6 +305,22 @@ export function createApp(deps: {
     const b = body<z.infer<typeof transcriptEditSchema>>(c);
     await repo.setTranscription(ann.id, b.transcript, "done");
     return c.json({ ok: true });
+  });
+
+  // AI analysis — single in-flight per project; manual trigger now, a
+  // Workflow drives it in production (Workers Paid, §14).
+  po.post("/analyze", async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    const res = await runAnalysis({ repo, llm }, project);
+    if (res.locked) throw new ApiException("conflict", "Analysis already running");
+    return c.json(res);
+  });
+
+  po.get("/tasks", async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    return c.json({ tasks: await repo.listTasks(project.id) });
   });
 
   app.route("/po", po);

@@ -1,10 +1,13 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "@speqify/db/schema";
 import type {
+  AnalysisRun,
   Annotation,
   AnnotationStatus,
   AnnotationType,
+  Task,
+  TaskStatus,
   ExportConfig,
   ExportTarget,
   PanelAudience,
@@ -18,7 +21,7 @@ import type {
   UserRole,
 } from "@speqify/shared";
 import { newId } from "../lib/ids.js";
-import type { AnnotationCreate, Repository, UserWithSecret } from "./types.js";
+import type { AnnotationCreate, Repository, TaskDraftInput, UserWithSecret } from "./types.js";
 
 type Db = DrizzleD1Database<typeof schema>;
 type PanelRow = typeof schema.panels.$inferSelect;
@@ -28,6 +31,41 @@ type UserRow = typeof schema.users.$inferSelect;
 type ProjectRow = typeof schema.projects.$inferSelect;
 
 type ExportConfigRow = typeof schema.exportConfigs.$inferSelect;
+type AnalysisRunRow = typeof schema.analysisRuns.$inferSelect;
+type TaskRow = typeof schema.tasks.$inferSelect;
+
+function toAnalysisRun(r: AnalysisRunRow): AnalysisRun {
+  return {
+    id: r.id,
+    projectId: r.projectId,
+    status: r.status as AnalysisRun["status"],
+    annotationIds: r.annotationIds,
+    startedAt: r.startedAt,
+    finishedAt: r.finishedAt ?? null,
+    error: r.error ?? null,
+  };
+}
+
+function toTask(r: TaskRow): Task {
+  return {
+    id: r.id,
+    projectId: r.projectId,
+    status: r.status as TaskStatus,
+    parentTaskId: r.parentTaskId ?? null,
+    title: r.title,
+    description: r.description,
+    acceptanceCriteria: r.acceptanceCriteria,
+    labels: r.labels,
+    component: r.component ?? null,
+    version: r.version ?? null,
+    priority: (r.priority as Task["priority"]) ?? null,
+    annotationIds: r.annotationIds,
+    screenshotKeys: r.screenshotKeys,
+    externalId: r.externalId ?? null,
+    exportError: r.exportError ?? null,
+    createdAt: r.createdAt,
+  };
+}
 
 function toExportConfig(r: ExportConfigRow): ExportConfig {
   return {
@@ -478,5 +516,102 @@ export class D1Repository implements Repository {
       .where(eq(schema.projects.id, args.projectId));
 
     return toExportConfig(row);
+  }
+
+  async startAnalysisRun(projectId: string): Promise<AnalysisRun | null> {
+    const running = await this.db
+      .select()
+      .from(schema.analysisRuns)
+      .where(
+        and(
+          eq(schema.analysisRuns.projectId, projectId),
+          eq(schema.analysisRuns.status, "running"),
+        ),
+      )
+      .limit(1);
+    if (running[0]) return null;
+    const inserted = await this.db
+      .insert(schema.analysisRuns)
+      .values({ id: newId(), projectId, status: "running", annotationIds: [] })
+      .returning();
+    return toAnalysisRun(inserted[0] as AnalysisRunRow);
+  }
+
+  async finishAnalysisRun(
+    runId: string,
+    status: "succeeded" | "failed",
+    annotationIds: string[],
+    error: string | null,
+  ): Promise<void> {
+    await this.db
+      .update(schema.analysisRuns)
+      .set({ status, annotationIds, error, finishedAt: new Date().toISOString() })
+      .where(eq(schema.analysisRuns.id, runId));
+  }
+
+  async listSubmittedForProject(projectId: string): Promise<Annotation[]> {
+    const panels = await this.db
+      .select({ id: schema.panels.id })
+      .from(schema.panels)
+      .where(eq(schema.panels.projectId, projectId));
+    const panelIds = panels.map((p) => p.id);
+    if (panelIds.length === 0) return [];
+    const rows = await this.db
+      .select()
+      .from(schema.annotations)
+      .where(
+        and(
+          eq(schema.annotations.status, "submitted"),
+          inArray(schema.annotations.panelId, panelIds),
+        ),
+      );
+    return rows.map(toAnnotation);
+  }
+
+  async createTasks(drafts: TaskDraftInput[]): Promise<Task[]> {
+    const out: Task[] = [];
+    for (const d of drafts) {
+      const inserted = await this.db
+        .insert(schema.tasks)
+        .values({
+          id: newId(),
+          projectId: d.projectId,
+          status: "generated",
+          parentTaskId: d.parentTaskId,
+          title: d.title,
+          description: d.description,
+          acceptanceCriteria: d.acceptanceCriteria,
+          labels: d.labels,
+          component: d.component,
+          version: d.version,
+          priority: d.priority,
+          annotationIds: d.annotationIds,
+          screenshotKeys: d.screenshotKeys,
+        })
+        .returning();
+      out.push(toTask(inserted[0] as TaskRow));
+    }
+    return out;
+  }
+
+  async markAnnotationsProcessed(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.db
+      .update(schema.annotations)
+      .set({ status: "processed" })
+      .where(
+        and(
+          inArray(schema.annotations.id, ids),
+          inArray(schema.annotations.status, ["submitted", "draft"]),
+        ),
+      );
+  }
+
+  async listTasks(projectId: string): Promise<Task[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.tasks)
+      .where(eq(schema.tasks.projectId, projectId));
+    return rows.map(toTask);
   }
 }

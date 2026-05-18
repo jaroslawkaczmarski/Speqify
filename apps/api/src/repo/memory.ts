@@ -1,4 +1,5 @@
 import type {
+  AnalysisRun,
   Annotation,
   ExportConfig,
   ExportTarget,
@@ -8,12 +9,13 @@ import type {
   Project,
   ProjectTemplate,
   Submission,
+  Task,
   TranscriptionStatus,
   User,
   UserRole,
 } from "@speqify/shared";
 import { newId } from "../lib/ids.js";
-import type { AnnotationCreate, Repository, UserWithSecret } from "./types.js";
+import type { AnnotationCreate, Repository, TaskDraftInput, UserWithSecret } from "./types.js";
 
 /**
  * In-memory Repository — used by unit tests and local dev without D1.
@@ -26,6 +28,12 @@ export class InMemoryRepository implements Repository {
   private users = new Map<string, UserWithSecret>();
   private projects = new Map<string, Project>();
   private exportConfigs = new Map<string, ExportConfig>();
+  private runs = new Map<string, AnalysisRun>();
+  private tasks = new Map<string, Task>();
+
+  private panelById(panelId: string): Panel | undefined {
+    return [...this.panels.values()].find((p) => p.id === panelId);
+  }
 
   constructor(seed?: { panels?: Panel[]; users?: UserWithSecret[]; projects?: Project[] }) {
     for (const p of seed?.panels ?? []) this.panels.set(p.secretToken, p);
@@ -271,5 +279,83 @@ export class InMemoryRepository implements Repository {
     const project = this.projects.get(args.projectId);
     if (project) project.exportConfigId = cfg.id;
     return cfg;
+  }
+
+  async startAnalysisRun(projectId: string): Promise<AnalysisRun | null> {
+    const busy = [...this.runs.values()].some(
+      (r) => r.projectId === projectId && r.status === "running",
+    );
+    if (busy) return null;
+    const run: AnalysisRun = {
+      id: newId(),
+      projectId,
+      status: "running",
+      annotationIds: [],
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      error: null,
+    };
+    this.runs.set(run.id, run);
+    return run;
+  }
+
+  async finishAnalysisRun(
+    runId: string,
+    status: "succeeded" | "failed",
+    annotationIds: string[],
+    error: string | null,
+  ): Promise<void> {
+    const run = this.runs.get(runId);
+    if (!run) return;
+    run.status = status;
+    run.annotationIds = annotationIds;
+    run.error = error;
+    run.finishedAt = new Date().toISOString();
+  }
+
+  async listSubmittedForProject(projectId: string): Promise<Annotation[]> {
+    return [...this.annotations.values()].filter(
+      (a) => a.status === "submitted" && this.panelById(a.panelId)?.projectId === projectId,
+    );
+  }
+
+  async createTasks(drafts: TaskDraftInput[]): Promise<Task[]> {
+    const created: Task[] = [];
+    for (const d of drafts) {
+      const task: Task = {
+        id: newId(),
+        projectId: d.projectId,
+        status: "generated",
+        parentTaskId: d.parentTaskId,
+        title: d.title,
+        description: d.description,
+        acceptanceCriteria: d.acceptanceCriteria,
+        labels: d.labels,
+        component: d.component,
+        version: d.version,
+        priority: d.priority,
+        annotationIds: d.annotationIds,
+        screenshotKeys: d.screenshotKeys,
+        externalId: null,
+        exportError: null,
+        createdAt: new Date().toISOString(),
+      };
+      this.tasks.set(task.id, task);
+      created.push(task);
+    }
+    return created;
+  }
+
+  async markAnnotationsProcessed(ids: string[]): Promise<void> {
+    const set = new Set(ids);
+    for (const a of this.annotations.values()) {
+      if (set.has(a.id) && (a.status === "submitted" || a.status === "draft")) {
+        a.status = "processed";
+      }
+    }
+  }
+
+  async listTasks(projectId: string): Promise<Task[]> {
+    return [...this.tasks.values()].filter((t) => t.projectId === projectId);
   }
 }

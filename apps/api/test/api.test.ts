@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import type { AppConfig } from "../src/env.js";
 import { hashPassword } from "../src/lib/crypto.js";
+import type { LlmProvider } from "../src/analysis/types.js";
 import { InMemoryMediaStore } from "../src/media/memory.js";
 import { InMemoryRepository } from "../src/repo/memory.js";
 import type { Transcriber } from "../src/transcribe/types.js";
@@ -73,9 +74,19 @@ const poProject: Project = {
   createdAt: new Date().toISOString(),
 };
 
-function makeApp(extra?: Panel[], transcriberArg?: Transcriber) {
+const poPanel: Panel = {
+  id: "panel-po-tok",
+  projectId: "prj_po",
+  audience: "client",
+  secretToken: "po-tok",
+  environmentUrl: ENV_URL,
+  status: "open",
+  createdAt: new Date().toISOString(),
+};
+
+function makeApp(extra?: Panel[], transcriberArg?: Transcriber, llmArg?: LlmProvider) {
   const repo = new InMemoryRepository({
-    panels: [panel("open-tok", "open"), panel("closed-tok", "closed"), ...(extra ?? [])],
+    panels: [panel("open-tok", "open"), panel("closed-tok", "closed"), poPanel, ...(extra ?? [])],
     users: [
       {
         id: "usr_po",
@@ -90,8 +101,9 @@ function makeApp(extra?: Panel[], transcriberArg?: Transcriber) {
   });
   const mediaStore = new InMemoryMediaStore();
   const transcriber: Transcriber = transcriberArg ?? okTranscriber();
+  const llm: LlmProvider = llmArg ?? okLlm();
   return {
-    app: createApp({ repo, config, mediaStore, transcriber }),
+    app: createApp({ repo, config, mediaStore, transcriber, llm }),
     repo,
     mediaStore,
   };
@@ -99,6 +111,10 @@ function makeApp(extra?: Panel[], transcriberArg?: Transcriber) {
 
 function okTranscriber(text = "the transcribed text"): Transcriber {
   return { transcribe: async () => ({ text }) };
+}
+
+function okLlm(json = '{"tasks":[{"title":"Improve checkout CTA"}]}'): LlmProvider {
+  return { complete: async () => json };
 }
 
 async function login(
@@ -585,5 +601,92 @@ describe("transcription (Phase 6)", () => {
       body: JSON.stringify({ transcript: "x" }),
     });
     expect(foreign.status).toBe(403);
+  });
+});
+
+async function seedPoAnnotations(app: ReturnType<typeof createApp>, ids: string[]): Promise<void> {
+  for (const cid of ids) {
+    await app.request("/panels/po-tok/annotations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        annotationBody({ clientAnnotationId: cid, submissionId: "sub-po", clientId: "b1" }),
+      ),
+    });
+  }
+  await app.request("/panels/po-tok/submit", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ submissionId: "sub-po", clientId: "b1" }),
+  });
+}
+
+describe("AI analysis (Phase 7)", () => {
+  it("no-op success when there are no submitted annotations", async () => {
+    const { app } = makeApp();
+    const po = await login(app, "po@speqify.app", "po-pass");
+    const res = await app.request("/po/analyze", {
+      method: "POST",
+      headers: { authorization: `Bearer ${po}` },
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { status: string; tasksCreated: number }).toMatchObject({
+      status: "succeeded",
+      annotations: 0,
+      tasksCreated: 0,
+    });
+  });
+
+  it("turns submitted annotations into tasks, then marks them processed", async () => {
+    const { app, repo } = makeApp();
+    const po = await login(app, "po@speqify.app", "po-pass");
+    await seedPoAnnotations(app, ["a1", "a2"]);
+
+    const res = await app.request("/po/analyze", {
+      method: "POST",
+      headers: { authorization: `Bearer ${po}` },
+    });
+    expect((await res.json()) as { annotations: number }).toMatchObject({
+      status: "succeeded",
+      annotations: 2,
+      tasksCreated: 1,
+    });
+    expect(await repo.listTasks("prj_po")).toHaveLength(1);
+
+    // Re-run is incremental: nothing left to process.
+    const again = await app.request("/po/analyze", {
+      method: "POST",
+      headers: { authorization: `Bearer ${po}` },
+    });
+    expect((await again.json()) as { annotations: number }).toMatchObject({
+      annotations: 0,
+      tasksCreated: 0,
+    });
+  });
+
+  it("invalid LLM output fails the run and never persists tasks or processes annotations", async () => {
+    const bad: LlmProvider = { complete: async () => "totally not json" };
+    const { app, repo } = makeApp([], undefined, bad);
+    const po = await login(app, "po@speqify.app", "po-pass");
+    await seedPoAnnotations(app, ["b1", "b2"]);
+
+    const res = await app.request("/po/analyze", {
+      method: "POST",
+      headers: { authorization: `Bearer ${po}` },
+    });
+    expect((await res.json()) as { status: string }).toMatchObject({ status: "failed" });
+    expect(await repo.listTasks("prj_po")).toHaveLength(0);
+    expect(await repo.listSubmittedForProject("prj_po")).toHaveLength(2);
+  });
+
+  it("rejects a concurrent run (single in-flight per project)", async () => {
+    const { app, repo } = makeApp();
+    const po = await login(app, "po@speqify.app", "po-pass");
+    await repo.startAnalysisRun("prj_po"); // hold the lock
+    const res = await app.request("/po/analyze", {
+      method: "POST",
+      headers: { authorization: `Bearer ${po}` },
+    });
+    expect(res.status).toBe(409);
   });
 });

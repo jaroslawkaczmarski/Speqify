@@ -4,8 +4,8 @@
 > relevant phase. Record every meaningful change in the **Revision Log** at the bottom.
 > Keep this file in sync with reality — it is the single source of truth for scope and status.
 
-- **Status:** In progress — Phases 0–6 shipped (logic); Phase 7 (AI analysis) next. Plan kept in sync per phase.
-- **Last updated:** 2026-05-18
+- **Status:** In progress — Phases 0–7 shipped (logic); Phase 8 (Review) next. Plan kept in sync per phase.
+- **Last updated:** 2026-05-19
 - **Owner:** TBD
 - **Related docs:** [`DESIGN.md`](./DESIGN.md) (Convergence design system — landing page authority)
 
@@ -224,16 +224,17 @@ Task:        generated ──Review──▶ accepted ──export──▶ expo
 - [~] Empty/silent → flagged done; long-audio segment/stitch deferred
 - [x] Transcript write-back; failed → retried next run; PO manual transcript
 
-### Phase 7 — AI analysis (Workflow)
-- [ ] PO trigger; **single in-flight run per project** (lock/queue); concurrent triggers queued
-- [ ] **Snapshot submitted+unprocessed annotation set at run start**; mid-run arrivals excluded
-- [ ] Collect: annotations + template + screenshots/keyframes (vision) + transcript + technical + host-app context (video → transcript + sampled keyframes, never raw video)
-- [ ] Prompt builder: language/AC/labels/component-version; embed technical + repro breadcrumb (dev-ready); **all captured content treated as untrusted (prompt-injection hardening)**
-- [ ] Large set → map-reduce (cluster → synthesize) within context window; images capped + downscaled
-- [ ] LLM via AI Gateway; grouping/merge; parent + subtasks; **structured-output validation + repair**
-- [ ] **Persist `Task` then mark annotations `processed` transactionally** (failure ⇒ re-analyzable, no dupes)
-- [ ] Zero annotations → no-op (no LLM call); provider error → actionable PO message; idempotent safe re-run
-- [ ] Re-run incremental; **accepted/PO-edited tasks never mutated**
+### Phase 7 — AI analysis  ✅ logic done (runtime/e2e = Workers Paid + LLM key)
+- [x] PO trigger (`POST /po/analyze`); **single in-flight run per project** (repo lock → 409)
+- [x] **Snapshot submitted+unprocessed annotations at run start** (re-run incremental)
+- [x] Collect: annotations + template + transcript + technical + host-app into prompt
+- [x] Prompt builder: language/AC/labels/component-version; **untrusted `<ANNOTATIONS>` block, prompt-injection-hardened**
+- [~] Map-reduce for very large sets / vision keyframes — deferred (single-shot prompt for now)
+- [x] LLM port (HTTP AI-Gateway/Noop) + grouping + parent/subtasks; **structured-output validation + 1 repair**; hallucinated annotationIds filtered
+- [x] **Persist tasks THEN mark `processed`** (failure ⇒ re-analyzable, no tasks persisted) — true D1 atomic batch deferred
+- [x] Zero annotations → no-op success; provider/invalid → run failed (actionable); idempotent
+- [x] Re-run incremental; **only inserts new tasks — existing never mutated**
+- [~] Runtime trigger = Cloudflare Workflow + LLM provider key (Workers Paid + SuperAdmin config) — manual `POST /po/analyze` provided
 
 ### Phase 8 — Review & accept
 - [ ] Review UI: list, filters, keyboard shortcuts (accept/reject/next/edit)
@@ -566,3 +567,4 @@ surface than requirements gathering).
 | 2026-05-18 | — | Usersnap competitor research: added auto technical-context capture, host-app context injection, action breadcrumb, blur/redact + arrow tools, structured capture prompt, dual screenshot strategy, triage priority/labels to Phases 5/7/8/9; added §13. |
 | 2026-05-18 | — | Screen recording promoted to V1 (parallel-audio design). Full edge-case review: rewrote Phases 5–9 for correctness/resilience; strengthened §9 (consent, scrubbing, erasure, cost, traceability, API versioning, recovery, DR); added §14 edge-case & correctness reference. |
 | 2026-05-18 | — | Implementation Phases 0–6 shipped & pushed (private repo, CI green): monorepo+CI, Convergence landing, D1(EU)+R2 provisioned, core API (Hono/D1/Drizzle), SuperAdmin (backend+UI), PO config (template+encrypted export), panel lifecycle, full overlay SDK 0.5.0 (capture/redaction/recording/offline), transcription logic. 43 tests. Roadmap §6 checkboxes reconciled; deferred items flagged. Manual prerequisites still outstanding: Workers Paid (Queues/Workflows runtime) + LLM provider key (Phase 7 e2e). |
+| 2026-05-19 | — | Phase 7 (AI analysis) logic shipped: LLM port + prompt (injection-hardened) + `runAnalysis` with §14 correctness (single in-flight lock, snapshot, structured-output validate+repair, persist-then-process, no mutation of existing tasks); `POST /po/analyze` + `GET /po/tasks`. 47 tests, cloud-free. §6 Phase 7 reconciled. |

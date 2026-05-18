@@ -26,6 +26,10 @@ export interface Env {
   readonly TRANSCRIBE_ENDPOINT?: string;
   readonly TRANSCRIBE_API_KEY?: string;
   readonly TRANSCRIBE_MODEL?: string;
+  /** LLM for task generation (AI Gateway / OpenAI-compatible) — optional. */
+  readonly LLM_ENDPOINT?: string;
+  readonly LLM_API_KEY?: string;
+  readonly LLM_MODEL?: string;
 }
 
 export interface AppConfig {

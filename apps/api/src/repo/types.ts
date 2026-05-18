@@ -1,5 +1,6 @@
 import type {
   Annotation,
+  AnalysisRun,
   CreateAnnotationInput,
   ExportConfig,
   ExportTarget,
@@ -9,10 +10,25 @@ import type {
   Project,
   ProjectTemplate,
   Submission,
+  Task,
   TranscriptionStatus,
   User,
   UserRole,
 } from "@speqify/shared";
+
+export interface TaskDraftInput {
+  projectId: string;
+  parentTaskId: string | null;
+  title: string;
+  description: string;
+  acceptanceCriteria: string[];
+  labels: string[];
+  component: string | null;
+  version: string | null;
+  priority: "low" | "medium" | "high" | null;
+  annotationIds: string[];
+  screenshotKeys: string[];
+}
 
 export type UserWithSecret = User & { passwordHash: string | null };
 
@@ -56,6 +72,29 @@ export interface Repository {
     transcript: string | null,
     status: TranscriptionStatus,
   ): Promise<Annotation | null>;
+
+  // --- AI analysis (Phase 7, §14) ---
+
+  /** Acquire the single in-flight analysis lock for a project (null if busy). */
+  startAnalysisRun(projectId: string): Promise<AnalysisRun | null>;
+
+  finishAnalysisRun(
+    runId: string,
+    status: "succeeded" | "failed",
+    annotationIds: string[],
+    error: string | null,
+  ): Promise<void>;
+
+  /** Snapshot: submitted, not-yet-processed annotations for a project. */
+  listSubmittedForProject(projectId: string): Promise<Annotation[]>;
+
+  /** Insert generated tasks; parents before subtasks. Never mutates existing. */
+  createTasks(drafts: TaskDraftInput[]): Promise<Task[]>;
+
+  /** draft/submitted -> processed for the given ids (post-persist, §14). */
+  markAnnotationsProcessed(ids: string[]): Promise<void>;
+
+  listTasks(projectId: string): Promise<Task[]>;
 
   // --- SuperAdmin (Phase 2) ---
 

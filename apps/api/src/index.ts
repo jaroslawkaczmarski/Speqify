@@ -1,3 +1,5 @@
+import { HttpLlmProvider, NoopLlmProvider } from "./analysis/providers.js";
+import type { LlmProvider } from "./analysis/types.js";
 import { createApp } from "./app.js";
 import { resolveConfig, type Env } from "./env.js";
 import { InMemoryMediaStore } from "./media/memory.js";
@@ -30,7 +32,11 @@ export default {
           env.TRANSCRIBE_MODEL ?? "whisper-1",
         );
       else transcriber = new NoopTranscriber();
-      return createApp({ repo, config, mediaStore, transcriber }).fetch(request, env, ctx);
+      const llm: LlmProvider =
+        env.LLM_ENDPOINT && env.LLM_API_KEY
+          ? new HttpLlmProvider(env.LLM_ENDPOINT, env.LLM_API_KEY, env.LLM_MODEL ?? "gpt-4o-mini")
+          : new NoopLlmProvider();
+      return createApp({ repo, config, mediaStore, transcriber, llm }).fetch(request, env, ctx);
     } catch (err) {
       const correlationId = request.headers.get("x-correlation-id") ?? crypto.randomUUID();
       return Response.json(
