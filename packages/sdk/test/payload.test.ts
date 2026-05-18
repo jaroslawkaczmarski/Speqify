@@ -92,4 +92,23 @@ describe("buildAnnotationPayload", () => {
     expect(body.screenshot?.contentType).toBe("image/png");
     expect(createAnnotationSchema.safeParse(body).success).toBe(true);
   });
+
+  it("becomes a recording annotation with video+audio MediaRefs", () => {
+    const media = (k: string) => ({
+      bucketKey: `panels/p1/${k}/r`,
+      contentType: k.includes("audio") ? "audio/webm" : "video/webm",
+      bytes: 2048,
+      publicUrl: `https://api.speqify.app/media/panels/p1/${k}/r`,
+    });
+    const body = buildAnnotationPayload({
+      submissionId: "s",
+      clientId: "c",
+      pageUrl: "https://x.test/",
+      recordingVideo: media("recording-video"),
+      recordingAudio: media("recording-audio"),
+    });
+    expect(body.type).toBe("recording");
+    expect(body.recordingVideo?.contentType).toBe("video/webm");
+    expect(createAnnotationSchema.safeParse(body).success).toBe(true);
+  });
 });

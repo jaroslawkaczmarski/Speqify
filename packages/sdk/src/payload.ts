@@ -31,23 +31,26 @@ export function buildAnnotationPayload(args: {
   textNote?: string | null;
   screenshot?: MediaRef | null;
   voice?: MediaRef | null;
+  recordingVideo?: MediaRef | null;
+  recordingAudio?: MediaRef | null;
   structured?: StructuredInput | null;
   technical?: TechnicalContext | null;
   hostApp?: HostAppContext | null;
   breadcrumb?: NavigationStep[];
 }): CreateAnnotationInput {
+  const type = args.recordingVideo ? "recording" : args.element ? "element" : "global";
   return {
     clientAnnotationId: newId(),
     submissionId: args.submissionId,
     clientId: args.clientId,
-    type: args.element ? "element" : "global",
+    type,
     pageUrl: args.pageUrl,
     breadcrumb: args.breadcrumb ?? [],
     element: args.element ?? null,
     screenshot: args.screenshot ?? null,
     voice: args.voice ?? null,
-    recordingVideo: null,
-    recordingAudio: null,
+    recordingVideo: args.recordingVideo ?? null,
+    recordingAudio: args.recordingAudio ?? null,
     textNote: args.textNote ?? null,
     structured: args.structured ?? null,
     technical: args.technical ?? null,

@@ -475,4 +475,16 @@ describe("media upload (Phase 5c)", () => {
     const missing = await app.request("/media/panels/nope/voice/x");
     expect(missing.status).toBe(404);
   });
+
+  it("accepts screen-recording media kinds", async () => {
+    const { app } = makeApp();
+    for (const kind of ["recording-video", "recording-audio"]) {
+      const up = await app.request(`/panels/open-tok/uploads?kind=${kind}`, {
+        method: "POST",
+        headers: { "content-type": "video/webm" },
+        body: new Uint8Array([9, 9, 9]),
+      });
+      expect(up.status).toBe(201);
+    }
+  });
 });

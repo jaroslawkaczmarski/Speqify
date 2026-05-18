@@ -11,7 +11,13 @@ import type {
   TechnicalContext,
 } from "@speqify/shared";
 import type { SpeqifyClient } from "./client.js";
-import { startVoiceRecording, type VoiceRecorder } from "./media.js";
+import {
+  startScreenRecording,
+  startVoiceRecording,
+  type ScreenRecorder,
+  type ScreenRecording,
+  type VoiceRecorder,
+} from "./media.js";
 import { buildAnnotationPayload, type ElementCapture, type StructuredInput } from "./payload.js";
 import { captureScreenshot } from "./screenshot.js";
 import { captureElement } from "./selector.js";
@@ -65,6 +71,8 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   let count = 0;
   let voiceBlob: Blob | null = null;
   let recorder: VoiceRecorder | null = null;
+  let screenRec: ScreenRecorder | null = null;
+  let screenOut: ScreenRecording | null = null;
 
   const fab = document.createElement("button");
   fab.className = "fab";
@@ -110,6 +118,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       </label>
       <div>
         <button class="act" data-rec>Record voice</button>
+        <button class="act" data-screen>Record screen</button>
         <span class="muted" data-vstat></span>
       </div>
       <textarea data-note placeholder="What should change here?"></textarea>
@@ -128,9 +137,30 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     const counter = q<HTMLElement>("[data-count]");
     const vstat = q<HTMLElement>("[data-vstat]");
     const recBtn = q<HTMLButtonElement>("[data-rec]");
+    const screenBtn = q<HTMLButtonElement>("[data-screen]");
     const shot = q<HTMLInputElement>("[data-shot]");
     counter.textContent = String(count);
     if (voiceBlob) vstat.textContent = "voice attached";
+    if (screenOut) vstat.textContent = "recording attached";
+
+    screenBtn.addEventListener("click", () => {
+      void (async () => {
+        if (screenRec) {
+          screenOut = await screenRec.stop();
+          screenRec = null;
+          screenBtn.textContent = "Record screen";
+          vstat.textContent = "recording attached";
+        } else {
+          try {
+            screenRec = await startScreenRecording();
+            screenBtn.textContent = "Stop screen ●";
+            vstat.textContent = "recording screen…";
+          } catch {
+            vstat.textContent = "screen capture blocked";
+          }
+        }
+      })();
+    });
 
     recBtn.addEventListener("click", () => {
       void (async () => {
@@ -188,6 +218,14 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
               /* non-fatal: send the annotation without a screenshot */
             }
           }
+          let recordingVideo = null;
+          let recordingAudio = null;
+          if (screenOut) {
+            recordingVideo = await client.upload("recording-video", screenOut.video);
+            if (screenOut.audio) {
+              recordingAudio = await client.upload("recording-audio", screenOut.audio);
+            }
+          }
           const body = buildAnnotationPayload({
             submissionId: getSubmissionId(),
             clientId: getClientId(),
@@ -196,6 +234,8 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
             textNote: note.value.trim() || null,
             screenshot,
             voice,
+            recordingVideo,
+            recordingAudio,
             structured,
             technical: deps.technical?.() ?? null,
             hostApp: deps.hostApp ?? null,
@@ -212,6 +252,8 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
           note.value = "";
           picked = null;
           voiceBlob = null;
+          screenOut = null;
+          screenBtn.textContent = "Record screen";
           vstat.textContent = "";
           clearHl();
           sel.textContent = "No element selected";

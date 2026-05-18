@@ -34,7 +34,10 @@ export class SpeqifyClient {
     return (await r.json()) as { id: string };
   }
 
-  async upload(kind: "screenshot" | "voice", blob: Blob): Promise<MediaRef> {
+  async upload(
+    kind: "screenshot" | "voice" | "recording-video" | "recording-audio",
+    blob: Blob,
+  ): Promise<MediaRef> {
     const r = await fetch(`${this.base}/panels/${this.token}/uploads?kind=${kind}`, {
       method: "POST",
       headers: { "content-type": blob.type || "application/octet-stream" },
