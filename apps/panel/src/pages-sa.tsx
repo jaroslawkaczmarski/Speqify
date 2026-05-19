@@ -12,10 +12,14 @@ import type {
 import { api, sdkSnippet } from "./api.js";
 import {
   Alert,
+  Avatar,
   Button,
   ConfirmModal,
+  EmptyState,
   Field,
   Page,
+  Pill,
+  RoleBadge,
   Stat,
   csvToList,
   useAsync,
@@ -24,9 +28,11 @@ import {
   IconCheck,
   IconAlert,
   IconX,
+  IconFileText,
   IconPlus,
   IconSearch,
   IconShield,
+  IconUsers,
 } from "./icons.js";
 
 const SPARK = "0,18 8,14 16,16 24,10 32,12 40,6 48,9 56,4 64,7 72,3 80,5";
@@ -370,10 +376,20 @@ export function Dashboard() {
   );
 }
 
+function initials(name: string): string {
+  const p = name.trim().split(/\s+/);
+  return ((p[0]?.[0] ?? "") + (p[1]?.[0] ?? p[0]?.[1] ?? "")).toUpperCase() || "??";
+}
+
+/** Admin · Użytkownicy (Admin Users.html). Real listUsers/createUser; SA/PO
+ *  counts live. Reviewers = panel role (no per-person identity in V1), 2FA /
+ *  activity / invites are representative — flagged in the note. */
 export function ProductOwners() {
   const [users, setUsers] = useState<User[]>([]);
+  const [q, setQ] = useState("");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [showForm, setShowForm] = useState(false);
   const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
   const { error, busy, run } = useAsync();
 
@@ -387,83 +403,374 @@ export function ProductOwners() {
       setCreated({ email: r.email, password: r.password });
       setEmail("");
       setName("");
+      setShowForm(false);
       setUsers((await api.listUsers()).users);
     });
   };
 
-  const pos = users.filter((u) => u.role === "product_owner");
+  const sa = users.filter((u) => u.role === "superadmin").length;
+  const po = users.filter((u) => u.role === "product_owner").length;
+  const ql = q.trim().toLowerCase();
+  const visible = ql
+    ? users.filter(
+        (u) =>
+          u.displayName.toLowerCase().includes(ql) || u.email.toLowerCase().includes(ql),
+      )
+    : users;
+
   return (
-    <Page crumbs={["Speqify Internal", "Użytkownicy"]}>
+    <Page
+      crumbs={["Speqify Internal", "Użytkownicy"]}
+      actions={
+        <Button icon={<IconPlus />} onClick={() => setShowForm((v) => !v)}>
+          {showForm ? "Zamknij" : "Zaproś użytkownika"}
+        </Button>
+      }
+    >
       <div className="page-h">
         <div>
           <h1>Użytkownicy</h1>
-          <p className="sub">Konta Product Ownerów tworzone przez SA</p>
+          <p className="sub">
+            {users.length} kont · role SA / PO (Reviewer = rola panelu, bez konta w V1)
+          </p>
         </div>
       </div>
       {error ? <Alert kind="danger">{error}</Alert> : null}
       {created ? (
-        <Alert kind="success">
-          Utworzono <b>{created.email}</b>. Hasło jednorazowe:{" "}
-          <span className="pill-code">{created.password}</span> — skopiuj teraz.
+        <Alert kind="success" title="Konto utworzone">
+          <b>{created.email}</b> · hasło jednorazowe{" "}
+          <span className="pill-code">{created.password}</span> — skopiuj teraz, nie pokażemy
+          ponownie.
         </Alert>
       ) : null}
+
+      <div className="role-stats">
+        <div className="role-stat">
+          <div className="top">
+            <span className="label">Wszyscy</span>
+            <span className="role-badge">All</span>
+          </div>
+          <span className="n">{users.length}</span>
+          <span className="meta">konta z dostępem do panelu</span>
+        </div>
+        <div className="role-stat">
+          <div className="top">
+            <span className="label">Super Admini</span>
+            <RoleBadge role="sa" />
+          </div>
+          <span className="n">{sa}</span>
+          <span className="meta">współdzielone konto SA</span>
+        </div>
+        <div className="role-stat active">
+          <div className="top">
+            <span className="label">Product Owners</span>
+            <RoleBadge role="po" />
+          </div>
+          <span className="n">{po}</span>
+          <span className="meta">tworzeni przez SA</span>
+        </div>
+        <div className="role-stat">
+          <div className="top">
+            <span className="label">Recenzenci</span>
+            <RoleBadge role="rev" />
+          </div>
+          <span className="n">—</span>
+          <span className="meta">rola panelu — bez kont (V1)</span>
+        </div>
+      </div>
+
+      <div className="filter-bar">
+        <div className="search" style={{ flex: 1, minWidth: 240 }}>
+          <IconSearch />
+          <input
+            placeholder="Szukaj po imieniu lub e-mailu…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+        <span className="filter-chip" aria-disabled="true">
+          Rola: <span className="v">Wszystkie</span>
+        </span>
+        <span className="filter-chip" aria-disabled="true">
+          2FA: <span className="v">Wszystkie</span>
+        </span>
+      </div>
+
+      {showForm ? (
+        <form
+          onSubmit={submit}
+          className="card card-pad"
+          style={{ marginBottom: 20, maxWidth: 520 }}
+          noValidate
+        >
+          <h2 className="section-title" style={{ marginTop: 0 }}>
+            Zaproś Product Ownera
+          </h2>
+          <Field label="Nazwa wyświetlana" htmlFor="po-name">
+            <input
+              id="po-name"
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <Field label="E-mail" htmlFor="po-email">
+            <input
+              id="po-email"
+              type="email"
+              className="input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </Field>
+          <Button type="submit" disabled={busy}>
+            {busy ? "Tworzenie…" : "Utwórz konto PO"}
+          </Button>
+        </form>
+      ) : null}
+
       <div className="card">
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Nazwa</th>
-              <th>E-mail</th>
-              <th>Id</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pos.length === 0 ? (
+        <div className="card-h">
+          <div>
+            <h2>Wszyscy użytkownicy · {users.length}</h2>
+            <p className="sub">2FA / aktywność = dane przykładowe (poza modelem V1)</p>
+          </div>
+        </div>
+        {visible.length === 0 ? (
+          <EmptyState
+            icon={<IconUsers />}
+            title="Brak użytkowników"
+            description="Zaproś pierwszego Product Ownera — utworzy mu się konto z hasłem jednorazowym."
+            action={
+              <Button icon={<IconPlus />} onClick={() => setShowForm(true)}>
+                Zaproś użytkownika
+              </Button>
+            }
+          />
+        ) : (
+          <table className="tbl">
+            <thead>
               <tr>
-                <td colSpan={3} style={{ color: "var(--muted)" }}>
-                  Brak Product Ownerów.
-                </td>
+                <th>Użytkownik</th>
+                <th>Rola</th>
+                <th>2FA</th>
+                <th>Utworzono</th>
+                <th>Status</th>
               </tr>
-            ) : (
-              pos.map((u) => (
+            </thead>
+            <tbody>
+              {visible.map((u) => (
                 <tr key={u.id}>
-                  <td>{u.displayName}</td>
-                  <td>{u.email}</td>
                   <td>
-                    <span className="pill-code">{u.id}</span>
+                    <div className="user-cell">
+                      <Avatar initials={initials(u.displayName)} />
+                      <div className="info">
+                        <div className="n">{u.displayName}</div>
+                        <div className="e">{u.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <RoleBadge role={u.role === "superadmin" ? "sa" : "po"} />
+                  </td>
+                  <td>
+                    <span className="twofa off">—</span>
+                  </td>
+                  <td className="num">{new Date(u.createdAt).toLocaleDateString()}</td>
+                  <td>
+                    <Pill kind="live">active</Pill>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
-      <form onSubmit={submit} className="card card-pad" style={{ marginTop: 20, maxWidth: 520 }} noValidate>
-        <h2 className="section-title" style={{ marginTop: 0 }}>
-          Utwórz Product Ownera
-        </h2>
-        <Field label="Nazwa wyświetlana" htmlFor="po-name">
+    </Page>
+  );
+}
+
+const AUDIT_KIND_LABEL: Record<string, string> = {
+  "user.created": "utworzył konto PO",
+  "project.created": "dodał projekt",
+  "project.status": "zmienił status projektu",
+  "panel.created": "utworzył panel",
+  "panel.deleted": "usunął panel",
+  "analysis.finished": "uruchomił analizę AI",
+  "task.accepted": "zaakceptował zadanie",
+  "task.rejected": "odrzucił zadanie",
+  "export.completed": "wyeksportował zadania",
+  "providers.updated": "zaktualizował dostawcę AI",
+  "lead.received": "nowe zgłoszenie do bety",
+};
+
+/** Admin · Audyt log (Admin Audit.html). Real GET /admin/audit; stats + CSV
+ *  derived from the live feed; SIEM stream is out of scope (flagged). */
+export function AdminAudit() {
+  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [q, setQ] = useState("");
+  const { error, run } = useAsync();
+
+  useEffect(() => {
+    void run(async () => setEntries((await api.adminAudit()).entries));
+  }, []);
+
+  const ql = q.trim().toLowerCase();
+  const visible = ql
+    ? entries.filter(
+        (e) =>
+          e.summary.toLowerCase().includes(ql) ||
+          e.actor.toLowerCase().includes(ql) ||
+          e.kind.toLowerCase().includes(ql),
+      )
+    : entries;
+
+  const dayAgo = Date.now() - 86_400_000;
+  const last24 = entries.filter((e) => new Date(e.at).getTime() >= dayAgo).length;
+  const human = entries.filter((e) => e.actor !== "system" && e.actor !== "landing").length;
+  const issues = entries.filter((e) => e.severity !== "ok").length;
+  const auto = entries.filter((e) => e.actor === "system").length;
+
+  const exportCsv = (): void => {
+    const esc = (s: string): string =>
+      /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    const rows = entries.map((e) =>
+      [e.at, e.kind, e.severity, e.actor, e.projectId ?? "", e.summary].map(esc).join(","),
+    );
+    const csv = ["at,kind,severity,actor,projectId,summary", ...rows].join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "speqify-audit.csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  return (
+    <Page crumbs={["Speqify Internal", "Audyt log"]}>
+      <div className="page-h">
+        <div>
+          <h1>Audyt log</h1>
+          <p className="sub">Wszystkie zdarzenia w organizacji · dane na żywo</p>
+        </div>
+        <div className="right">
+          <Button variant="secondary" onClick={exportCsv} disabled={entries.length === 0}>
+            <IconShield />
+            Eksport CSV
+          </Button>
+          <Button
+            variant="secondary"
+            disabled
+            title="Stream do SIEM — poza zakresem V1 (Phase 11 observability)"
+          >
+            Stream do SIEM
+          </Button>
+        </div>
+      </div>
+      {error ? <Alert kind="danger">{error}</Alert> : null}
+
+      <div className="stats">
+        <Stat label="Zdarzenia" value={entries.length} delta={<span className="sp">dane na żywo</span>} />
+        <Stat label="Ostatnie 24h" value={last24} delta={<span className="sp">dane na żywo</span>} />
+        <Stat
+          label="Akcje ludzi"
+          value={human}
+          delta={<span className="sp">vs. {auto} auto</span>}
+        />
+        <Stat
+          label="Błędy & warningi"
+          value={issues}
+          deltaNeg={issues > 0}
+          delta={<span className="sp">{issues > 0 ? "wymaga uwagi" : "czysto"}</span>}
+        />
+        <Stat label="Auto-akcje" value={auto} delta={<span className="sp">system</span>} />
+      </div>
+
+      <div className="filter-bar">
+        <div className="search" style={{ flex: 1, minWidth: 240 }}>
+          <IconSearch />
           <input
-            id="po-name"
-            className="input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
+            placeholder="Szukaj po akcji, aktorze, typie…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
           />
-        </Field>
-        <Field label="E-mail" htmlFor="po-email">
-          <input
-            id="po-email"
-            type="email"
-            className="input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
+        </div>
+        <span className="filter-chip" aria-disabled="true">
+          Zakres: <span className="v">Wszystko</span>
+        </span>
+      </div>
+
+      <div className="card" style={{ overflow: "hidden" }}>
+        {visible.length === 0 ? (
+          <EmptyState
+            icon={<IconFileText />}
+            title="Brak zdarzeń"
+            description="Audyt zapełni się po pierwszych akcjach w panelu (tworzenie projektu, analiza, eksport…)."
+            action={null}
           />
-        </Field>
-        <Button type="submit" disabled={busy}>
-          {busy ? "Tworzenie…" : "Utwórz PO"}
-        </Button>
-      </form>
+        ) : (
+          <>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th style={{ width: 56 }} />
+                  <th>Aktor</th>
+                  <th>Akcja</th>
+                  <th>Target</th>
+                  <th>Kiedy</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((e) => (
+                  <tr key={e.id}>
+                    <td>
+                      <span className={`audit-ic ${e.severity}`}>
+                        {e.severity === "ok" ? (
+                          <IconCheck />
+                        ) : e.severity === "warn" ? (
+                          <IconAlert />
+                        ) : (
+                          <IconX />
+                        )}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 500 }}>{e.actor}</div>
+                      <div
+                        className="mono"
+                        style={{ fontSize: ".6875rem", color: "var(--muted)" }}
+                      >
+                        {e.kind}
+                      </div>
+                    </td>
+                    <td>{e.summary}</td>
+                    <td className="mono" style={{ fontSize: ".75rem", color: "var(--secondary)" }}>
+                      {e.projectId ?? AUDIT_KIND_LABEL[e.kind] ?? "—"}
+                    </td>
+                    <td style={{ fontSize: ".75rem", color: "var(--muted)" }}>{ago(e.at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div
+              style={{
+                padding: "12px 18px",
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: ".8125rem",
+                color: "var(--muted)",
+                borderTop: "1px solid var(--border)",
+              }}
+            >
+              <span>
+                Pokazano {visible.length} z {entries.length} zdarzeń
+              </span>
+              <span>retencja: in-memory (dev) · trwała = Phase 11</span>
+            </div>
+          </>
+        )}
+      </div>
     </Page>
   );
 }
