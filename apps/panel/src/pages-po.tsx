@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import type {
   PoSourceAnnotation,
   ProjectTemplate,
@@ -10,11 +10,17 @@ import type {
 import { api, type PoProjectView } from "./api.js";
 import {
   Alert,
+  Avatar,
+  AvatarStack,
   Button,
+  Card,
   EmptyState,
   Field,
   Page,
+  Pill,
+  RoleBadge,
   Skeleton,
+  Stat,
   Toggle,
   csvToList,
   useAsync,
@@ -24,9 +30,13 @@ import {
   IconCheck,
   IconEdit,
   IconInfo,
+  IconMessage,
+  IconMic,
   IconPlay,
+  IconPlus,
   IconRefresh,
   IconTrash,
+  IconUsers,
   IconZap,
   IconDownload,
 } from "./icons.js";
@@ -1062,6 +1072,1035 @@ export function PoTasks() {
           )}
         </div>
       </div>
+    </Page>
+  );
+}
+
+/* ===================================================================== *
+ *  Batch 4 — PO bundle screens                                          *
+ * ===================================================================== */
+
+/** Honesty banner for screens whose backend is out of V1 scope. */
+function RepBanner({ children }: { children: ReactNode }) {
+  return (
+    <Alert kind="warning" title="Widok poglądowy">
+      {children} Dane i akcje są reprezentatywne — encja sesji / recenzentów nie istnieje
+      w V1 (Phase 11). Adnotacje i zadania w pozostałych widokach pochodzą z realnego API.
+    </Alert>
+  );
+}
+
+function relTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "—";
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return "przed chwilą";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min temu`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} godz. temu`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? "wczoraj" : `${d} dni temu`;
+}
+
+/** Representative review-session card (no session entity in V1). */
+type RepSession = {
+  name: string;
+  env: "prod" | "stg" | "dev";
+  state: "live" | "danger" | "archived";
+  stateLabel: string;
+  desc: string;
+  range: string;
+  by: string;
+  url: string;
+  anns: number;
+  ai: number | null;
+  people: string[];
+  pct: number;
+  pctNote: string;
+  done?: boolean;
+};
+
+const REP_SESSIONS: RepSession[] = [
+  {
+    name: "Q1 2026 — Zamówienia & rozliczenia",
+    env: "prod",
+    state: "live",
+    stateLabel: "aktywna",
+    desc: "Przegląd przepływu zamówień na produkcji przed sprintem 24 — eksport raportów i statusy zwrotów.",
+    range: "12.05 → 24.05.2026",
+    by: "Ty",
+    url: "app.lumen-lab.com/orders",
+    anns: 34,
+    ai: 12,
+    people: ["MK", "TW", "AL", "JK", "PG"],
+    pct: 68,
+    pctNote: "68% · do 24.05",
+  },
+  {
+    name: "Hotfix — formularz kontakt B2B",
+    env: "prod",
+    state: "danger",
+    stateLabel: "kończy jutro",
+    desc: "Szybka weryfikacja formularza B2B po włączeniu walidacji NIP — edge case'y.",
+    range: "18.05 → 20.05.2026",
+    by: "Patrycja Górska",
+    url: "app.lumen-lab.com/contact",
+    anns: 10,
+    ai: null,
+    people: ["TW"],
+    pct: 92,
+    pctNote: "92% · kończy jutro",
+  },
+  {
+    name: "Q2 2026 — Refresh nawigacji",
+    env: "stg",
+    state: "live",
+    stateLabel: "aktywna",
+    desc: "Przegląd nowej nawigacji bocznej i top-baru na staging'u przed wdrożeniem na prod.",
+    range: "17.05 → 14.06.2026",
+    by: "Ty",
+    url: "staging.lumen-lab.com",
+    anns: 18,
+    ai: null,
+    people: ["MK", "AL", "PG"],
+    pct: 24,
+    pctNote: "24% · 26 dni do końca",
+  },
+  {
+    name: "Q4 2025 — Onboarding nowych klientów",
+    env: "prod",
+    state: "archived",
+    stateLabel: "ukończona",
+    desc: "12.04 → 30.04.2026 · 24 adnotacje · 9 zadań w Jira",
+    range: "12.04 → 30.04.2026",
+    by: "Marta Kowalska",
+    url: "app.lumen-lab.com/onboarding",
+    anns: 24,
+    ai: 9,
+    people: ["MK", "TW", "AL"],
+    pct: 100,
+    pctNote: "Raport →",
+    done: true,
+  },
+  {
+    name: "Q3 2025 — Płatności PSD2",
+    env: "prod",
+    state: "archived",
+    stateLabel: "ukończona",
+    desc: "22.03 → 12.04.2026 · 42 adnotacje · 14 zadań",
+    range: "22.03 → 12.04.2026",
+    by: "Marta Kowalska",
+    url: "app.lumen-lab.com/checkout",
+    anns: 42,
+    ai: 14,
+    people: ["MK", "JK", "TW"],
+    pct: 100,
+    pctNote: "Raport →",
+    done: true,
+  },
+];
+
+export function PoSessions() {
+  const [name, setName] = useState<string>("Mój projekt");
+  const { run } = useAsync();
+  useEffect(() => {
+    void run(async () => {
+      try {
+        setName((await api.poProject()).project.name);
+      } catch {
+        /* representative header — name is non-critical */
+      }
+    });
+  }, []);
+
+  const active = REP_SESSIONS.filter((s) => !s.done);
+  const done = REP_SESSIONS.filter((s) => s.done);
+
+  return (
+    <Page
+      crumbs={[name, "Sesje review"]}
+      env="prod"
+      actions={
+        <Button onClick={() => (window.location.hash = "/sessions/new")}>
+          <IconPlus width={14} height={14} />
+          Nowa sesja
+        </Button>
+      }
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: 20,
+          marginBottom: 20,
+        }}
+      >
+        <div>
+          <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-.015em" }}>
+            Sesje review
+          </h1>
+          <div style={{ color: "var(--muted)", fontSize: ".875rem", marginTop: 4 }}>
+            {active.length} aktywne · {done.length} ukończone · czasowo ograniczone okna zbierania
+            feedbacku
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <RepBanner>
+          „Sesje review" grupują adnotacje w okno czasowe. W V1 adnotacje są zbierane przez panele
+          bez warstwy sesji.
+        </RepBanner>
+      </div>
+
+      <div className="stats" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 24 }}>
+        <Stat label="Aktywne" value={active.length} delta="+1 nowa w tym tyg." />
+        <Stat label="Ukończone · maj" value={done.length} delta="→ 23 zadania w Jira" />
+        <Stat label="Avg. czas trwania" value="5,2 dni" delta="↓ 0,8 d vs. kwiecień" />
+        <Stat label="Avg. adnotacje / sesja" value="17" delta="+22% vs. kwiecień" />
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {active.map((s) => (
+          <Card key={s.name}>
+            <div
+              style={{
+                padding: "18px 22px",
+                display: "grid",
+                gridTemplateColumns: "1fr auto auto auto auto",
+                gap: 18,
+                alignItems: "center",
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                  <span style={{ fontSize: "1.0625rem", fontWeight: 700 }}>{s.name}</span>
+                  <span className={`env-pill env-${s.env}`}>{s.env}</span>
+                  <Pill kind={s.state}>{s.stateLabel}</Pill>
+                </div>
+                <div
+                  style={{
+                    fontSize: ".8125rem",
+                    color: "var(--secondary)",
+                    lineHeight: 1.5,
+                    marginBottom: 8,
+                    maxWidth: 560,
+                  }}
+                >
+                  {s.desc}
+                </div>
+                <div
+                  style={{
+                    fontSize: ".75rem",
+                    color: "var(--muted)",
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span>
+                    <strong style={{ color: "var(--primary)" }}>{s.range}</strong>
+                  </span>
+                  <span>·</span>
+                  <span>
+                    utworzone przez <strong style={{ color: "var(--secondary)" }}>{s.by}</strong>
+                  </span>
+                  <span>·</span>
+                  <span className="mono">{s.url}</span>
+                </div>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <div className="mono" style={{ fontSize: "1.25rem", fontWeight: 700 }}>
+                  {s.anns}
+                </div>
+                <div
+                  style={{
+                    fontSize: ".625rem",
+                    color: "var(--muted)",
+                    fontWeight: 600,
+                    letterSpacing: ".04em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  adnotacje
+                </div>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: "1.25rem",
+                    fontWeight: 700,
+                    color: s.ai == null ? "var(--muted)" : "var(--accent)",
+                  }}
+                >
+                  {s.ai == null ? "—" : s.ai}
+                </div>
+                <div
+                  style={{
+                    fontSize: ".625rem",
+                    color: "var(--muted)",
+                    fontWeight: 600,
+                    letterSpacing: ".04em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {s.ai == null ? "analiza wkrótce" : "zadania AI"}
+                </div>
+              </div>
+              <AvatarStack people={s.people} />
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-end",
+                  gap: 6,
+                }}
+              >
+                <div
+                  style={{
+                    height: 6,
+                    width: 140,
+                    borderRadius: 999,
+                    background: "var(--surface-muted)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <i
+                    style={{
+                      display: "block",
+                      height: "100%",
+                      width: `${s.pct}%`,
+                      borderRadius: 999,
+                      background: s.state === "danger" ? "var(--accent)" : "var(--success)",
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: ".6875rem", color: "var(--muted)" }}>{s.pctNote}</span>
+              </div>
+            </div>
+          </Card>
+        ))}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "16px 0 4px" }}>
+          <span
+            style={{
+              fontSize: ".75rem",
+              fontWeight: 700,
+              letterSpacing: ".06em",
+              textTransform: "uppercase",
+              color: "var(--muted)",
+            }}
+          >
+            Ukończone
+          </span>
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+        </div>
+
+        {done.map((s) => (
+          <Card key={s.name}>
+            <div
+              style={{
+                padding: "14px 22px",
+                display: "grid",
+                gridTemplateColumns: "1fr auto auto auto",
+                gap: 18,
+                alignItems: "center",
+                opacity: 0.82,
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                  <span style={{ fontSize: ".9375rem", fontWeight: 600 }}>{s.name}</span>
+                  <span className={`env-pill env-${s.env}`}>{s.env}</span>
+                  <Pill kind="archived">{s.stateLabel}</Pill>
+                </div>
+                <div style={{ fontSize: ".75rem", color: "var(--muted)" }}>{s.desc}</div>
+              </div>
+              <div className="mono" style={{ fontWeight: 600, fontSize: ".8125rem" }}>
+                {s.anns} adn.
+              </div>
+              <div
+                className="mono"
+                style={{ fontWeight: 600, fontSize: ".8125rem", color: "var(--success)" }}
+              >
+                {s.ai} wyeksp.
+              </div>
+              <span style={{ fontSize: ".75rem", color: "var(--muted)" }}>{s.pctNote}</span>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </Page>
+  );
+}
+
+const NS_STEPS = ["Podstawy", "Zakres & instrukcje", "Recenzenci", "Harmonogram"];
+const NS_FOCUS = [
+  "Eksport raportów",
+  "Statusy zamówień i zwrotów",
+  "Tabela zamówień (filtry, sortowanie, paginacja)",
+  "Dashboard analityka",
+  "Ustawienia konta",
+];
+
+export function PoNewSession() {
+  return (
+    <Page crumbs={["Mój projekt", "Nowa sesja review"]} env="prod">
+      <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 18 }}>
+        <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-.015em" }}>
+          Nowa sesja review
+        </h1>
+        <span style={{ fontSize: ".875rem", color: "var(--muted)" }}>
+          krok 2 z 4 · Zakres & instrukcje
+        </span>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <RepBanner>
+          Kreator sesji to makieta — w V1 panele recenzentów tworzy SuperAdmin, a adnotacje trafiają
+          wprost do projektu.
+        </RepBanner>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${NS_STEPS.length},1fr)`,
+          marginBottom: 24,
+        }}
+      >
+        {NS_STEPS.map((label, i) => {
+          const doneStep = i === 0;
+          const cur = i === 1;
+          return (
+            <div
+              key={label}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 16px",
+                background: doneStep
+                  ? "var(--success)"
+                  : cur
+                    ? "var(--primary)"
+                    : "var(--surface)",
+                color: doneStep || cur ? "#fff" : "var(--muted)",
+                border: doneStep || cur ? 0 : "1px solid var(--border)",
+                borderRadius:
+                  i === 0 ? "8px 0 0 8px" : i === NS_STEPS.length - 1 ? "0 8px 8px 0" : 0,
+              }}
+            >
+              <span
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: "50%",
+                  background:
+                    doneStep || cur ? "rgba(255,255,255,.2)" : "var(--surface-muted)",
+                  fontWeight: 700,
+                  fontSize: ".75rem",
+                  display: "grid",
+                  placeItems: "center",
+                  flex: "none",
+                }}
+              >
+                {doneStep ? "✓" : i + 1}
+              </span>
+              <div>
+                <div
+                  style={{
+                    fontSize: ".75rem",
+                    opacity: 0.8,
+                    fontWeight: 600,
+                    letterSpacing: ".04em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Krok {i + 1}
+                </div>
+                <div style={{ fontSize: ".875rem", fontWeight: 600 }}>{label}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <Card>
+        <div className="card-h">
+          <div>
+            <h2>Zakres & instrukcje</h2>
+            <p className="sub">co recenzent ma sprawdzić i jak</p>
+          </div>
+        </div>
+        <div
+          style={{
+            padding: "20px 22px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 18,
+            maxWidth: 620,
+          }}
+        >
+          <div>
+            <label
+              style={{ fontSize: ".875rem", fontWeight: 500, marginBottom: 6, display: "block" }}
+            >
+              URL aplikacji do review
+            </label>
+            <input
+              type="url"
+              defaultValue="https://app.lumen-lab.com/orders"
+              disabled
+              style={{
+                width: "100%",
+                height: 40,
+                border: "1px solid var(--border-strong)",
+                borderRadius: 6,
+                padding: "0 12px",
+                fontSize: ".875rem",
+                fontFamily: "var(--font-mono)",
+              }}
+            />
+            <div style={{ fontSize: ".75rem", color: "var(--muted)", marginTop: 6 }}>
+              SDK aktywuje się tylko na tej domenie i jej podścieżkach.
+            </div>
+          </div>
+
+          <div>
+            <label
+              style={{
+                fontSize: ".875rem",
+                fontWeight: 500,
+                marginBottom: 8,
+                display: "block",
+              }}
+            >
+              Obszary skupienia
+            </label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {NS_FOCUS.map((f, i) => (
+                <label
+                  key={f}
+                  style={{ display: "flex", alignItems: "center", gap: 8, fontSize: ".875rem" }}
+                >
+                  <input
+                    type="checkbox"
+                    defaultChecked={i < 3}
+                    disabled
+                    style={{ width: 18, height: 18, accentColor: "var(--primary)" }}
+                  />
+                  {f}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label
+              style={{ fontSize: ".875rem", fontWeight: 500, marginBottom: 6, display: "block" }}
+            >
+              Instrukcje dla recenzentów
+            </label>
+            <textarea
+              disabled
+              defaultValue={
+                "Skup się na przepływie eksportu raportów Q1 — w szczególności przycisk Eksportuj raport oraz powiadomienia dla zespołu finansowego.\n\nSprawdź statusy zamówień (anulowane vs zwrócone) — czy etykiety są jednoznaczne wizualnie."
+              }
+              style={{
+                width: "100%",
+                minHeight: 120,
+                border: "1px solid var(--border-strong)",
+                borderRadius: 6,
+                padding: 12,
+                fontSize: ".875rem",
+                fontFamily: "inherit",
+                lineHeight: 1.55,
+                resize: "vertical",
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button variant="secondary" onClick={() => (window.location.hash = "/sessions")}>
+              Wróć do sesji
+            </Button>
+            <Button disabled title="Kreator sesji — poza V1 (Phase 11)">
+              Dalej: Recenzenci
+            </Button>
+          </div>
+        </div>
+      </Card>
+    </Page>
+  );
+}
+
+type AnnRow = PoSourceAnnotation & { taskTitle: string };
+
+function annKind(a: PoSourceAnnotation): { voice: boolean; label: string } {
+  const voice = a.type === "voice" || a.type === "recording" || !!a.voiceUrl;
+  return { voice, label: voice ? "głos" : "txt" };
+}
+
+export function PoAnnotations() {
+  const [rows, setRows] = useState<AnnRow[] | null>(null);
+  const { error, busy, run } = useAsync();
+  const toast = useToast();
+
+  const load = (): void =>
+    void run(async () => {
+      const { tasks } = await api.listTasks();
+      const lists = await Promise.all(
+        tasks.map(async (t) => ({
+          title: t.title,
+          annotations: (await api.taskAnnotations(t.id)).annotations,
+        })),
+      );
+      const byId = new Map<string, AnnRow>();
+      for (const l of lists) {
+        for (const a of l.annotations) {
+          if (!byId.has(a.id)) byId.set(a.id, { ...a, taskTitle: l.title });
+        }
+      }
+      const all = [...byId.values()].sort((x, y) => y.createdAt.localeCompare(x.createdAt));
+      setRows(all);
+    });
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const stats = useMemo(() => {
+    const r = rows ?? [];
+    return {
+      total: r.length,
+      voice: r.filter((a) => annKind(a).voice).length,
+      text: r.filter((a) => !!a.textNote).length,
+      classified: r.filter((a) => !!a.structured).length,
+    };
+  }, [rows]);
+
+  const analyze = (): void =>
+    void run(async () => {
+      const res = await api.analyze();
+      toast.push({
+        kind: "ok",
+        title: "Analiza AI uruchomiona",
+        message: `${res.annotations} adnotacji przetworzono · ${res.tasksCreated} zadań utworzono`,
+      });
+      load();
+    });
+
+  const exportJson = (): void => {
+    const blob = new Blob([JSON.stringify(rows ?? [], null, 2)], {
+      type: "application/json",
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `speqify-annotations-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  return (
+    <Page
+      crumbs={["Mój projekt", "Adnotacje"]}
+      env="prod"
+      actions={
+        <>
+          <Button variant="secondary" onClick={exportJson} disabled={!rows || rows.length === 0}>
+            <IconDownload width={14} height={14} />
+            Eksport JSON
+          </Button>
+          <Button onClick={analyze} disabled={busy}>
+            <IconZap width={14} height={14} />
+            Uruchom analizę AI
+          </Button>
+        </>
+      }
+    >
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-.015em" }}>
+          Adnotacje
+        </h1>
+        <div style={{ color: "var(--muted)", fontSize: ".875rem", marginTop: 4 }}>
+          Surowy feedback recenzentów (na żywo z API) — źródło zadań generowanych przez AI
+        </div>
+      </div>
+
+      {error ? (
+        <div style={{ marginBottom: 16 }}>
+          <Alert kind="danger" title="Nie udało się wczytać adnotacji">
+            {error}
+          </Alert>
+        </div>
+      ) : null}
+
+      <div className="stats" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 20 }}>
+        <Stat label="Wszystkie" value={rows ? stats.total : "—"} />
+        <Stat label="Głosowe" value={rows ? stats.voice : "—"} />
+        <Stat label="Tekstowe" value={rows ? stats.text : "—"} />
+        <Stat
+          label="Z klasyfikacją AI"
+          value={rows ? stats.classified : "—"}
+          delta={rows && stats.total ? `${Math.round((stats.classified / stats.total) * 100)}%` : undefined}
+        />
+      </div>
+
+      {!rows ? (
+        <Card>
+          <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} height={28} line />
+            ))}
+          </div>
+        </Card>
+      ) : rows.length === 0 ? (
+        <EmptyState
+          icon={<IconMessage />}
+          title="Brak adnotacji"
+          description="Adnotacje pojawią się tutaj, gdy recenzenci prześlą feedback przez nakładkę SDK. Następnie uruchom analizę AI, aby wygenerować zadania."
+        />
+      ) : (
+        <Card style={{ overflow: "hidden" }}>
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "separate",
+              borderSpacing: 0,
+              fontSize: ".875rem",
+            }}
+          >
+            <thead>
+              <tr>
+                {["ID", "Treść", "Element", "Klasyfikacja AI", "Tagi", "Czas"].map((h) => (
+                  <th
+                    key={h}
+                    style={{
+                      textAlign: "left",
+                      fontSize: ".6875rem",
+                      color: "var(--muted)",
+                      textTransform: "uppercase",
+                      letterSpacing: ".06em",
+                      fontWeight: 700,
+                      padding: "10px 16px",
+                      background: "var(--surface-muted)",
+                      borderBottom: "1px solid var(--border)",
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((a) => {
+                const k = annKind(a);
+                const content =
+                  a.transcript ?? a.textNote ?? (k.voice ? "nagranie głosowe" : "(brak treści)");
+                return (
+                  <tr key={a.id}>
+                    <td
+                      style={{
+                        padding: "12px 16px",
+                        borderBottom: "1px solid var(--border)",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: ".75rem",
+                        fontWeight: 600,
+                        color: "var(--secondary)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {a.id.slice(0, 10)}
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 16px",
+                        borderBottom: "1px solid var(--border)",
+                        maxWidth: 360,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            fontSize: ".625rem",
+                            fontWeight: 700,
+                            textTransform: "uppercase",
+                            letterSpacing: ".04em",
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                            flex: "none",
+                            background: k.voice ? "#FEF2F2" : "#EFF6FF",
+                            color: k.voice ? "var(--accent)" : "var(--info)",
+                          }}
+                        >
+                          {k.voice ? <IconMic width={10} height={10} /> : null}
+                          {k.label}
+                        </span>
+                        <span
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={content}
+                        >
+                          {content}
+                        </span>
+                      </div>
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 16px",
+                        borderBottom: "1px solid var(--border)",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: ".6875rem",
+                        color: "var(--muted)",
+                        maxWidth: 200,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {a.selector ?? "—"}
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 16px",
+                        borderBottom: "1px solid var(--border)",
+                      }}
+                    >
+                      {a.structured ? (
+                        <Pill
+                          kind={
+                            a.structured.severity === "high"
+                              ? "danger"
+                              : a.structured.severity === "medium"
+                                ? "warn"
+                                : "info"
+                          }
+                        >
+                          {a.structured.kind === "bug" ? "bug" : "zmiana"} ·{" "}
+                          {a.structured.severity}
+                        </Pill>
+                      ) : (
+                        <span style={{ color: "var(--muted)" }}>—</span>
+                      )}
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 16px",
+                        borderBottom: "1px solid var(--border)",
+                        fontSize: ".75rem",
+                        color: "var(--muted)",
+                        maxWidth: 160,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {a.tags.length ? a.tags.join(", ") : "—"}
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 16px",
+                        borderBottom: "1px solid var(--border)",
+                        fontSize: ".75rem",
+                        color: "var(--muted)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {relTime(a.createdAt)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div
+            style={{
+              padding: "12px 18px",
+              fontSize: ".8125rem",
+              color: "var(--muted)",
+              borderTop: "1px solid var(--border)",
+            }}
+          >
+            {rows.length} adnotacji · źródło zadań w kolejce review
+          </div>
+        </Card>
+      )}
+    </Page>
+  );
+}
+
+type RepReviewer = {
+  initials: string;
+  name: string;
+  email: string;
+  role: "Lead" | "Reviewer";
+  sessions: number;
+  anns: number;
+  last: string;
+  twofa: boolean;
+  status: "active" | "idle";
+};
+
+const REP_REVIEWERS: RepReviewer[] = [
+  { initials: "TW", name: "Tomek Wójcik", email: "tomek.wojcik@lumen-lab.com", role: "Lead", sessions: 3, anns: 28, last: "8 min temu · online", twofa: true, status: "active" },
+  { initials: "AL", name: "Anna Lis", email: "anna.lis@lumen-lab.com", role: "Reviewer", sessions: 3, anns: 24, last: "2 godz. temu", twofa: true, status: "active" },
+  { initials: "JK", name: "Jacek Kowal", email: "j.kowal@fintech-co.pl", role: "Reviewer", sessions: 2, anns: 18, last: "wczoraj", twofa: true, status: "active" },
+  { initials: "PG", name: "Patrycja Górska", email: "p.gorska@northstack.io", role: "Reviewer", sessions: 2, anns: 14, last: "wczoraj", twofa: false, status: "idle" },
+  { initials: "MN", name: "Marek Nowak", email: "m.nowak@lumen-lab.com", role: "Reviewer", sessions: 1, anns: 8, last: "3 dni temu", twofa: false, status: "idle" },
+  { initials: "SK", name: "Sebastian Kotowicz", email: "s.kotowicz@lumen-lab.com", role: "Reviewer", sessions: 1, anns: 3, last: "12 dni temu", twofa: false, status: "idle" },
+];
+
+export function PoReviewers() {
+  return (
+    <Page
+      crumbs={["Mój projekt", "Recenzenci"]}
+      env="prod"
+      actions={
+        <Button disabled title="Zapraszanie recenzentów — panele tworzy SuperAdmin (V1)">
+          <IconUsers width={14} height={14} />
+          Zaproś recenzenta
+        </Button>
+      }
+    >
+      <div style={{ marginBottom: 18 }}>
+        <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-.015em" }}>
+          Recenzenci
+        </h1>
+        <div style={{ color: "var(--muted)", fontSize: ".875rem", marginTop: 4 }}>
+          {REP_REVIEWERS.length} osób w projekcie · feedback przez nakładkę SDK
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <RepBanner>
+          W V1 „recenzent" to rola panelu, którą wydaje SuperAdmin — dedykowana lista osób z 2FA
+          i statystykami jest poglądowa.
+        </RepBanner>
+      </div>
+
+      <div className="stats" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 20 }}>
+        <Stat label="Aktywni" value={8} delta="+2 w tym mies." />
+        <Stat label="Aktywni · 7d" value={5} delta="62%" />
+        <Stat label="Avg. adnotacje / recenzent" value={12} delta="+3 vs. poprzedni mies." />
+        <Stat label="Zaproszenia oczekujące" value={3} delta="2 starsze niż 3 dni" deltaNeg />
+      </div>
+
+      <Card style={{ overflow: "hidden" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "separate",
+            borderSpacing: 0,
+            fontSize: ".875rem",
+          }}
+        >
+          <thead>
+            <tr>
+              {["Recenzent", "Rola", "Sesje", "Adn.", "Ostatnio", "2FA", "Status"].map((h) => (
+                <th
+                  key={h}
+                  style={{
+                    textAlign: "left",
+                    fontSize: ".6875rem",
+                    color: "var(--muted)",
+                    textTransform: "uppercase",
+                    letterSpacing: ".06em",
+                    fontWeight: 700,
+                    padding: "10px 16px",
+                    background: "var(--surface-muted)",
+                    borderBottom: "1px solid var(--border)",
+                  }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {REP_REVIEWERS.map((r) => (
+              <tr key={r.email}>
+                <td style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Avatar initials={r.initials} />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: ".875rem" }}>{r.name}</div>
+                      <div
+                        style={{
+                          fontFamily: "var(--font-mono)",
+                          fontSize: ".6875rem",
+                          color: "var(--muted)",
+                        }}
+                      >
+                        {r.email}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
+                  <RoleBadge role="rev" />
+                  {r.role === "Lead" ? (
+                    <span style={{ marginLeft: 6, fontSize: ".6875rem", color: "var(--info)", fontWeight: 700 }}>
+                      Lead
+                    </span>
+                  ) : null}
+                </td>
+                <td
+                  style={{
+                    padding: "14px 16px",
+                    borderBottom: "1px solid var(--border)",
+                    fontVariantNumeric: "tabular-nums",
+                    fontWeight: 600,
+                  }}
+                >
+                  {r.sessions}
+                </td>
+                <td
+                  style={{
+                    padding: "14px 16px",
+                    borderBottom: "1px solid var(--border)",
+                    fontVariantNumeric: "tabular-nums",
+                    fontWeight: 600,
+                  }}
+                >
+                  {r.anns}
+                </td>
+                <td
+                  style={{
+                    padding: "14px 16px",
+                    borderBottom: "1px solid var(--border)",
+                    fontSize: ".8125rem",
+                    color: "var(--secondary)",
+                  }}
+                >
+                  {r.last}
+                </td>
+                <td style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
+                  {r.twofa ? (
+                    <span style={{ fontSize: ".6875rem", color: "var(--success)", fontWeight: 600 }}>
+                      ✓ 2FA
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: ".6875rem", color: "var(--muted)" }}>— brak</span>
+                  )}
+                </td>
+                <td style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
+                  <Pill kind={r.status === "active" ? "live" : "warn"}>{r.status}</Pill>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
     </Page>
   );
 }

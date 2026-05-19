@@ -24,7 +24,16 @@ import {
   Projects,
   Providers,
 } from "./pages-sa.js";
-import { PoExport, PoOverview, PoTasks, PoTemplate } from "./pages-po.js";
+import {
+  PoAnnotations,
+  PoExport,
+  PoNewSession,
+  PoOverview,
+  PoReviewers,
+  PoSessions,
+  PoTasks,
+  PoTemplate,
+} from "./pages-po.js";
 import {
   IconBook,
   IconBuilding,
@@ -353,30 +362,10 @@ function renderPage(role: string, route: string): ReactNode {
   if (r === "/template") return <PoTemplate />;
   if (r === "/export") return <PoExport />;
   if (r === "/tasks") return <PoTasks />;
-  if (r === "/sessions")
-    return (
-      <Placeholder
-        crumbs={["Lumen Lab", "Sesje review"]}
-        title="Sesje review"
-        note="Widok pojedynczej sesji (timeline adnotacji + nagranie ekranu) nie jest jeszcze wdrożony (V1.5 backlog)."
-      />
-    );
-  if (r === "/annotations")
-    return (
-      <Placeholder
-        crumbs={["Lumen Lab", "Adnotacje"]}
-        title="Adnotacje"
-        note="Przeglądarka surowych adnotacji dla PO nie jest jeszcze wdrożona (Phase 8)."
-      />
-    );
-  if (r === "/reviewers")
-    return (
-      <Placeholder
-        crumbs={["Lumen Lab", "Recenzenci"]}
-        title="Recenzenci"
-        note="Recenzenci są tożsami z panelami (rola panelu) — dedykowany widow listy recenzentów nie jest wdrożony."
-      />
-    );
+  if (r === "/sessions/new") return <PoNewSession />;
+  if (r === "/sessions") return <PoSessions />;
+  if (r === "/annotations") return <PoAnnotations />;
+  if (r === "/reviewers") return <PoReviewers />;
   if (r === "/po-privacy")
     return (
       <Placeholder
