@@ -11,7 +11,16 @@ import {
   ToastProvider,
   useAsync,
 } from "./components.js";
-import { AdminAudit, Dashboard, Panels, ProductOwners, Projects, Providers } from "./pages-sa.js";
+import {
+  AdminAudit,
+  AdminProject,
+  CreateProject,
+  Dashboard,
+  Panels,
+  ProductOwners,
+  Projects,
+  Providers,
+} from "./pages-sa.js";
 import { PoExport, PoOverview, PoTasks, PoTemplate } from "./pages-po.js";
 import {
   IconBook,
@@ -326,6 +335,8 @@ function Login(props: { onAuthed: (role: string) => void }) {
 function renderPage(role: string, route: string): ReactNode {
   const r = route === "" ? "/" : route;
   if (role === "superadmin") {
+    if (r === "/projects/new") return <CreateProject />;
+    if (r.startsWith("/projects/")) return <AdminProject id={r.slice("/projects/".length)} />;
     if (r === "/projects") return <Projects />;
     if (r === "/po-users") return <ProductOwners />;
     if (r === "/panels") return <Panels />;
@@ -423,7 +434,10 @@ function Sidebar(props: { role: string; here: string; onSignOut: () => void }) {
             <p className="nav-group">{g.group}</p>
             {g.items.map((n) => {
               const Ico = n.icon;
-              const active = props.here === n.path || (n.path === "/" && props.here === "");
+              const active =
+                props.here === n.path ||
+                (n.path === "/" && props.here === "") ||
+                (n.path !== "/" && props.here.startsWith(`${n.path}/`));
               return (
                 <a
                   key={n.path}

@@ -76,10 +76,20 @@ export const api = {
       body: JSON.stringify({ email, displayName }),
     }),
   listProjects: () => call<{ projects: Project[] }>("/admin/projects"),
-  createProject: (name: string, productOwnerId: string, environmentUrls: string[]) =>
+  createProject: (
+    name: string,
+    productOwnerId: string,
+    environmentUrls: string[],
+    template?: ProjectTemplate,
+  ) =>
     call<Project>("/admin/projects", {
       method: "POST",
-      body: JSON.stringify({ name, productOwnerId, environmentUrls }),
+      body: JSON.stringify({
+        name,
+        productOwnerId,
+        environmentUrls,
+        ...(template ? { template } : {}),
+      }),
     }),
   listPanels: (projectId: string) =>
     call<{ panels: Panel[] }>(`/admin/projects/${projectId}/panels`),

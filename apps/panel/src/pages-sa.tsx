@@ -21,14 +21,17 @@ import {
   Pill,
   RoleBadge,
   Stat,
+  Toggle,
   csvToList,
   useAsync,
 } from "./components.js";
 import {
   IconCheck,
   IconAlert,
+  IconBuilding,
   IconX,
   IconFileText,
+  IconLink,
   IconPlus,
   IconSearch,
   IconShield,
@@ -777,76 +780,76 @@ export function AdminAudit() {
 
 export function Projects() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [name, setName] = useState("");
-  const [poId, setPoId] = useState("");
-  const [urls, setUrls] = useState("");
-  const { error, busy, run } = useAsync();
+  const { error, run } = useAsync();
 
   const load = (): void =>
-    void run(async () => {
-      const [p, u] = await Promise.all([api.listProjects(), api.listUsers()]);
-      setProjects(p.projects);
-      setUsers(u.users);
-    });
+    void run(async () => setProjects((await api.listProjects()).projects));
   useEffect(() => load(), []);
 
-  const submit = (e: FormEvent): void => {
-    e.preventDefault();
-    void run(async () => {
-      await api.createProject(name, poId, csvToList(urls));
-      setName("");
-      setUrls("");
-      setProjects((await api.listProjects()).projects);
-    });
-  };
   const changeStatus = (id: string, status: ProjectStatus): void =>
     void run(async () => {
       await api.setProjectStatus(id, status);
       setProjects((await api.listProjects()).projects);
     });
 
-  const pos = users.filter((u) => u.role === "product_owner");
   return (
-    <Page crumbs={["Speqify Internal", "Projekty"]}>
+    <Page
+      crumbs={["Speqify Internal", "Projekty"]}
+      actions={
+        <a className="btn btn-primary" href="#/projects/new">
+          <IconPlus />
+          Nowy projekt
+        </a>
+      }
+    >
       <div className="page-h">
         <div>
           <h1>Projekty</h1>
-          <p className="sub">{projects.length} projektów · status SA-sterowany</p>
+          <p className="sub">{projects.length} projektów · kliknij, aby otworzyć szczegóły</p>
         </div>
       </div>
       {error ? <Alert kind="danger">{error}</Alert> : null}
       <div className="card">
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Projekt</th>
-              <th>Env</th>
-              <th>Product Owner</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {projects.length === 0 ? (
+        {projects.length === 0 ? (
+          <EmptyState
+            icon={<IconBuilding />}
+            title="Brak projektów"
+            description="Utwórz pierwszy projekt — SA przypisuje Product Ownera i adresy środowisk."
+            action={
+              <a className="btn btn-primary" href="#/projects/new">
+                <IconPlus />
+                Nowy projekt
+              </a>
+            }
+          />
+        ) : (
+          <table className="tbl">
+            <thead>
               <tr>
-                <td colSpan={4} style={{ color: "var(--muted)" }}>
-                  Brak projektów.
-                </td>
+                <th>Projekt</th>
+                <th>Env</th>
+                <th>Product Owner</th>
+                <th>Status</th>
               </tr>
-            ) : (
-              projects.map((p) => {
+            </thead>
+            <tbody>
+              {projects.map((p) => {
                 const env = envOf(p.environmentUrls[0]);
                 const st = STATUS_PILL[p.status];
                 return (
                   <tr key={p.id}>
                     <td>
-                      <div className="name">
+                      <a
+                        href={`#/projects/${p.id}`}
+                        className="name"
+                        style={{ color: "inherit" }}
+                      >
                         <span className="sq" />
                         <div>
                           <div className="n">{p.name}</div>
                           <div className="k">{p.id}</div>
                         </div>
-                      </div>
+                      </a>
                     </td>
                     <td>
                       <span className={`env-pill ${env.cls}`}>{env.label}</span>
@@ -865,9 +868,7 @@ export function Projects() {
                           aria-label={`Status ${p.name}`}
                           style={{ height: 30, width: 120, fontSize: ".75rem" }}
                           value={p.status}
-                          onChange={(e) =>
-                            changeStatus(p.id, e.target.value as ProjectStatus)
-                          }
+                          onChange={(e) => changeStatus(p.id, e.target.value as ProjectStatus)}
                         >
                           <option value="live">live</option>
                           <option value="paused">paused</option>
@@ -877,58 +878,578 @@ export function Projects() {
                     </td>
                   </tr>
                 );
-              })
-            )}
-          </tbody>
-        </table>
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
-      <form onSubmit={submit} className="card card-pad" style={{ marginTop: 20, maxWidth: 520 }} noValidate>
-        <h2 className="section-title" style={{ marginTop: 0 }}>
-          Utwórz projekt
-        </h2>
-        <Field label="Nazwa projektu" htmlFor="pr-name">
-          <input
-            id="pr-name"
-            className="input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-        </Field>
-        <Field label="Product Owner" htmlFor="pr-po">
-          <select
-            id="pr-po"
-            className="select"
-            value={poId}
-            onChange={(e) => setPoId(e.target.value)}
-            required
+    </Page>
+  );
+}
+
+const WIZARD_STEPS = ["Podstawy projektu", "Szablon & AI", "Zespół & finalizacja"];
+
+/** Admin · Nowy projekt (Admin Create Project.html) — 3-step wizard.
+ *  Real createProject(name, PO, env URLs, template). AI routing / integrations
+ *  shown as design-faithful preview (configured by PO later — flagged). */
+export function CreateProject() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [step, setStep] = useState(0);
+  const [name, setName] = useState("");
+  const [poId, setPoId] = useState("");
+  const [urls, setUrls] = useState("");
+  const [lang, setLang] = useState<"pl" | "en">("pl");
+  const [userStory, setUserStory] = useState(true);
+  const [acc, setAcc] = useState(true);
+  const [labels, setLabels] = useState("");
+  const { error, busy, run } = useAsync();
+
+  useEffect(() => {
+    void run(async () => setUsers((await api.listUsers()).users));
+  }, []);
+  const pos = users.filter((u) => u.role === "product_owner");
+  const step1ok = name.trim() && poId && csvToList(urls).length > 0;
+
+  const finish = (): void =>
+    void run(async () => {
+      const created = await api.createProject(name.trim(), poId, csvToList(urls), {
+        language: lang,
+        userStory,
+        acceptanceCriteria: acc,
+        labels: csvToList(labels),
+        components: [],
+        versions: [],
+        customFields: {},
+      });
+      window.location.hash = `/projects/${created.id}`;
+    });
+
+  return (
+    <Page crumbs={["Speqify Internal", "Projekty", "Nowy projekt"]}>
+      <div className="page-h">
+        <div>
+          <h1>Nowy projekt</h1>
+          <p className="sub">
+            Krok {step + 1}/3 · {WIZARD_STEPS[step]}
+          </p>
+        </div>
+        <a className="btn btn-ghost" href="#/projects">
+          Anuluj
+        </a>
+      </div>
+      {error ? <Alert kind="danger">{error}</Alert> : null}
+
+      <div className="role-stats" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+        {WIZARD_STEPS.map((s, i) => (
+          <div key={s} className={`role-stat${i === step ? " active" : ""}`}>
+            <div className="top">
+              <span className="label">Krok {i + 1}</span>
+              {i < step ? <RoleBadge role="po" /> : null}
+            </div>
+            <span style={{ fontWeight: 600 }}>{s}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid-2">
+        <div className="card card-pad">
+          {step === 0 ? (
+            <>
+              <h2 className="section-title" style={{ marginTop: 0 }}>
+                Podstawy projektu
+              </h2>
+              <Field label="Nazwa projektu" htmlFor="w-name">
+                <input
+                  id="w-name"
+                  className="input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Lumen Lab — Q1 Review"
+                  required
+                />
+              </Field>
+              <Field label="Product Owner" htmlFor="w-po">
+                <select
+                  id="w-po"
+                  className="select"
+                  value={poId}
+                  onChange={(e) => setPoId(e.target.value)}
+                  required
+                >
+                  <option value="">Wybierz Product Ownera…</option>
+                  {pos.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.displayName} ({u.email})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field
+                label="Adresy środowisk"
+                htmlFor="w-urls"
+                hint="Po przecinku. To także lista dozwolonych originów CORS dla ingest."
+              >
+                <input
+                  id="w-urls"
+                  className="input"
+                  value={urls}
+                  onChange={(e) => setUrls(e.target.value)}
+                  placeholder="https://staging.acme.test, https://app.acme.test"
+                  required
+                />
+              </Field>
+            </>
+          ) : step === 1 ? (
+            <>
+              <h2 className="section-title" style={{ marginTop: 0 }}>
+                Szablon zadań
+              </h2>
+              <Field label="Język wyjściowy zadań" htmlFor="w-lang">
+                <select
+                  id="w-lang"
+                  className="select"
+                  value={lang}
+                  onChange={(e) => setLang(e.target.value === "en" ? "en" : "pl")}
+                >
+                  <option value="pl">Polski</option>
+                  <option value="en">English</option>
+                </select>
+              </Field>
+              <div className="field" style={{ display: "flex", gap: 32 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <Toggle on={userStory} onChange={setUserStory} label="Format user story" />
+                  <span style={{ fontSize: ".875rem" }}>Format user story</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <Toggle on={acc} onChange={setAcc} label="Kryteria akceptacji" />
+                  <span style={{ fontSize: ".875rem" }}>Kryteria akceptacji</span>
+                </div>
+              </div>
+              <Field label="Etykiety" htmlFor="w-labels" hint="Dozwolone słownictwo, po przecinku">
+                <input
+                  id="w-labels"
+                  className="input"
+                  value={labels}
+                  onChange={(e) => setLabels(e.target.value)}
+                  placeholder="frontend, backend, eksport"
+                />
+              </Field>
+              <Alert kind="info">
+                Routing AI / integracje (Jira/GitHub) konfiguruje PO po utworzeniu projektu —
+                poza tym kreatorem.
+              </Alert>
+            </>
+          ) : (
+            <>
+              <h2 className="section-title" style={{ marginTop: 0 }}>
+                Zespół & finalizacja
+              </h2>
+              <p style={{ color: "var(--secondary)", marginTop: 0 }}>
+                Po utworzeniu projektu dodasz panele (linki recenzentów) w zakładce
+                „Recenzenci”, a PO skonfiguruje szablon i eksport.
+              </p>
+              <div
+                style={{
+                  marginTop: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  fontSize: ".875rem",
+                  color: "var(--secondary)",
+                }}
+              >
+                <div>
+                  <b>Nazwa:</b> {name || "—"}
+                </div>
+                <div>
+                  <b>PO:</b> {pos.find((u) => u.id === poId)?.displayName ?? "—"}
+                </div>
+                <div>
+                  <b>Środowiska:</b> {csvToList(urls).join(", ") || "—"}
+                </div>
+                <div>
+                  <b>Szablon:</b> {lang.toUpperCase()} ·{" "}
+                  {userStory ? "user-story" : "prosty"} · {acc ? "z AC" : "bez AC"}
+                </div>
+              </div>
+            </>
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginTop: 20,
+              gap: 8,
+            }}
           >
-            <option value="">Wybierz Product Ownera…</option>
-            {pos.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.displayName} ({u.email})
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field
-          label="Adresy środowisk"
-          htmlFor="pr-urls"
-          hint="Po przecinku. To także lista dozwolonych originów CORS dla ingest."
-        >
-          <input
-            id="pr-urls"
-            className="input"
-            value={urls}
-            onChange={(e) => setUrls(e.target.value)}
-            placeholder="https://staging.acme.test"
-            required
+            <Button
+              variant="ghost"
+              disabled={step === 0 || busy}
+              onClick={() => setStep((s) => Math.max(0, s - 1))}
+            >
+              ← Wstecz
+            </Button>
+            {step < 2 ? (
+              <Button
+                disabled={(step === 0 && !step1ok) || busy}
+                onClick={() => setStep((s) => s + 1)}
+              >
+                Dalej →
+              </Button>
+            ) : (
+              <Button disabled={busy || !step1ok} onClick={finish}>
+                {busy ? "Tworzenie…" : "Utwórz projekt"}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="col">
+          <div className="card">
+            <div className="card-h">
+              <div>
+                <h2>Podsumowanie</h2>
+                <p className="sub">na żywo z kreatora</p>
+              </div>
+            </div>
+            <div
+              className="card-pad"
+              style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: ".8125rem" }}
+            >
+              {[
+                ["Nazwa", name || "—"],
+                ["PO", pos.find((u) => u.id === poId)?.email ?? "—"],
+                ["Env", `${csvToList(urls).length} adresów`],
+                ["Szablon", lang.toUpperCase()],
+              ].map(([k, v]) => (
+                <div
+                  key={k}
+                  style={{ display: "flex", justifyContent: "space-between", gap: 12 }}
+                >
+                  <span style={{ color: "var(--muted)" }}>{k}</span>
+                  <span style={{ color: "var(--primary)", fontWeight: 500 }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="card card-pad">
+            <h2 className="section-title" style={{ marginTop: 0 }}>
+              Co dalej
+            </h2>
+            <ul style={{ margin: 0, paddingLeft: 18, color: "var(--secondary)", fontSize: ".875rem" }}>
+              <li>Utwórz panele recenzentów (tokeny capability)</li>
+              <li>PO konfiguruje szablon zadań i eksport (Jira/GitHub)</li>
+              <li>Wklej snippet SDK w aplikacji środowiska</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </Page>
+  );
+}
+
+const PROJECT_TABS = [
+  "Przegląd",
+  "Instalacja SDK",
+  "Recenzenci",
+  "Integracje",
+  "Webhooki",
+  "Strefa niebezpieczna",
+] as const;
+
+/** Admin · Projekt detail (Admin Project.html). Real project/panels/status/
+ *  SDK snippet. Integracje/Webhooki = configured by PO / out of V1 (flagged);
+ *  permanent delete is not in V1 — Strefa niebezpieczna archives instead. */
+export function AdminProject(props: { id: string }) {
+  const [project, setProject] = useState<Project | null>(null);
+  const [owner, setOwner] = useState<User | null>(null);
+  const [panels, setPanels] = useState<Panel[]>([]);
+  const [tab, setTab] = useState(0);
+  const [audience, setAudience] = useState("client");
+  const [envUrl, setEnvUrl] = useState("");
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const { error, busy, run } = useAsync();
+
+  const load = (): void =>
+    void run(async () => {
+      const [{ projects }, { users }] = await Promise.all([
+        api.listProjects(),
+        api.listUsers(),
+      ]);
+      const p = projects.find((x) => x.id === props.id) ?? null;
+      setProject(p);
+      setOwner(users.find((u) => u.id === p?.productOwnerId) ?? null);
+      if (p) setPanels((await api.listPanels(p.id)).panels);
+    });
+  useEffect(() => load(), [props.id]);
+
+  if (!project)
+    return (
+      <Page crumbs={["Speqify Internal", "Projekty", props.id]}>
+        <div className="card card-pad" style={{ color: "var(--muted)" }}>
+          {error ? <Alert kind="danger">{error}</Alert> : "Ładowanie projektu…"}
+        </div>
+      </Page>
+    );
+
+  const env = envOf(project.environmentUrls[0]);
+  const st = STATUS_PILL[project.status];
+  const firstPanel = panels[0];
+
+  const addPanel = (e: FormEvent): void => {
+    e.preventDefault();
+    void run(async () => {
+      await api.createPanel(project.id, audience, envUrl);
+      setEnvUrl("");
+      setPanels((await api.listPanels(project.id)).panels);
+    });
+  };
+  const togglePanel = (p: Panel): void =>
+    void run(async () => {
+      await api.setPanelStatus(p.id, p.status === "open" ? "closed" : "open");
+      setPanels((await api.listPanels(project.id)).panels);
+    });
+  const archive = (): void =>
+    void run(async () => {
+      await api.setProjectStatus(project.id, "archived");
+      setConfirmArchive(false);
+      load();
+    });
+
+  return (
+    <Page crumbs={["Speqify Internal", "Projekty", project.name]}>
+      <div className="page-h">
+        <div>
+          <h1 style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {project.name}
+            <span className={`env-pill ${env.cls}`}>{env.label}</span>
+            <span className={`pill ${st.cls}`}>
+              <span className="dot" />
+              {st.label}
+            </span>
+          </h1>
+          <p className="sub">
+            <span className="mono">{project.id}</span> · Owner:{" "}
+            {owner ? `${owner.displayName} (PO)` : "—"} · {panels.length} paneli · utworzono{" "}
+            {new Date(project.createdAt).toLocaleDateString()}
+          </p>
+        </div>
+        <a className="btn btn-ghost" href="#/projects">
+          ← Wszystkie projekty
+        </a>
+      </div>
+      {error ? <Alert kind="danger">{error}</Alert> : null}
+
+      <nav className="filter-bar" aria-label="Sekcje projektu" style={{ gap: 4 }}>
+        {PROJECT_TABS.map((t, i) => (
+          <button
+            key={t}
+            className={`state-tab${i === tab ? " active" : ""}`}
+            onClick={() => setTab(i)}
+            style={i === 5 ? { color: i === tab ? undefined : "var(--danger)" } : undefined}
+          >
+            {t}
+          </button>
+        ))}
+      </nav>
+
+      {tab === 0 ? (
+        <div className="grid-2">
+          <div className="card card-pad">
+            <h2 className="section-title" style={{ marginTop: 0 }}>
+              Adresy środowisk
+            </h2>
+            <ul style={{ margin: "0 0 16px", paddingLeft: 18 }}>
+              {project.environmentUrls.map((u) => (
+                <li key={u} className="mono" style={{ fontSize: ".8125rem", padding: "2px 0" }}>
+                  {u}
+                </li>
+              ))}
+            </ul>
+            <h2 className="section-title">Szablon zadań</h2>
+            <p style={{ color: "var(--secondary)", margin: 0 }}>
+              Język <b>{project.template.language.toUpperCase()}</b> ·{" "}
+              {project.template.userStory ? "user-story" : "prosty"} ·{" "}
+              {project.template.acceptanceCriteria ? "z AC" : "bez AC"} · etykiety:{" "}
+              {project.template.labels.join(", ") || "—"}
+            </p>
+            <p className="hint">Pełna konfiguracja szablonu/eksportu po stronie PO.</p>
+          </div>
+          <div className="col">
+            <div className="card card-pad">
+              <h2 className="section-title" style={{ marginTop: 0 }}>
+                Status SDK
+              </h2>
+              <Stat
+                label="Panele (recenzenci)"
+                value={panels.length}
+                delta={<span className="sp">linki capability</span>}
+              />
+              <Stat
+                label="Aktywne panele"
+                value={panels.filter((p) => p.status === "open").length}
+                delta={<span className="sp">otwarte do zgłoszeń</span>}
+              />
+            </div>
+          </div>
+        </div>
+      ) : tab === 1 ? (
+        <div className="card card-pad">
+          <div className="card-h" style={{ padding: 0, border: 0, marginBottom: 14 }}>
+            <div>
+              <h2>Instalacja w 1 linii</h2>
+              <p className="sub">wklej przed &lt;/body&gt; w aplikacji środowiska</p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled
+              title="Rotacja tokenu = utwórz nowy panel (zakładka Recenzenci); rotate-in-place poza V1"
+            >
+              Rotuj klucz
+            </Button>
+          </div>
+          {firstPanel ? (
+            <>
+              <pre className="code-block">
+                <code>{sdkSnippet(firstPanel.secretToken)}</code>
+              </pre>
+              <p className="hint">
+                Token panelu „{firstPanel.audience}” ({firstPanel.environmentUrl}). CSP/CORS:
+                dodaj API origin do <span className="mono">connect-src</span>.
+              </p>
+            </>
+          ) : (
+            <EmptyState
+              icon={<IconLink />}
+              title="Brak panelu"
+              description="Utwórz panel recenzenta w zakładce „Recenzenci”, aby wygenerować token i snippet."
+              action={
+                <Button onClick={() => setTab(2)}>Przejdź do Recenzenci</Button>
+              }
+            />
+          )}
+        </div>
+      ) : tab === 2 ? (
+        <div className="card">
+          <div className="card-h">
+            <div>
+              <h2>Recenzenci · panele</h2>
+              <p className="sub">linki capability — token + środowisko + status</p>
+            </div>
+          </div>
+          {panels.length === 0 ? (
+            <EmptyState
+              icon={<IconUsers />}
+              title="Brak paneli"
+              description="Utwórz pierwszy panel — wygeneruje token i link dla recenzentów."
+              action={null}
+            />
+          ) : (
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Audiencja</th>
+                  <th>Środowisko</th>
+                  <th>Status</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {panels.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.audience}</td>
+                    <td className="mono" style={{ fontSize: ".75rem" }}>
+                      {p.environmentUrl}
+                    </td>
+                    <td>
+                      <Pill kind={p.status === "open" ? "live" : "archived"}>{p.status}</Pill>
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <Button variant="secondary" size="sm" onClick={() => togglePanel(p)}>
+                        {p.status === "open" ? "Zamknij" : "Otwórz"}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <form
+            onSubmit={addPanel}
+            className="card-pad"
+            style={{ borderTop: "1px solid var(--border)" }}
+            noValidate
+          >
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <Field label="Audiencja" htmlFor="ap-aud">
+                <select
+                  id="ap-aud"
+                  className="select"
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                  style={{ width: 160 }}
+                >
+                  <option value="client">Klient</option>
+                  <option value="tester">Tester</option>
+                  <option value="po">Product Owner</option>
+                </select>
+              </Field>
+              <Field label="Adres środowiska" htmlFor="ap-url">
+                <input
+                  id="ap-url"
+                  className="input"
+                  value={envUrl}
+                  onChange={(e) => setEnvUrl(e.target.value)}
+                  placeholder="https://staging.acme.test"
+                  style={{ width: 280 }}
+                  required
+                />
+              </Field>
+              <Button type="submit" disabled={busy}>
+                Utwórz panel
+              </Button>
+            </div>
+          </form>
+        </div>
+      ) : tab === 5 ? (
+        <div className="card card-pad" style={{ maxWidth: 640 }}>
+          <h2 className="section-title" style={{ marginTop: 0, color: "var(--danger)" }}>
+            Strefa niebezpieczna
+          </h2>
+          <p style={{ color: "var(--secondary)" }}>
+            Archiwizacja zatrzymuje zgłoszenia i ukrywa projekt z aktywnej listy. Trwałe
+            usunięcie projektu wraz z adnotacjami nie jest dostępne w V1.
+          </p>
+          <Button
+            variant="danger-ghost"
+            disabled={project.status === "archived"}
+            onClick={() => setConfirmArchive(true)}
+          >
+            {project.status === "archived" ? "Już zarchiwizowany" : "Zarchiwizuj projekt"}
+          </Button>
+          <ConfirmModal
+            open={confirmArchive}
+            danger
+            title="Zarchiwizować projekt?"
+            description={`„${project.name}” zniknie z aktywnej listy, a panele przestaną przyjmować zgłoszenia. Można przywrócić zmieniając status.`}
+            requireAck="Rozumiem skutki archiwizacji."
+            confirmLabel="Tak, zarchiwizuj"
+            onCancel={() => setConfirmArchive(false)}
+            onConfirm={archive}
           />
-        </Field>
-        <Button type="submit" disabled={busy || !poId}>
-          {busy ? "Tworzenie…" : "Utwórz projekt"}
-        </Button>
-      </form>
+        </div>
+      ) : (
+        <div className="card card-pad">
+          <Alert kind="info">
+            {tab === 3
+              ? "Integracje (Jira / GitHub) konfiguruje Product Owner w sekcji „Eksport & integracje”."
+              : "Webhooki nie są jeszcze wdrożone (Phase 11)."}
+          </Alert>
+          <p className="hint">Ten widok jest częścią designu — backend poza bieżącą fazą.</p>
+        </div>
+      )}
     </Page>
   );
 }
