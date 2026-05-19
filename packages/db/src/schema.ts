@@ -10,7 +10,7 @@ import type {
   HostAppContext,
   MediaRef,
   NavigationStep,
-  ProjectTemplate,
+  ProjectTemplates,
   TechnicalContext,
 } from "@speqify/shared";
 
@@ -40,7 +40,8 @@ export const projects = sqliteTable("projects", {
   environmentUrls: text("environment_urls", { mode: "json" }).notNull().$type<string[]>(),
   // SA-controlled lifecycle (design SA projects table).
   status: text("status").notNull().default("live"),
-  template: text("template", { mode: "json" }).notNull().$type<ProjectTemplate>(),
+  // Per-task-type templates (bug / change / feature / polish).
+  templates: text("templates", { mode: "json" }).notNull().$type<ProjectTemplates>(),
   exportConfigId: text("export_config_id"),
   createdAt: now(),
 });
@@ -93,21 +94,55 @@ export const exportConfigs = sqliteTable("export_configs", {
   defaults: text("defaults", { mode: "json" }).notNull().$type<Record<string, string>>(),
 });
 
-export const panels = sqliteTable(
-  "panels",
+// A PO-defined campaign window — the SDK only renders UI when a URL carries
+// both ?speqify_session=<reviewSessions.token> and ?speqify_reviewer=<reviewers.token>.
+export const reviewSessions = sqliteTable(
+  "review_sessions",
   {
     id: id(),
     projectId: text("project_id")
       .notNull()
       .references(() => projects.id),
-    audience: text("audience").notNull(),
-    secretToken: text("secret_token").notNull().unique(),
-    environmentUrl: text("environment_url").notNull(),
-    status: text("status").notNull().default("open"),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    instructions: text("instructions").notNull().default(""),
+    envUrl: text("env_url").notNull(),
+    // Public session token (in invitation URL). Unique across the platform.
+    token: text("token").notNull().unique(),
+    status: text("status").notNull().default("draft"),
+    startsAt: text("starts_at"),
+    endsAt: text("ends_at"),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
     createdAt: now(),
   },
   (t) => ({
-    byProject: index("panels_project_idx").on(t.projectId),
+    byProject: index("review_sessions_project_idx").on(t.projectId),
+  }),
+);
+
+// One invited person per session. Per-reviewer-per-session secret token is
+// the only identity vector (no reviewer accounts in V1, §11).
+export const reviewers = sqliteTable(
+  "reviewers",
+  {
+    id: id(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => reviewSessions.id),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    token: text("token").notNull().unique(),
+    status: text("status").notNull().default("pending"),
+    invitedAt: text("invited_at")
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+    acceptedAt: text("accepted_at"),
+    lastSeenAt: text("last_seen_at"),
+  },
+  (t) => ({
+    bySession: index("reviewers_session_idx").on(t.sessionId),
   }),
 );
 
@@ -115,15 +150,19 @@ export const submissions = sqliteTable(
   "submissions",
   {
     id: id(),
-    panelId: text("panel_id")
+    sessionId: text("session_id")
       .notNull()
-      .references(() => panels.id),
+      .references(() => reviewSessions.id),
+    reviewerId: text("reviewer_id")
+      .notNull()
+      .references(() => reviewers.id),
     clientId: text("client_id").notNull(),
     complete: integer("complete", { mode: "boolean" }).notNull().default(false),
     createdAt: now(),
   },
   (t) => ({
-    byPanel: index("submissions_panel_idx").on(t.panelId),
+    bySession: index("submissions_session_idx").on(t.sessionId),
+    byReviewer: index("submissions_reviewer_idx").on(t.reviewerId),
   }),
 );
 
@@ -131,9 +170,12 @@ export const annotations = sqliteTable(
   "annotations",
   {
     id: id(),
-    panelId: text("panel_id")
+    sessionId: text("session_id")
       .notNull()
-      .references(() => panels.id),
+      .references(() => reviewSessions.id),
+    reviewerId: text("reviewer_id")
+      .notNull()
+      .references(() => reviewers.id),
     submissionId: text("submission_id")
       .notNull()
       .references(() => submissions.id),
@@ -141,7 +183,6 @@ export const annotations = sqliteTable(
     clientAnnotationId: text("client_annotation_id").notNull(),
     type: text("type").notNull(),
     status: text("status").notNull().default("draft"),
-    audience: text("audience").notNull(),
     pageUrl: text("page_url").notNull(),
     breadcrumb: text("breadcrumb", { mode: "json" }).$type<NavigationStep[]>(),
     element: text("element", { mode: "json" }).$type<ElementRef>(),
@@ -165,9 +206,14 @@ export const annotations = sqliteTable(
     correlationId: text("correlation_id").notNull(),
   },
   (t) => ({
-    byPanelStatus: index("annotations_panel_status_idx").on(t.panelId, t.status),
+    bySessionStatus: index("annotations_session_status_idx").on(t.sessionId, t.status),
     bySubmission: index("annotations_submission_idx").on(t.submissionId),
-    clientIdUq: uniqueIndex("annotations_panel_client_uq").on(t.panelId, t.clientAnnotationId),
+    // Idempotency: same client-supplied id per (session,reviewer) collapses.
+    clientIdUq: uniqueIndex("annotations_session_reviewer_client_uq").on(
+      t.sessionId,
+      t.reviewerId,
+      t.clientAnnotationId,
+    ),
   }),
 );
 
@@ -230,7 +276,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
     fields: [projects.productOwnerId],
     references: [users.id],
   }),
-  panels: many(panels),
+  reviewSessions: many(reviewSessions),
   tasks: many(tasks),
   analysisRuns: many(analysisRuns),
   exportConfigs: many(exportConfigs),
@@ -243,27 +289,45 @@ export const exportConfigsRelations = relations(exportConfigs, ({ one }) => ({
   }),
 }));
 
-export const panelsRelations = relations(panels, ({ one, many }) => ({
+export const reviewSessionsRelations = relations(reviewSessions, ({ one, many }) => ({
   project: one(projects, {
-    fields: [panels.projectId],
+    fields: [reviewSessions.projectId],
     references: [projects.id],
+  }),
+  reviewers: many(reviewers),
+  submissions: many(submissions),
+  annotations: many(annotations),
+}));
+
+export const reviewersRelations = relations(reviewers, ({ one, many }) => ({
+  session: one(reviewSessions, {
+    fields: [reviewers.sessionId],
+    references: [reviewSessions.id],
   }),
   submissions: many(submissions),
   annotations: many(annotations),
 }));
 
 export const submissionsRelations = relations(submissions, ({ one, many }) => ({
-  panel: one(panels, {
-    fields: [submissions.panelId],
-    references: [panels.id],
+  session: one(reviewSessions, {
+    fields: [submissions.sessionId],
+    references: [reviewSessions.id],
+  }),
+  reviewer: one(reviewers, {
+    fields: [submissions.reviewerId],
+    references: [reviewers.id],
   }),
   annotations: many(annotations),
 }));
 
 export const annotationsRelations = relations(annotations, ({ one }) => ({
-  panel: one(panels, {
-    fields: [annotations.panelId],
-    references: [panels.id],
+  session: one(reviewSessions, {
+    fields: [annotations.sessionId],
+    references: [reviewSessions.id],
+  }),
+  reviewer: one(reviewers, {
+    fields: [annotations.reviewerId],
+    references: [reviewers.id],
   }),
   submission: one(submissions, {
     fields: [annotations.submissionId],
