@@ -1,5 +1,17 @@
 /** API client for the SA/PO panel. Bearer token in sessionStorage. */
-import type { Panel, Project, ProjectTemplate, Task, User } from "@speqify/shared";
+import type {
+  AdminStats,
+  AuditEntry,
+  Panel,
+  PlatformProviderConfigView,
+  PoSourceAnnotation,
+  Project,
+  ProjectStatus,
+  ProjectTemplate,
+  Task,
+  TaskEditInput,
+  User,
+} from "@speqify/shared";
 
 const API_BASE =
   (import.meta.env as Record<string, string | undefined>).VITE_API_BASE ?? "http://127.0.0.1:8787";
@@ -83,6 +95,26 @@ export const api = {
     }),
   deletePanel: (panelId: string) =>
     call<{ deleted: boolean }>(`/admin/panels/${panelId}`, { method: "DELETE" }),
+  adminStats: () => call<AdminStats>("/admin/stats"),
+  adminAudit: () => call<{ entries: AuditEntry[] }>("/admin/audit"),
+  setProjectStatus: (projectId: string, status: ProjectStatus) =>
+    call<{ id: string; status: string }>(`/admin/projects/${projectId}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }),
+  getProviders: () => call<{ config: PlatformProviderConfigView | null }>("/admin/providers"),
+  putProviders: (body: {
+    aiProvider: string;
+    aiModel: string;
+    aiEndpoint?: string;
+    aiKey?: string;
+    transcriptionProvider: string;
+    transcriptionEndpoint?: string;
+  }) =>
+    call<{ config: PlatformProviderConfigView }>("/admin/providers", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
 
   // Product Owner
   poProject: () => call<PoProjectView>("/po/project"),
@@ -111,6 +143,37 @@ export const api = {
       method: "POST",
     }),
   listTasks: () => call<{ tasks: Task[] }>("/po/tasks"),
+  getTask: (id: string) => call<{ task: Task }>(`/po/tasks/${id}`),
+  taskAnnotations: (id: string) =>
+    call<{ annotations: PoSourceAnnotation[] }>(`/po/tasks/${id}/annotations`),
+  acceptTask: (id: string, expectedRev: number) =>
+    call<{ task: Task }>(`/po/tasks/${id}/accept`, {
+      method: "POST",
+      body: JSON.stringify({ expectedRev }),
+    }),
+  rejectTask: (id: string, expectedRev: number, reason?: string) =>
+    call<{ task: Task }>(`/po/tasks/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ expectedRev, reason }),
+    }),
+  regenerateTask: (id: string, expectedRev: number) =>
+    call<{ task: Task }>(`/po/tasks/${id}/regenerate`, {
+      method: "POST",
+      body: JSON.stringify({ expectedRev }),
+    }),
+  editTask: (id: string, input: TaskEditInput) =>
+    call<{ task: Task }>(`/po/tasks/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  exportTasks: (format: "json" | "csv") =>
+    call<{
+      format: string;
+      total: number;
+      newlyExported: number;
+      filename: string;
+      content: string;
+    }>(`/po/tasks/export?format=${format}`, { method: "POST" }),
 };
 
 /** SDK loader snippet for a panel (Install tab, IMPLEMENTATION_PLAN §7.3). */

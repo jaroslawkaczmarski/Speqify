@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
+/** Async action helper — error + busy state for one in-flight operation. */
 export function useAsync() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -10,7 +11,7 @@ export function useAsync() {
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(e instanceof Error ? e.message : "Coś poszło nie tak");
     } finally {
       setBusy(false);
     }
@@ -18,41 +19,42 @@ export function useAsync() {
   return { error, busy, run, setError };
 }
 
-export function Alert(props: {
-  kind: "info" | "success" | "warning" | "danger";
+/** Topbar (breadcrumbs + optional env pill + right-side actions) + body. */
+export function Page(props: {
+  crumbs: string[];
+  env?: string;
+  actions?: ReactNode;
+  variant?: "padded" | "bleed";
   children: ReactNode;
 }) {
+  const last = props.crumbs.length - 1;
   return (
-    <p className={`alert alert-${props.kind}`} role={props.kind === "danger" ? "alert" : "status"}>
-      {props.children}
-    </p>
-  );
-}
-
-export function Field(props: {
-  label: string;
-  htmlFor: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="field">
-      <label htmlFor={props.htmlFor}>{props.label}</label>
-      {props.children}
-      {props.hint ? <p className="hint">{props.hint}</p> : null}
-    </div>
-  );
-}
-
-export function PageHeader(props: { title: string; sub?: string; actions?: ReactNode }) {
-  return (
-    <div className="mb-xl flex items-end justify-between gap-lg">
-      <div>
-        <h1 className="page-title">{props.title}</h1>
-        {props.sub ? <p className="page-sub">{props.sub}</p> : null}
-      </div>
-      {props.actions ? <div className="flex gap-sm">{props.actions}</div> : null}
-    </div>
+    <>
+      <header className="topbar">
+        <div className="crumbs">
+          {props.crumbs.map((c, i) => (
+            <span key={c} className={i === last ? "cur" : undefined}>
+              {c}
+              {i < last ? (
+                <span className="sep" style={{ marginLeft: 8 }}>
+                  /
+                </span>
+              ) : null}
+            </span>
+          ))}
+        </div>
+        {props.env ? <span className="env">{props.env}</span> : null}
+        <div className="topbar-spacer" />
+        {props.actions}
+      </header>
+      {props.variant === "bleed" ? (
+        <div style={{ overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          {props.children}
+        </div>
+      ) : (
+        <div className="body">{props.children}</div>
+      )}
+    </>
   );
 }
 
