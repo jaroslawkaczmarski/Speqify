@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Speqify SDK — demo (host app)</title>
+    <style>
+      :root {
+        --p: #0f172a;
+        --b: #e2e8f0;
+        --m: #64748b;
+        --s: #f1f5f9;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: 14px/1.5 "Inter", system-ui, sans-serif;
+        color: var(--p);
+        background: #f8fafc;
+      }
+      .host {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        grid-template-rows: 56px 1fr;
+        grid-template-areas: "side top" "side main";
+        min-height: 100vh;
+      }
+      .side {
+        grid-area: side;
+        background: #0b1220;
+        color: rgba(255, 255, 255, 0.8);
+        padding: 18px 14px;
+      }
+      .brand {
+        font-weight: 700;
+        color: #fff;
+        margin-bottom: 18px;
+      }
+      .nav div {
+        padding: 8px 10px;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        color: rgba(255, 255, 255, 0.7);
+      }
+      .nav div.active {
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+      }
+      .top {
+        grid-area: top;
+        background: #fff;
+        border-bottom: 1px solid var(--b);
+        display: flex;
+        align-items: center;
+        padding: 0 24px;
+        gap: 16px;
+      }
+      .crumbs {
+        color: var(--m);
+        font-size: 0.875rem;
+      }
+      .main {
+        grid-area: main;
+        padding: 24px 28px;
+      }
+      h1 {
+        font-size: 1.5rem;
+        margin: 0 0 4px;
+      }
+      .sub {
+        color: var(--m);
+        margin: 0 0 20px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid var(--b);
+        border-radius: 12px;
+        padding: 16px 18px;
+      }
+      .card .l {
+        font-size: 0.75rem;
+        color: var(--m);
+        text-transform: uppercase;
+      }
+      .card .n {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-top: 6px;
+      }
+      table {
+        width: 100%;
+        background: #fff;
+        border: 1px solid var(--b);
+        border-radius: 12px;
+        border-collapse: separate;
+        border-spacing: 0;
+        overflow: hidden;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--b);
+        font-size: 0.875rem;
+      }
+      th {
+        background: var(--s);
+        color: var(--m);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .btn-export {
+        background: #0f172a;
+        color: #fff;
+        border: 0;
+        padding: 8px 14px;
+        border-radius: 8px;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .banner {
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin-bottom: 20px;
+        font-size: 0.875rem;
+      }
+      .banner b {
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="host">
+      <aside class="side">
+        <div class="brand">Lumen Lab</div>
+        <nav class="nav">
+          <div>Pulpit</div>
+          <div class="active">Zamówienia</div>
+          <div>Klienci</div>
+          <div>Raporty</div>
+          <div>Ustawienia</div>
+        </nav>
+      </aside>
+      <header class="top">
+        <span class="crumbs">Workspace / Zamówienia / Q1 2026</span>
+      </header>
+      <main class="main">
+        <div class="banner">
+          To jest <b>przykładowa aplikacja klienta</b> z wpiętym SDK Speqify. Overlay jest
+          aktywny: zobacz <b>pasek statusu na górze</b> i <b>toolbar na dole</b>. Kliknij
+          narzędzie (np. „Wskaż element”) i wskaż coś na tej stronie — np. przycisk
+          „Eksportuj raport”.
+        </div>
+        <h1>Zamówienia · Q1 2026</h1>
+        <p class="sub">Aktualizowane co 5 minut · 142 pozycje</p>
+        <div class="cards">
+          <div class="card"><div class="l">Suma</div><div class="n">€ 184 320</div></div>
+          <div class="card"><div class="l">Średnia</div><div class="n">€ 1 298</div></div>
+          <div class="card"><div class="l">Realizacja</div><div class="n">2.4 d</div></div>
+          <div class="card"><div class="l">NPS</div><div class="n">62</div></div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Zamówienie</th>
+              <th>Klient</th>
+              <th>Status</th>
+              <th>Wartość</th>
+              <th>Akcje</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>LMN-2026-00471</td>
+              <td>Stelmach S.A.</td>
+              <td>W przygotowaniu</td>
+              <td>€ 4 120</td>
+              <td><button class="btn-export" data-action="export">Eksportuj raport</button></td>
+            </tr>
+            <tr>
+              <td>LMN-2026-00470</td>
+              <td>Velora sp. z o.o.</td>
+              <td>Wysłane</td>
+              <td>€ 11 890</td>
+              <td><button class="btn-export" data-action="export">Eksportuj raport</button></td>
+            </tr>
+            <tr>
+              <td>LMN-2026-00468</td>
+              <td>Northstack</td>
+              <td>Oczekuje płatności</td>
+              <td>€ 2 240</td>
+              <td><button class="btn-export" data-action="export">Eksportuj raport</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </main>
+    </div>
+
+    <!-- Speqify overlay SDK — exactly the production embed shape (§7.2),
+         pointed at the local dev API + seeded demo panel token. -->
+    <script
+      defer
+      src="/speqify-loader.js"
+      data-speqify-token="demo-panel-token"
+      data-speqify-api="http://127.0.0.1:8787"
+    ></script>
+  </body>
+</html>
