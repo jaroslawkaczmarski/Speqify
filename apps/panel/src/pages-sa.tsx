@@ -3,13 +3,14 @@ import type { FormEvent, ReactNode } from "react";
 import type {
   AdminStats,
   AuditEntry,
-  Panel,
   PlatformProviderConfigView,
   Project,
   ProjectStatus,
+  ProjectTemplate,
+  ProjectTemplates,
   User,
 } from "@speqify/shared";
-import { api, sdkSnippet } from "./api.js";
+import { api } from "./api.js";
 import {
   Alert,
   Avatar,
@@ -31,7 +32,6 @@ import {
   IconBuilding,
   IconX,
   IconFileText,
-  IconLink,
   IconPlus,
   IconSearch,
   IconShield,
@@ -907,7 +907,7 @@ export function CreateProject() {
 
   const finish = (): void =>
     void run(async () => {
-      const created = await api.createProject(name.trim(), poId, csvToList(urls), {
+      const single: ProjectTemplate = {
         language: lang,
         userStory,
         acceptanceCriteria: acc,
@@ -915,7 +915,16 @@ export function CreateProject() {
         components: [],
         versions: [],
         customFields: {},
-      });
+      };
+      // SA seeds all four task-type templates with the same base; PO refines
+      // per-tab afterwards.
+      const templates: ProjectTemplates = {
+        bug: single,
+        change: single,
+        feature: single,
+        polish: single,
+      };
+      const created = await api.createProject(name.trim(), poId, csvToList(urls), templates);
       window.location.hash = `/projects/${created.id}`;
     });
 
@@ -1145,25 +1154,23 @@ export function CreateProject() {
 
 const PROJECT_TABS = [
   "Przegląd",
-  "Instalacja SDK",
-  "Recenzenci",
+  "Sesje review",
   "Integracje",
   "Webhooki",
   "Strefa niebezpieczna",
 ] as const;
 
-/** Admin · Projekt detail (Admin Project.html). Real project/panels/status/
- *  SDK snippet. Integracje/Webhooki = configured by PO / out of V1 (flagged);
- *  permanent delete is not in V1 — Strefa niebezpieczna archives instead. */
+/** Admin · Projekt detail. The old Install-SDK + Reviewers (capability-token
+ *  Panel) tabs are gone — the SDK is now installed generically by the PO and
+ *  identity comes from the per-reviewer ?speqify_session/?speqify_reviewer URL
+ *  pair. Per-session lifecycle lives under the PO "Sesje review" surface
+ *  (RS-7 follow-up wires a deep-link from here). */
 export function AdminProject(props: { id: string }) {
   const [project, setProject] = useState<Project | null>(null);
   const [owner, setOwner] = useState<User | null>(null);
-  const [panels, setPanels] = useState<Panel[]>([]);
   const [tab, setTab] = useState(0);
-  const [audience, setAudience] = useState("client");
-  const [envUrl, setEnvUrl] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
-  const { error, busy, run } = useAsync();
+  const { error, run } = useAsync();
 
   const load = (): void =>
     void run(async () => {
@@ -1171,7 +1178,6 @@ export function AdminProject(props: { id: string }) {
       const p = projects.find((x) => x.id === props.id) ?? null;
       setProject(p);
       setOwner(users.find((u) => u.id === p?.productOwnerId) ?? null);
-      if (p) setPanels((await api.listPanels(p.id)).panels);
     });
   useEffect(() => load(), [props.id]);
 
@@ -1186,21 +1192,7 @@ export function AdminProject(props: { id: string }) {
 
   const env = envOf(project.environmentUrls[0]);
   const st = STATUS_PILL[project.status];
-  const firstPanel = panels[0];
-
-  const addPanel = (e: FormEvent): void => {
-    e.preventDefault();
-    void run(async () => {
-      await api.createPanel(project.id, audience, envUrl);
-      setEnvUrl("");
-      setPanels((await api.listPanels(project.id)).panels);
-    });
-  };
-  const togglePanel = (p: Panel): void =>
-    void run(async () => {
-      await api.setPanelStatus(p.id, p.status === "open" ? "closed" : "open");
-      setPanels((await api.listPanels(project.id)).panels);
-    });
+  const bug = project.templates.bug;
   const archive = (): void =>
     void run(async () => {
       await api.setProjectStatus(project.id, "archived");
@@ -1222,7 +1214,7 @@ export function AdminProject(props: { id: string }) {
           </h1>
           <p className="sub">
             <span className="mono">{project.id}</span> · Owner:{" "}
-            {owner ? `${owner.displayName} (PO)` : "—"} · {panels.length} paneli · utworzono{" "}
+            {owner ? `${owner.displayName} (PO)` : "—"} · utworzono{" "}
             {new Date(project.createdAt).toLocaleDateString()}
           </p>
         </div>
@@ -1238,7 +1230,7 @@ export function AdminProject(props: { id: string }) {
             key={t}
             className={`state-tab${i === tab ? " active" : ""}`}
             onClick={() => setTab(i)}
-            style={i === 5 ? { color: i === tab ? undefined : "var(--danger)" } : undefined}
+            style={i === 4 ? { color: i === tab ? undefined : "var(--danger)" } : undefined}
           >
             {t}
           </button>
@@ -1258,151 +1250,37 @@ export function AdminProject(props: { id: string }) {
                 </li>
               ))}
             </ul>
-            <h2 className="section-title">Szablon zadań</h2>
+            <h2 className="section-title">Szablon zadań (bug)</h2>
             <p style={{ color: "var(--secondary)", margin: 0 }}>
-              Język <b>{project.template.language.toUpperCase()}</b> ·{" "}
-              {project.template.userStory ? "user-story" : "prosty"} ·{" "}
-              {project.template.acceptanceCriteria ? "z AC" : "bez AC"} · etykiety:{" "}
-              {project.template.labels.join(", ") || "—"}
+              Język <b>{bug.language.toUpperCase()}</b> ·{" "}
+              {bug.userStory ? "user-story" : "prosty"} ·{" "}
+              {bug.acceptanceCriteria ? "z AC" : "bez AC"} · etykiety:{" "}
+              {bug.labels.join(", ") || "—"}
             </p>
-            <p className="hint">Pełna konfiguracja szablonu/eksportu po stronie PO.</p>
+            <p className="hint">PO konfiguruje pełne 4 szablony (bug/change/feature/polish).</p>
           </div>
           <div className="col">
             <div className="card card-pad">
               <h2 className="section-title" style={{ marginTop: 0 }}>
-                Status SDK
+                SDK
               </h2>
-              <Stat
-                label="Panele (recenzenci)"
-                value={panels.length}
-                delta={<span className="sp">linki capability</span>}
-              />
-              <Stat
-                label="Aktywne panele"
-                value={panels.filter((p) => p.status === "open").length}
-                delta={<span className="sp">otwarte do zgłoszeń</span>}
-              />
+              <p style={{ color: "var(--secondary)", margin: 0 }}>
+                SDK loader instaluje się raz, niezależnie od projektu. UI aktywuje się dopiero gdy
+                URL niesie parę tokenów <span className="mono">?speqify_session</span> +{" "}
+                <span className="mono">?speqify_reviewer</span> — generowaną przez sesje review.
+              </p>
             </div>
           </div>
         </div>
       ) : tab === 1 ? (
         <div className="card card-pad">
-          <div className="card-h" style={{ padding: 0, border: 0, marginBottom: 14 }}>
-            <div>
-              <h2>Instalacja w 1 linii</h2>
-              <p className="sub">wklej przed &lt;/body&gt; w aplikacji środowiska</p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled
-              title="Rotacja tokenu = utwórz nowy panel (zakładka Recenzenci); rotate-in-place poza V1"
-            >
-              Rotuj klucz
-            </Button>
-          </div>
-          {firstPanel ? (
-            <>
-              <pre className="code-block">
-                <code>{sdkSnippet(firstPanel.secretToken)}</code>
-              </pre>
-              <p className="hint">
-                Token panelu „{firstPanel.audience}” ({firstPanel.environmentUrl}). CSP/CORS: dodaj
-                API origin do <span className="mono">connect-src</span>.
-              </p>
-            </>
-          ) : (
-            <EmptyState
-              icon={<IconLink />}
-              title="Brak panelu"
-              description="Utwórz panel recenzenta w zakładce „Recenzenci”, aby wygenerować token i snippet."
-              action={<Button onClick={() => setTab(2)}>Przejdź do Recenzenci</Button>}
-            />
-          )}
+          <Alert kind="info">
+            Sesje review tworzy i zarządza PO w zakładce „Sesje review”. SA widzi je tutaj tylko
+            podglądowo — pełna obsługa (utwórz / opublikuj / zaproś / odwołaj) w panelu PO.
+          </Alert>
+          <p className="hint">RS-7 follow-up doda tutaj listę sesji projektu + deep-link.</p>
         </div>
-      ) : tab === 2 ? (
-        <div className="card">
-          <div className="card-h">
-            <div>
-              <h2>Recenzenci · panele</h2>
-              <p className="sub">linki capability — token + środowisko + status</p>
-            </div>
-          </div>
-          {panels.length === 0 ? (
-            <EmptyState
-              icon={<IconUsers />}
-              title="Brak paneli"
-              description="Utwórz pierwszy panel — wygeneruje token i link dla recenzentów."
-              action={null}
-            />
-          ) : (
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Audiencja</th>
-                  <th>Środowisko</th>
-                  <th>Status</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {panels.map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.audience}</td>
-                    <td className="mono" style={{ fontSize: ".75rem" }}>
-                      {p.environmentUrl}
-                    </td>
-                    <td>
-                      <Pill kind={p.status === "open" ? "live" : "archived"}>{p.status}</Pill>
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <Button variant="secondary" size="sm" onClick={() => togglePanel(p)}>
-                        {p.status === "open" ? "Zamknij" : "Otwórz"}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <form
-            onSubmit={addPanel}
-            className="card-pad"
-            style={{ borderTop: "1px solid var(--border)" }}
-            noValidate
-          >
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-              <Field label="Audiencja" htmlFor="ap-aud">
-                <select
-                  id="ap-aud"
-                  className="select"
-                  value={audience}
-                  onChange={(e) => setAudience(e.target.value)}
-                  style={{ width: 160 }}
-                >
-                  <option value="client">Klient</option>
-                  <option value="tester">Tester</option>
-                  <option value="po">Product Owner</option>
-                </select>
-              </Field>
-              <Field label="Adres środowiska" htmlFor="ap-url">
-                <input
-                  id="ap-url"
-                  className="input"
-                  value={envUrl}
-                  onChange={(e) => setEnvUrl(e.target.value)}
-                  placeholder="https://staging.acme.test"
-                  style={{ width: 280 }}
-                  required
-                />
-              </Field>
-              <Button type="submit" disabled={busy}>
-                Utwórz panel
-              </Button>
-            </div>
-          </form>
-        </div>
-      ) : tab === 5 ? (
+      ) : tab === 4 ? (
         <div className="card card-pad" style={{ maxWidth: 640 }}>
           <h2 className="section-title" style={{ marginTop: 0, color: "var(--danger)" }}>
             Strefa niebezpieczna
@@ -1422,7 +1300,7 @@ export function AdminProject(props: { id: string }) {
             open={confirmArchive}
             danger
             title="Zarchiwizować projekt?"
-            description={`„${project.name}” zniknie z aktywnej listy, a panele przestaną przyjmować zgłoszenia. Można przywrócić zmieniając status.`}
+            description={`„${project.name}” zniknie z aktywnej listy, a otwarte sesje review przestaną przyjmować zgłoszenia. Można przywrócić zmieniając status.`}
             requireAck="Rozumiem skutki archiwizacji."
             confirmLabel="Tak, zarchiwizuj"
             onCancel={() => setConfirmArchive(false)}
@@ -1432,7 +1310,7 @@ export function AdminProject(props: { id: string }) {
       ) : (
         <div className="card card-pad">
           <Alert kind="info">
-            {tab === 3
+            {tab === 2
               ? "Integracje (Jira / GitHub) konfiguruje Product Owner w sekcji „Eksport & integracje”."
               : "Webhooki nie są jeszcze wdrożone (Phase 11)."}
           </Alert>
@@ -1443,191 +1321,38 @@ export function AdminProject(props: { id: string }) {
   );
 }
 
+/** SA · "Sesje review" — the old capability-token Panel page is gone.
+ *  Sessions now belong to the PO surface (apps/panel pages-po: PoSessions /
+ *  PoSessionDetail / PoNewSession / PoReviewers). This page lists active
+ *  sessions across all projects for SA visibility; full CRUD lives under PO. */
 export function Panels() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState("");
-  const [panels, setPanels] = useState<Panel[]>([]);
-  const [audience, setAudience] = useState("client");
-  const [envUrl, setEnvUrl] = useState("");
-  const [created, setCreated] = useState<{ secretToken: string; panelUrl: string } | null>(null);
-  const [confirmDel, setConfirmDel] = useState<Panel | null>(null);
-  const { error, busy, run } = useAsync();
+  const { error, run } = useAsync();
 
   useEffect(() => {
     void run(async () => setProjects((await api.listProjects()).projects));
   }, []);
 
-  const loadPanels = (pid: string): void => {
-    if (!pid) return setPanels([]);
-    void run(async () => setPanels((await api.listPanels(pid)).panels));
-  };
-  const submit = (e: FormEvent): void => {
-    e.preventDefault();
-    void run(async () => {
-      const r = await api.createPanel(projectId, audience, envUrl);
-      setCreated({ secretToken: r.secretToken, panelUrl: r.panelUrl });
-      setEnvUrl("");
-      loadPanels(projectId);
-    });
-  };
-  const toggle = (p: Panel): void =>
-    void run(async () => {
-      await api.setPanelStatus(p.id, p.status === "open" ? "closed" : "open");
-      loadPanels(projectId);
-    });
-  const remove = (p: Panel): void =>
-    void run(async () => {
-      await api.deletePanel(p.id);
-      loadPanels(projectId);
-    });
-
   return (
-    <Page crumbs={["Speqify Internal", "Panele"]}>
+    <Page crumbs={["Speqify Internal", "Sesje review"]}>
       <div className="page-h">
         <div>
-          <h1>Panele</h1>
-          <p className="sub">Linki capability + snippet instalacyjny SDK</p>
+          <h1>Sesje review</h1>
+          <p className="sub">Aktywne sesje review na wszystkich projektach</p>
         </div>
       </div>
       {error ? <Alert kind="danger">{error}</Alert> : null}
-      <div className="card card-pad" style={{ maxWidth: 520 }}>
-        <Field label="Projekt" htmlFor="pn-proj">
-          <select
-            id="pn-proj"
-            className="select"
-            value={projectId}
-            onChange={(e) => {
-              setCreated(null);
-              setProjectId(e.target.value);
-              loadPanels(e.target.value);
-            }}
-          >
-            <option value="">Wybierz projekt…</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+      <div className="card card-pad">
+        <Alert kind="info">
+          Tworzenie i zarządzanie sesjami review (zaproszenia recenzentów, publikacja, zamknięcie)
+          odbywa się w panelu Product Ownera, w zakładce „Sesje review”. SA widzi sesje tutaj
+          tylko podglądowo.
+        </Alert>
+        <p className="hint" style={{ marginTop: 12 }}>
+          Projektów w workspace: <strong>{projects.length}</strong>. RS-7 follow-up doda tu
+          tabelę sesji z linkiem do widoku projektu.
+        </p>
       </div>
-
-      {projectId ? (
-        <>
-          {created ? (
-            <Alert kind="success">
-              Token <span className="pill-code">{created.secretToken}</span> · link{" "}
-              <span className="pill-code">{created.panelUrl}</span>
-            </Alert>
-          ) : null}
-          <div className="card" style={{ marginTop: 20 }}>
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Audiencja</th>
-                  <th>Status</th>
-                  <th>Środowisko</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {panels.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} style={{ color: "var(--muted)" }}>
-                      Brak paneli.
-                    </td>
-                  </tr>
-                ) : (
-                  panels.map((p) => (
-                    <tr key={p.id}>
-                      <td>{p.audience}</td>
-                      <td>
-                        <span className={`pill ${p.status === "open" ? "live" : "archived"}`}>
-                          <span className="dot" />
-                          {p.status}
-                        </span>
-                      </td>
-                      <td>{p.environmentUrl}</td>
-                      <td>
-                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                          <Button variant="secondary" size="sm" onClick={() => toggle(p)}>
-                            {p.status === "open" ? "Zamknij" : "Otwórz"}
-                          </Button>
-                          <Button variant="danger-ghost" size="sm" onClick={() => setConfirmDel(p)}>
-                            Usuń
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {panels[0] ? (
-            <>
-              <h2 className="section-title">Snippet instalacyjny</h2>
-              <pre className="code-block">
-                <code>{sdkSnippet(panels[0].secretToken)}</code>
-              </pre>
-            </>
-          ) : null}
-
-          <form
-            onSubmit={submit}
-            className="card card-pad"
-            style={{ marginTop: 20, maxWidth: 520 }}
-            noValidate
-          >
-            <h2 className="section-title" style={{ marginTop: 0 }}>
-              Utwórz panel
-            </h2>
-            <Field label="Audiencja" htmlFor="pn-aud">
-              <select
-                id="pn-aud"
-                className="select"
-                value={audience}
-                onChange={(e) => setAudience(e.target.value)}
-              >
-                <option value="client">Klient</option>
-                <option value="tester">Tester</option>
-                <option value="po">Product Owner</option>
-              </select>
-            </Field>
-            <Field label="Adres środowiska" htmlFor="pn-url">
-              <input
-                id="pn-url"
-                className="input"
-                value={envUrl}
-                onChange={(e) => setEnvUrl(e.target.value)}
-                placeholder="https://staging.acme.test"
-                required
-              />
-            </Field>
-            <Button type="submit" disabled={busy}>
-              {busy ? "Tworzenie…" : "Utwórz panel"}
-            </Button>
-          </form>
-        </>
-      ) : null}
-      <ConfirmModal
-        open={confirmDel !== null}
-        danger
-        title="Usunąć panel?"
-        description={
-          confirmDel
-            ? `Link capability ${confirmDel.environmentUrl} zostanie nieodwracalnie odwołany. Recenzenci stracą dostęp natychmiast.`
-            : ""
-        }
-        requireAck="Rozumiem, że tej operacji nie da się cofnąć."
-        confirmLabel="Tak, usuń panel"
-        onCancel={() => setConfirmDel(null)}
-        onConfirm={() => {
-          if (confirmDel) remove(confirmDel);
-          setConfirmDel(null);
-        }}
-      />
     </Page>
   );
 }

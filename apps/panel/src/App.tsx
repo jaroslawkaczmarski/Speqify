@@ -63,7 +63,7 @@ const SA_NAV: { group: string; items: Nav[] }[] = [
       { path: "/", label: "Pulpit", icon: IconGrid },
       { path: "/projects", label: "Projekty", icon: IconBuilding, ct: "·" },
       { path: "/po-users", label: "Użytkownicy", icon: IconUsers },
-      { path: "/panels", label: "Panele", icon: IconLink },
+      { path: "/sessions", label: "Sesje review", icon: IconLink },
       { path: "/providers", label: "Dostawcy AI", icon: IconCpu, ct: "3", hot: false },
     ],
   },
@@ -518,83 +518,6 @@ function Register() {
   );
 }
 
-function AcceptInvite() {
-  return (
-    <div className="auth">
-      <main className="form-pane">
-        <div className="form-top">
-          <span className="login-brand">
-            <span className="mark" aria-hidden="true">
-              <IconLogo />
-            </span>
-            Speqify
-          </span>
-          <div className="lang-switch" aria-hidden="true">
-            <button className="active" type="button">
-              PL
-            </button>
-          </div>
-        </div>
-
-        <div className="form-box">
-          <h1>Dołącz jako recenzent</h1>
-          <p className="sub">
-            <strong>Lumen Lab — Q1 Review</strong> · rola <strong>Reviewer</strong>. Zaznaczanie
-            elementów UI z automatycznym kontekstem technicznym oraz notatki głosowe i tekstowe.
-          </p>
-
-          <InviteOnlyNote />
-
-          <form onSubmit={(e) => e.preventDefault()} noValidate style={{ marginTop: 16 }}>
-            <Field
-              label="Twój e-mail"
-              htmlFor="i-email"
-              hint="Adres z zaproszenia. Aby zmienić, poproś o ponowne zaproszenie."
-            >
-              <input
-                id="i-email"
-                type="email"
-                className="input"
-                defaultValue="tomek.wojcik@lumen-lab.com"
-                disabled
-              />
-            </Field>
-            <Field label="Imię i nazwisko" htmlFor="i-name">
-              <input id="i-name" className="input" placeholder="Tomek Wójcik" disabled />
-            </Field>
-            <p style={{ fontSize: ".75rem", color: "var(--muted)", margin: "0 0 18px" }}>
-              Nie będziesz mieć dostępu do zadań, eksportu ani ustawień organizacji — tylko nakładka
-              recenzenta.
-            </p>
-            <Button type="submit" disabled style={{ width: "100%" }}>
-              Dołącz do sesji review
-            </Button>
-          </form>
-        </div>
-
-        <div className="form-foot">
-          <span className="gdpr">
-            <IconShield />
-            Hosted in EU · RODO-compliant
-          </span>
-          <span>© {new Date().getFullYear()} Speqify</span>
-        </div>
-      </main>
-
-      <AuthAside
-        eyebrow="Co zobaczysz po akceptacji"
-        title="Aplikacja, której używasz — z nakładką do zostawiania uwag."
-        lead="Recenzja zajmuje tyle, ile normalne korzystanie z aplikacji."
-        steps={[
-          "Wskaż element — SDK zapisze selektor, XPath, HTML, zrzut",
-          "Powiedz, co Cię boli — głos lub tekst",
-          "Wyślij na koniec sesji — PO uruchomi analizę AI",
-        ]}
-      />
-    </div>
-  );
-}
-
 function renderPage(role: string, route: string): ReactNode {
   const r = route === "" ? "/" : route;
   if (role === "superadmin") {
@@ -602,7 +525,7 @@ function renderPage(role: string, route: string): ReactNode {
     if (r.startsWith("/projects/")) return <AdminProject id={r.slice("/projects/".length)} />;
     if (r === "/projects") return <Projects />;
     if (r === "/po-users") return <ProductOwners />;
-    if (r === "/panels") return <Panels />;
+    if (r === "/sessions") return <Panels />;
     if (r === "/providers") return <Providers />;
     if (r === "/billing") return <AdminBilling />;
     if (r === "/audit") return <AdminAudit />;
@@ -720,7 +643,6 @@ export function App() {
     );
   if (!role) {
     if (route === "/register") return <Register />;
-    if (route === "/accept-invite") return <AcceptInvite />;
     return <Login onAuthed={setRole} />;
   }
 

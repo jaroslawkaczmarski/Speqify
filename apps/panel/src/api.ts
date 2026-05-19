@@ -2,14 +2,19 @@
 import type {
   AdminStats,
   AuditEntry,
-  Panel,
   PlatformProviderConfigView,
   PoSourceAnnotation,
   Project,
   ProjectStatus,
   ProjectTemplate,
+  ProjectTemplates,
+  Reviewer,
+  ReviewerView,
+  ReviewSession,
+  ReviewSessionStatus,
   Task,
   TaskEditInput,
+  TaskType,
   User,
 } from "@speqify/shared";
 
@@ -51,13 +56,29 @@ export interface PoProjectView {
     id: string;
     name: string;
     environmentUrls: string[];
-    template: ProjectTemplate;
+    templates: ProjectTemplates;
   };
   export: {
     target: string;
     fieldMapping: Record<string, string>;
     defaults: Record<string, string>;
   } | null;
+}
+
+export interface CreateReviewSessionBody {
+  name: string;
+  description?: string;
+  instructions?: string;
+  envUrl: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+}
+
+export interface InviteReviewerResponse {
+  reviewer: ReviewerView;
+  inviteUrl: string;
+  emailSent: boolean;
+  emailError?: string;
 }
 
 export const api = {
@@ -80,7 +101,7 @@ export const api = {
     name: string,
     productOwnerId: string,
     environmentUrls: string[],
-    template?: ProjectTemplate,
+    templates?: ProjectTemplates,
   ) =>
     call<Project>("/admin/projects", {
       method: "POST",
@@ -88,23 +109,53 @@ export const api = {
         name,
         productOwnerId,
         environmentUrls,
-        ...(template ? { template } : {}),
+        ...(templates ? { templates } : {}),
       }),
     }),
-  listPanels: (projectId: string) =>
-    call<{ panels: Panel[] }>(`/admin/projects/${projectId}/panels`),
-  createPanel: (projectId: string, audience: string, environmentUrl: string) =>
-    call<{ id: string; secretToken: string; panelUrl: string }>(
-      `/admin/projects/${projectId}/panels`,
-      { method: "POST", body: JSON.stringify({ audience, environmentUrl }) },
-    ),
-  setPanelStatus: (panelId: string, status: "open" | "closed") =>
-    call<{ id: string; status: string }>(`/admin/panels/${panelId}/status`, {
+
+  // Review sessions (SA-scoped admin endpoints; the same endpoints back the
+  // PO panel's "Sesje review" UI -- both audiences are admin-authenticated).
+  listSessions: (projectId: string) =>
+    call<{ sessions: ReviewSession[] }>(`/admin/projects/${projectId}/sessions`),
+  createSession: (projectId: string, body: CreateReviewSessionBody) =>
+    call<ReviewSession>(`/admin/projects/${projectId}/sessions`, {
+      method: "POST",
+      body: JSON.stringify({
+        ...body,
+        description: body.description ?? "",
+        instructions: body.instructions ?? "",
+        startsAt: body.startsAt ?? null,
+        endsAt: body.endsAt ?? null,
+      }),
+    }),
+  getSession: (sessionId: string) =>
+    call<{ session: ReviewSession; reviewers: ReviewerView[] }>(`/admin/sessions/${sessionId}`),
+  updateSession: (sessionId: string, body: Partial<CreateReviewSessionBody>) =>
+    call<ReviewSession>(`/admin/sessions/${sessionId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  setSessionStatus: (sessionId: string, status: ReviewSessionStatus) =>
+    call<{ id: string; status: string }>(`/admin/sessions/${sessionId}/status`, {
       method: "POST",
       body: JSON.stringify({ status }),
     }),
-  deletePanel: (panelId: string) =>
-    call<{ deleted: boolean }>(`/admin/panels/${panelId}`, { method: "DELETE" }),
+  inviteReviewer: (sessionId: string, name: string, email: string) =>
+    call<InviteReviewerResponse>(`/admin/sessions/${sessionId}/reviewers`, {
+      method: "POST",
+      body: JSON.stringify({ name, email }),
+    }),
+  revokeReviewer: (sessionId: string, reviewerId: string) =>
+    call<{ id: string; status: string }>(
+      `/admin/sessions/${sessionId}/reviewers/${reviewerId}`,
+      { method: "DELETE" },
+    ),
+  resendInvite: (sessionId: string, reviewerId: string) =>
+    call<{ inviteUrl: string; emailSent: boolean; emailError?: string }>(
+      `/admin/sessions/${sessionId}/reviewers/${reviewerId}/resend`,
+      { method: "POST" },
+    ),
+
   adminStats: () => call<AdminStats>("/admin/stats"),
   adminAudit: () => call<{ entries: AuditEntry[] }>("/admin/audit"),
   setProjectStatus: (projectId: string, status: ProjectStatus) =>
@@ -128,10 +179,17 @@ export const api = {
 
   // Product Owner
   poProject: () => call<PoProjectView>("/po/project"),
-  putTemplate: (template: ProjectTemplate) =>
-    call<Project>("/po/project/template", {
+  /** Update a single task-type template tab. */
+  putTemplate: (taskType: TaskType, template: ProjectTemplate) =>
+    call<Project>("/po/project/templates", {
       method: "PUT",
-      body: JSON.stringify(template),
+      body: JSON.stringify({ taskType, template }),
+    }),
+  /** Replace the full per-type template bundle in one call. */
+  putTemplates: (templates: ProjectTemplates) =>
+    call<Project>("/po/project/templates", {
+      method: "PUT",
+      body: JSON.stringify(templates),
     }),
   putExport: (body: {
     target: string;
@@ -186,14 +244,6 @@ export const api = {
     }>(`/po/tasks/export?format=${format}`, { method: "POST" }),
 };
 
-/** SDK loader snippet for a panel (Install tab, IMPLEMENTATION_PLAN §7.3). */
-export function sdkSnippet(secretToken: string): string {
-  return [
-    "<!-- Speqify overlay - load ONLY on non-production / review envs -->",
-    "<script",
-    "  defer",
-    '  src="https://speqify.app/sdk/v1/loader.js"',
-    `  data-speqify-token="${secretToken}"`,
-    "></script>",
-  ].join("\n");
-}
+// Re-export for convenience in pages-* (they previously imported Reviewer/Session
+// through api.ts indirectly via Panel).
+export type { Reviewer, ReviewerView, ReviewSession };

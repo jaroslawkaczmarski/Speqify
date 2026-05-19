@@ -4,8 +4,12 @@
 series is green; CI is wired to deploy-on-push for main, branch pushes
 are safe)
 
-**Pick up from RS-3** unless instructed otherwise. See "Pickup
-instructions" at the bottom.
+**Pick up from RS-7 follow-up + RS-8** — RS-3..RS-6 are landed and
+RS-7 is at "panel typechecks but UI is stubbed" (see "State of play").
+The remaining work to ship is mostly cosmetic: turn the representative
+PoSessions/PoSessionDetail/PoNewSession/PoReviewers pages into real
+ones backed by the new API, polish the SDK UX rebalance, then RS-8
+(tests + analysis prompt + ship).
 
 ---
 
@@ -46,9 +50,11 @@ Invite) **real**.
 |---|---|
 | `packages/shared` (types/schemas/states) | ✅ committed in `8e4a5e4` (RS-1) |
 | `packages/db` (Drizzle schema + migration 0004) | ✅ committed in `039dd0b` (RS-2) |
-| `apps/api` (repo, endpoints, email) | ⏳ pending RS-3..RS-5 |
-| `packages/sdk` (loader + overlay rewrite) | ⏳ pending RS-6 |
-| `apps/panel` (Sessions UI rewire + per-type templates) | ⏳ pending RS-7 |
+| `apps/api` repo (in-memory + D1) | ✅ committed in `226a422` (RS-3) |
+| `apps/api` endpoints (/admin/sessions/*, /sdk/*) | ✅ committed in `9422c20` (RS-4) |
+| `apps/api` email (Resend + invitation template) | ✅ committed in `662cb98` (RS-5) |
+| `packages/sdk` wire (loader/index/client/welcome) | ✅ committed in `13aed25` (RS-6 — wire only; UX rebalance pending) |
+| `apps/panel` typecheck-green + stubs | ⏳ in progress this session (api.ts wired, Panel UI stubbed; Session pages still representative) |
 | Tests + analysis prompt + ship | ⏳ pending RS-8 |
 
 Prod state at branch creation: 1 project, 1 user, 1 panel (unused),
@@ -232,20 +238,66 @@ state, which is now achieved by simply not rendering anything).
 2. `git checkout feat/review-sessions` (already pushed to origin).
 3. Verify state:
    ```
-   git log --oneline main..HEAD          # expect: 8e4a5e4 + 039dd0b
-   pnpm --filter @speqify/shared typecheck   # green
-   pnpm --filter @speqify/db typecheck       # green
-   pnpm --filter @speqify/api typecheck      # currently RED — that's
-                                             #   expected, fix in RS-3
+   git log --oneline main..HEAD            # expect: cb3386a docs + RS-1..RS-7-partial
+   pnpm --filter @speqify/shared typecheck # green
+   pnpm --filter @speqify/db typecheck     # green
+   pnpm --filter @speqify/sdk typecheck    # green
+   pnpm --filter @speqify/panel typecheck  # green
+   pnpm --filter @speqify/api  typecheck   # RED — RS-8 territory:
+                                           #   analysis/prompt.ts + test/api.test.ts
    ```
-4. Start RS-3 (Repository methods). Make `apps/api` typecheck green by
-   the end of RS-3 → RS-4 (endpoints) → RS-5 (email) → RS-6 (SDK) →
-   RS-7 (panel UI) → RS-8 (tests + analysis + PR).
-5. Local gate between phases: `pnpm --filter @speqify/<changed> typecheck`.
-6. Commit at the end of each RS-N with the `refactor/feat(scope/RS-N): …`
-   convention used here.
+4. Outstanding work, in order:
+   a) **RS-7 follow-up — make session pages real.**
+      `apps/panel/src/pages-po.tsx` still has representative versions of
+      `PoSessions` / `PoSessionDetail` / `PoNewSession` / `PoReviewers`
+      (look for `RepBanner`). Rewire them to:
+        - `api.listSessions(projectId)` / `api.createSession(...)` /
+          `api.getSession(...)` / `api.updateSession(...)` /
+          `api.setSessionStatus(...)`
+        - `api.inviteReviewer(...)` / `api.revokeReviewer(...)` /
+          `api.resendInvite(...)`
+      Display the `inviteUrl` returned by `inviteReviewer` so the PO
+      can copy/paste it (this is the graceful-fallback path even with
+      Resend wired). Show `tokenHint` next to each reviewer (Reviewer
+      tokens themselves are never echoed back from the API).
+      Also: the SA `AdminProject` "Sesje review" tab currently shows
+      a placeholder — bolt on a small read-only list of sessions for
+      SA visibility (deep-link to PO panel).
+   b) **RS-6 follow-up — SDK UX rebalance.** Wire is done; visual
+      redesign is not. The PO pivot wants:
+        - bottom dock = primary surface after welcome accept
+        - right `.sp-panel` collapsed by default, opened only via a
+          "Szczegóły" dock button
+        - dock gains primary "Wyślij" button (currently sending is
+          only reachable through the right panel)
+        - mic click → element-pick auto-engages → record → stop →
+          annotation auto-drafts → "Wyślij" sends (4 taps + voice)
+   c) **RS-8 — tests, analysis prompt, ship.**
+        - Rewrite `apps/api/test/api.test.ts` fixtures around
+          `ReviewSession` + `Reviewer` (drop `panels` seed key, drop
+          `Panel` import, drop `panelId` on annotations; pass
+          `emailSender: new NoopEmailSender()` to `createApp`).
+        - Fix `apps/api/src/analysis/prompt.ts` line 16:
+          `project.template` → `project.templates[taskType]`. Pick
+          the type based on the AI's classification of the annotation
+          batch (default to `bug` when AI omits). The analysis service
+          (`apps/api/src/analysis/service.ts`) needs to emit
+          `taskType: TaskType` in the AI-parse output schema and pass
+          it to `prompt.buildPrompt(project, anns, taskType)`.
+        - Once `pnpm --filter @speqify/api typecheck` is green, run
+          local full gate (typecheck × all, tests × all, prettier
+          --check, vite build × panel+landing, sdk build).
+        - Apply migration `0004` to remote D1 once series is green:
+          `npx wrangler d1 execute speqify --remote --file packages/db/migrations/0004_review_sessions_and_reviewers.sql`
+        - Open PR `feat/review-sessions → main`. Let CI run. Merge
+          when green. Deploy workflow auto-redeploys.
+
+5. Local gate between phases:
+   `pnpm --filter @speqify/<changed> typecheck`
+6. Commit at the end of each step with the
+   `refactor/feat(scope/RS-N): …` convention used here.
 7. Don't push to main mid-series — push to the feature branch only.
-   Final PR + merge happens in RS-8.
+   Final PR + merge happens at the end of RS-8.
 
 ## Operational notes for the picker-upper
 

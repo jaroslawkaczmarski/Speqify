@@ -6,7 +6,9 @@ import type {
   SubtaskType,
   Task,
   TaskEditInput,
+  TaskType,
 } from "@speqify/shared";
+import { TASK_TYPES } from "@speqify/shared";
 import { api, type PoProjectView } from "./api.js";
 import {
   Alert,
@@ -70,9 +72,9 @@ export function PoOverview() {
             </div>
             <div className="stat">
               <span className="l">Język zadań</span>
-              <span className="n">{v.project.template.language.toUpperCase()}</span>
+              <span className="n">{v.project.templates.bug.language.toUpperCase()}</span>
               <span className="d">
-                <span className="sp">szablon zadań</span>
+                <span className="sp">szablon zadań (bug)</span>
               </span>
             </div>
             <div className="stat">
@@ -110,25 +112,37 @@ export function PoOverview() {
   );
 }
 
+const TASK_TYPE_LABELS: Record<TaskType, string> = {
+  bug: "Błąd",
+  change: "Zmiana",
+  feature: "Nowa funkcja",
+  polish: "Polish",
+};
+
 export function PoTemplate() {
-  const [t, setT] = useState<ProjectTemplate | null>(null);
+  const [allTemplates, setAllTemplates] = useState<Record<TaskType, ProjectTemplate> | null>(null);
+  const [activeType, setActiveType] = useState<TaskType>("bug");
   const [saved, setSaved] = useState(false);
   const { error, busy, run } = useAsync();
   useEffect(() => {
-    void run(async () => setT((await api.poProject()).project.template));
+    void run(async () => setAllTemplates((await api.poProject()).project.templates));
   }, []);
+
+  const t = allTemplates ? allTemplates[activeType] : null;
 
   const submit = (e: FormEvent): void => {
     e.preventDefault();
     if (!t) return;
     void run(async () => {
-      await api.putTemplate(t);
+      await api.putTemplate(activeType, t);
       setSaved(true);
     });
   };
   const set = (patch: Partial<ProjectTemplate>): void => {
     setSaved(false);
-    if (t) setT({ ...t, ...patch });
+    if (allTemplates && t) {
+      setAllTemplates({ ...allTemplates, [activeType]: { ...t, ...patch } });
+    }
   };
 
   return (
@@ -136,11 +150,37 @@ export function PoTemplate() {
       <div className="page-h">
         <div>
           <h1>Szablon zadań</h1>
-          <p className="sub">Kształtuje każde zadanie generowane przez AI</p>
+          <p className="sub">Per typ zadania (bug / change / feature / polish) — AI dobiera szablon przy klasyfikacji.</p>
         </div>
       </div>
+      <div className="tabs" role="tablist" aria-label="Typ zadania" style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        {TASK_TYPES.map((tt) => (
+          <button
+            key={tt}
+            type="button"
+            role="tab"
+            aria-selected={tt === activeType}
+            className={`pill${tt === activeType ? " active" : ""}`}
+            onClick={() => {
+              setActiveType(tt);
+              setSaved(false);
+            }}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: "1px solid var(--border)",
+              background: tt === activeType ? "var(--primary)" : "transparent",
+              color: tt === activeType ? "#fff" : "inherit",
+              cursor: "pointer",
+              fontSize: ".8125rem",
+            }}
+          >
+            {TASK_TYPE_LABELS[tt]}
+          </button>
+        ))}
+      </div>
       {error ? <Alert kind="danger">{error}</Alert> : null}
-      {saved ? <Alert kind="success">Szablon zapisany.</Alert> : null}
+      {saved ? <Alert kind="success">Szablon ({TASK_TYPE_LABELS[activeType]}) zapisany.</Alert> : null}
       {!t ? (
         <div
           className="card card-pad"
