@@ -34,6 +34,13 @@ export interface Env {
   readonly LLM_MODEL?: string;
   /** Comma-separated allowed origins for the SA/PO SPA (CORS). */
   readonly PANEL_ORIGINS?: string;
+  /** Resend API key for transactional invite emails. Optional — when absent
+   *  the invite endpoint returns the magic-link URL so the PO can hand-deliver
+   *  it (graceful-fallback contract, RS-NOTES.md §RS-5). */
+  readonly RESEND_API_KEY?: string;
+  /** Verified Resend sender ("Display Name <noreply@speqify.app>"). DNS for
+   *  SPF/DKIM is configured manually at the Resend dashboard. */
+  readonly RESEND_FROM?: string;
 }
 
 export interface AppConfig {

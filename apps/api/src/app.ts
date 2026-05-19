@@ -37,6 +37,8 @@ import { parseAnalysisOutput } from "./analysis/schema.js";
 import { runAnalysis } from "./analysis/service.js";
 import type { LlmProvider } from "./analysis/types.js";
 import { authenticate, requireRole } from "./auth/auth.js";
+import { buildInvitationEmail } from "./email/templates.js";
+import type { EmailSender } from "./email/types.js";
 import type { AppConfig } from "./env.js";
 import { b64url, encryptJson, hashPassword } from "./lib/crypto.js";
 import { ApiException, errorEnvelope } from "./lib/http.js";
@@ -116,8 +118,9 @@ export function createApp(deps: {
   mediaStore: MediaStore;
   transcriber: Transcriber;
   llm: LlmProvider;
+  emailSender: EmailSender;
 }): Hono<AppEnv> {
-  const { repo, config, mediaStore, transcriber, llm } = deps;
+  const { repo, config, mediaStore, transcriber, llm, emailSender } = deps;
   const app = new Hono<AppEnv>();
 
   app.use("*", requestContext);
@@ -332,19 +335,33 @@ export function createApp(deps: {
         token: newSecretToken(),
       });
       const inviteUrl = buildInviteUrl(session.envUrl, session.token, reviewer.token);
-      // RS-5 will plug in Resend here; for now we always return the URL so the
-      // PO can copy/paste it. This stays the graceful-fallback path even once
-      // Resend is wired (notes §RS-5).
-      const emailSent = false;
+      const project = await repo.getProject(session.projectId);
+      const sendResult = await emailSender.send(
+        buildInvitationEmail({
+          reviewerName: reviewer.name,
+          reviewerEmail: reviewer.email,
+          projectName: project?.name ?? "",
+          sessionName: session.name,
+          description: session.description,
+          inviteUrl,
+        }),
+      );
       await repo.appendAudit({
         kind: "reviewer.invited",
         actor: c.get("session").sub,
-        summary: `Zaproszono ${reviewer.email} do sesji „${session.name}”`,
+        summary: sendResult.sent
+          ? `Zaproszono ${reviewer.email} do sesji „${session.name}” (email wysłany)`
+          : `Zaproszono ${reviewer.email} do sesji „${session.name}” (link gotowy do skopiowania)`,
         severity: "ok",
         projectId: session.projectId,
       });
       return c.json(
-        { reviewer: toReviewerView(reviewer), inviteUrl, emailSent },
+        {
+          reviewer: toReviewerView(reviewer),
+          inviteUrl,
+          emailSent: sendResult.sent,
+          ...(sendResult.reason ? { emailError: sendResult.reason } : {}),
+        },
         201,
       );
     },
@@ -380,8 +397,22 @@ export function createApp(deps: {
       throw new ApiException("bad_request", "Reviewer access was revoked");
     }
     const inviteUrl = buildInviteUrl(session.envUrl, session.token, reviewer.token);
-    // Resend hook lands in RS-5; for now we just return the same URL again.
-    return c.json({ inviteUrl, emailSent: false });
+    const project = await repo.getProject(session.projectId);
+    const sendResult = await emailSender.send(
+      buildInvitationEmail({
+        reviewerName: reviewer.name,
+        reviewerEmail: reviewer.email,
+        projectName: project?.name ?? "",
+        sessionName: session.name,
+        description: session.description,
+        inviteUrl,
+      }),
+    );
+    return c.json({
+      inviteUrl,
+      emailSent: sendResult.sent,
+      ...(sendResult.reason ? { emailError: sendResult.reason } : {}),
+    });
   });
 
   // --- SA dashboard real data (Tranche B) ---
