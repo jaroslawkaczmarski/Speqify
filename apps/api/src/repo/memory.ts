@@ -6,14 +6,14 @@ import type {
   ExportConfig,
   ExportTarget,
   Lead,
-  Panel,
-  PanelAudience,
-  PanelStatus,
   PlatformProviderConfig,
   PlatformProviderConfigView,
   Project,
   ProjectStatus,
-  ProjectTemplate,
+  ProjectTemplates,
+  Reviewer,
+  ReviewSession,
+  ReviewSessionStatus,
   Submission,
   Task,
   TranscriptionStatus,
@@ -22,8 +22,11 @@ import type {
 } from "@speqify/shared";
 import { newId } from "../lib/ids.js";
 import type {
+  AddReviewerArgs,
   AnnotationCreate,
+  CreateReviewSessionArgs,
   Repository,
+  ReviewSessionPatch,
   TaskDraftInput,
   TaskMutation,
   TaskPatch,
@@ -35,8 +38,13 @@ import type {
  * Behaviour is the contract the D1 adapter must match.
  */
 export class InMemoryRepository implements Repository {
-  private panels = new Map<string, Panel>();
+  private reviewSessions = new Map<string, ReviewSession>();
+  private reviewers = new Map<string, Reviewer>();
+  // submissions keyed by `${sessionId}:${submissionId}` — the same submission
+  // batch is never shared across sessions, so this is the natural composite.
   private submissions = new Map<string, Submission>();
+  // annotations keyed by `${sessionId}:${reviewerId}:${clientAnnotationId}` —
+  // the idempotency unique-index (§14).
   private annotations = new Map<string, Annotation>();
   private users = new Map<string, UserWithSecret>();
   private projects = new Map<string, Project>();
@@ -48,18 +56,16 @@ export class InMemoryRepository implements Repository {
   private platformKeyRef: string | null = null;
   private leads: Lead[] = [];
 
-  private panelById(panelId: string): Panel | undefined {
-    return [...this.panels.values()].find((p) => p.id === panelId);
-  }
-
   constructor(seed?: {
-    panels?: Panel[];
+    reviewSessions?: ReviewSession[];
+    reviewers?: Reviewer[];
     users?: UserWithSecret[];
     projects?: Project[];
     annotations?: Annotation[];
     tasks?: Task[];
   }) {
-    for (const p of seed?.panels ?? []) this.panels.set(p.secretToken, p);
+    for (const s of seed?.reviewSessions ?? []) this.reviewSessions.set(s.id, s);
+    for (const r of seed?.reviewers ?? []) this.reviewers.set(r.id, r);
     for (const u of seed?.users ?? []) this.users.set(u.email.toLowerCase(), u);
     for (const p of seed?.projects ?? []) this.projects.set(p.id, p);
     // Seeded review data uses the annotation/task id as the map key (no
@@ -68,21 +74,19 @@ export class InMemoryRepository implements Repository {
     for (const t of seed?.tasks ?? []) this.tasks.set(t.id, t);
   }
 
-  async getPanelByToken(token: string): Promise<Panel | null> {
-    return this.panels.get(token) ?? null;
-  }
-
   async getOrCreateSubmission(args: {
-    panelId: string;
+    sessionId: string;
+    reviewerId: string;
     submissionId: string;
     clientId: string;
   }): Promise<Submission> {
-    const key = `${args.panelId}:${args.submissionId}`;
+    const key = `${args.sessionId}:${args.submissionId}`;
     const existing = this.submissions.get(key);
     if (existing) return existing;
     const created: Submission = {
       id: args.submissionId,
-      panelId: args.panelId,
+      sessionId: args.sessionId,
+      reviewerId: args.reviewerId,
       clientId: args.clientId,
       complete: false,
       createdAt: new Date().toISOString(),
@@ -95,17 +99,17 @@ export class InMemoryRepository implements Repository {
     args: AnnotationCreate,
   ): Promise<{ annotation: Annotation; created: boolean }> {
     const { input } = args;
-    const idemKey = `${args.panelId}:${input.clientAnnotationId}`;
+    const idemKey = `${args.sessionId}:${args.reviewerId}:${input.clientAnnotationId}`;
     const existing = this.annotations.get(idemKey);
     if (existing) return { annotation: existing, created: false };
 
     const annotation: Annotation = {
       id: newId(),
-      panelId: args.panelId,
+      sessionId: args.sessionId,
+      reviewerId: args.reviewerId,
       submissionId: input.submissionId,
       type: input.type,
       status: "draft",
-      audience: args.audience,
       pageUrl: input.pageUrl,
       breadcrumb: input.breadcrumb,
       element: input.element,
@@ -128,8 +132,8 @@ export class InMemoryRepository implements Repository {
     return { annotation, created: true };
   }
 
-  async completeSubmission(args: { panelId: string; submissionId: string }): Promise<boolean> {
-    const key = `${args.panelId}:${args.submissionId}`;
+  async completeSubmission(args: { sessionId: string; submissionId: string }): Promise<boolean> {
+    const key = `${args.sessionId}:${args.submissionId}`;
     const submission = this.submissions.get(key);
     if (!submission) return false;
     submission.complete = true;
@@ -210,7 +214,7 @@ export class InMemoryRepository implements Repository {
     name: string;
     productOwnerId: string;
     environmentUrls: string[];
-    template: ProjectTemplate;
+    templates: ProjectTemplates;
   }): Promise<Project> {
     const project: Project = {
       id: newId(),
@@ -218,7 +222,7 @@ export class InMemoryRepository implements Repository {
       productOwnerId: args.productOwnerId,
       environmentUrls: args.environmentUrls,
       status: "live",
-      template: args.template,
+      templates: args.templates,
       exportConfigId: null,
       createdAt: new Date().toISOString(),
     };
@@ -307,61 +311,125 @@ export class InMemoryRepository implements Repository {
     return view;
   }
 
-  async createPanel(args: {
-    projectId: string;
-    audience: PanelAudience;
-    environmentUrl: string;
-    secretToken: string;
-  }): Promise<Panel> {
-    const panel: Panel = {
+  // --- Review sessions (RS-3) ---
+
+  async createReviewSession(args: CreateReviewSessionArgs): Promise<ReviewSession> {
+    const session: ReviewSession = {
       id: newId(),
       projectId: args.projectId,
-      audience: args.audience,
-      secretToken: args.secretToken,
-      environmentUrl: args.environmentUrl,
-      status: "open",
+      name: args.name,
+      description: args.description,
+      instructions: args.instructions,
+      envUrl: args.envUrl,
+      token: args.token,
+      status: "draft",
+      startsAt: args.startsAt,
+      endsAt: args.endsAt,
+      createdBy: args.createdBy,
       createdAt: new Date().toISOString(),
     };
-    this.panels.set(panel.secretToken, panel);
-    return panel;
+    this.reviewSessions.set(session.id, session);
+    return session;
   }
 
-  async listPanels(projectId: string): Promise<Panel[]> {
-    return [...this.panels.values()].filter((p) => p.projectId === projectId);
+  async getReviewSession(id: string): Promise<ReviewSession | null> {
+    return this.reviewSessions.get(id) ?? null;
   }
 
-  async getPanelById(panelId: string): Promise<Panel | null> {
-    return [...this.panels.values()].find((p) => p.id === panelId) ?? null;
+  async getReviewSessionByToken(token: string): Promise<ReviewSession | null> {
+    return [...this.reviewSessions.values()].find((s) => s.token === token) ?? null;
   }
 
-  async updatePanelStatus(panelId: string, status: PanelStatus): Promise<Panel | null> {
-    const found = [...this.panels.values()].find((p) => p.id === panelId);
-    if (!found) return null;
-    found.status = status;
-    return found;
+  async listReviewSessionsByProject(projectId: string): Promise<ReviewSession[]> {
+    return [...this.reviewSessions.values()].filter((s) => s.projectId === projectId);
   }
 
-  async deletePanel(panelId: string): Promise<boolean> {
-    for (const [token, p] of this.panels) {
-      if (p.id === panelId) {
-        this.panels.delete(token);
-        return true;
-      }
+  async updateReviewSession(
+    id: string,
+    patch: ReviewSessionPatch,
+  ): Promise<ReviewSession | null> {
+    const existing = this.reviewSessions.get(id);
+    if (!existing) return null;
+    const next: ReviewSession = { ...existing, ...patch };
+    this.reviewSessions.set(id, next);
+    return next;
+  }
+
+  async setReviewSessionStatus(
+    id: string,
+    status: ReviewSessionStatus,
+  ): Promise<ReviewSession | null> {
+    const existing = this.reviewSessions.get(id);
+    if (!existing) return null;
+    existing.status = status;
+    return existing;
+  }
+
+  // --- Reviewers (RS-3) ---
+
+  async addReviewer(args: AddReviewerArgs): Promise<Reviewer> {
+    const now = new Date().toISOString();
+    const reviewer: Reviewer = {
+      id: newId(),
+      sessionId: args.sessionId,
+      name: args.name,
+      email: args.email,
+      token: args.token,
+      status: "pending",
+      invitedAt: now,
+      acceptedAt: null,
+      lastSeenAt: null,
+    };
+    this.reviewers.set(reviewer.id, reviewer);
+    return reviewer;
+  }
+
+  async getReviewer(id: string): Promise<Reviewer | null> {
+    return this.reviewers.get(id) ?? null;
+  }
+
+  async getReviewerByToken(token: string): Promise<Reviewer | null> {
+    return [...this.reviewers.values()].find((r) => r.token === token) ?? null;
+  }
+
+  async listReviewersBySession(sessionId: string): Promise<Reviewer[]> {
+    return [...this.reviewers.values()].filter((r) => r.sessionId === sessionId);
+  }
+
+  async revokeReviewer(id: string): Promise<Reviewer | null> {
+    const r = this.reviewers.get(id);
+    if (!r) return null;
+    r.status = "declined";
+    return r;
+  }
+
+  async markReviewerAccepted(id: string): Promise<Reviewer | null> {
+    const r = this.reviewers.get(id);
+    if (!r) return null;
+    if (r.status === "pending") {
+      r.status = "active";
+      r.acceptedAt = new Date().toISOString();
     }
-    return false;
+    return r;
+  }
+
+  async markReviewerSeen(id: string, at: string): Promise<void> {
+    const r = this.reviewers.get(id);
+    if (!r) return;
+    r.lastSeenAt = at;
   }
 
   async getProjectByOwner(ownerId: string): Promise<Project | null> {
     return [...this.projects.values()].find((p) => p.productOwnerId === ownerId) ?? null;
   }
 
-  async updateProjectTemplate(
+  async updateProjectTemplates(
     projectId: string,
-    template: ProjectTemplate,
+    templates: ProjectTemplates,
   ): Promise<Project | null> {
     const project = this.projects.get(projectId);
     if (!project) return null;
-    project.template = template;
+    project.templates = templates;
     return project;
   }
 
@@ -424,8 +492,14 @@ export class InMemoryRepository implements Repository {
   }
 
   async listSubmittedForProject(projectId: string): Promise<Annotation[]> {
+    const sessionIds = new Set(
+      [...this.reviewSessions.values()]
+        .filter((s) => s.projectId === projectId)
+        .map((s) => s.id),
+    );
+    if (sessionIds.size === 0) return [];
     return [...this.annotations.values()].filter(
-      (a) => a.status === "submitted" && this.panelById(a.panelId)?.projectId === projectId,
+      (a) => a.status === "submitted" && sessionIds.has(a.sessionId),
     );
   }
 
