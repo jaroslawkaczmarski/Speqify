@@ -13,7 +13,10 @@ import {
 } from "./components.js";
 import {
   AdminAudit,
+  AdminBilling,
+  AdminPrivacy,
   AdminProject,
+  AdminSettings,
   CreateProject,
   Dashboard,
   Panels,
@@ -341,31 +344,10 @@ function renderPage(role: string, route: string): ReactNode {
     if (r === "/po-users") return <ProductOwners />;
     if (r === "/panels") return <Panels />;
     if (r === "/providers") return <Providers />;
-    if (r === "/billing")
-      return (
-        <Placeholder
-          crumbs={["Speqify Internal", "Rozliczenia & limity"]}
-          title="Rozliczenia & limity"
-          note="Limity i koszty AI per organizacja nie są jeszcze wdrożone (Phase 11)."
-        />
-      );
+    if (r === "/billing") return <AdminBilling />;
     if (r === "/audit") return <AdminAudit />;
-    if (r === "/privacy")
-      return (
-        <Placeholder
-          crumbs={["Speqify Internal", "Prywatność & RODO"]}
-          title="Prywatność & RODO"
-          note="Panel retencji/erasure RODO nie jest jeszcze wdrożony (Phase 11)."
-        />
-      );
-    if (r === "/settings")
-      return (
-        <Placeholder
-          crumbs={["Speqify Internal", "Ustawienia organizacji"]}
-          title="Ustawienia organizacji"
-          note="Ustawienia organizacji nie są jeszcze wdrożone."
-        />
-      );
+    if (r === "/privacy") return <AdminPrivacy />;
+    if (r === "/settings") return <AdminSettings />;
     return <Dashboard />;
   }
   if (r === "/template") return <PoTemplate />;

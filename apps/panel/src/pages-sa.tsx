@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import type {
   AdminStats,
   AuditEntry,
@@ -1786,6 +1786,407 @@ export function Providers() {
       <p className="hint" style={{ maxWidth: 640 }}>
         Pomiar p95 / health dostawców i auto-fallback to zakres Phase 11 (observability).
       </p>
+    </Page>
+  );
+}
+
+/** Shared honesty banner for governance screens with no V1 backend. */
+function RepNote({ children }: { children: ReactNode }) {
+  return (
+    <Alert kind="warning" title="Widok poglądowy">
+      {children} Dane i akcje są reprezentatywne — backend tej sekcji jest poza zakresem V1
+      (Phase 11). Liczby oznaczone „na żywo” pochodzą z realnego API.
+    </Alert>
+  );
+}
+
+/** Admin · Rozliczenia & limity (Admin Billing.html). Usage stats are live
+ *  from /admin/stats; plan / invoices / payment are representative. */
+export function AdminBilling() {
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const { error, run } = useAsync();
+  useEffect(() => {
+    void run(async () => setStats(await api.adminStats()));
+  }, []);
+
+  return (
+    <Page
+      crumbs={["Speqify Internal", "Rozliczenia & limity"]}
+      actions={
+        <>
+          <Button variant="secondary" disabled title="Faktury — poza V1 (Phase 11)">
+            Pobierz faktury
+          </Button>
+          <Button disabled title="Zmiana planu — poza V1 (Phase 11)">
+            Zmień plan
+          </Button>
+        </>
+      }
+    >
+      <div className="page-h">
+        <div>
+          <h1>Rozliczenia & limity</h1>
+          <p className="sub">Plan Team · limity organizacji · koszty AI</p>
+        </div>
+      </div>
+      {error ? <Alert kind="danger">{error}</Alert> : null}
+      <RepNote>Plan, faktury i metoda płatności to makieta.</RepNote>
+
+      <div
+        className="card card-pad"
+        style={{
+          background: "var(--primary)",
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <span
+            style={{
+              fontSize: ".6875rem",
+              fontWeight: 700,
+              letterSpacing: ".08em",
+              textTransform: "uppercase",
+              color: "#93C5FD",
+              background: "rgba(29,78,216,.2)",
+              padding: "4px 10px",
+              borderRadius: 999,
+            }}
+          >
+            Aktualny plan
+          </span>
+          <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: 8 }}>Team</div>
+          <div style={{ color: "rgba(255,255,255,.7)", fontSize: ".875rem" }}>
+            € 0 / mies. · beta zamknięta · rozliczenia włączą się przy GA
+          </div>
+        </div>
+        <Button variant="secondary" disabled>
+          Upgrade do Enterprise
+        </Button>
+      </div>
+
+      <div className="stats" style={{ marginTop: 20 }}>
+        <Stat
+          label="Projekty"
+          value={stats?.projects ?? "—"}
+          delta={<span className="sp">na żywo</span>}
+        />
+        <Stat
+          label="Product Owners"
+          value={stats?.productOwners ?? "—"}
+          delta={<span className="sp">na żywo</span>}
+        />
+        <Stat
+          label="Adnotacje"
+          value={stats?.annotations ?? "—"}
+          delta={<span className="sp">na żywo</span>}
+        />
+        <Stat
+          label="Koszt AI · maj"
+          value="€ 248,40"
+          deltaNeg
+          delta={<span className="sp">dane przykładowe</span>}
+        />
+        <Stat
+          label="Sesje aktywne"
+          value="14"
+          delta={<span className="sp">dane przykładowe</span>}
+        />
+      </div>
+
+      <div className="grid-2">
+        <div className="card">
+          <div className="card-h">
+            <div>
+              <h2>Faktury</h2>
+              <p className="sub">historia rozliczeń · dane przykładowe</p>
+            </div>
+          </div>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Okres</th>
+                <th>Kwota</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ["Kwiecień 2026", "€ 0,00", "beta"],
+                ["Marzec 2026", "€ 0,00", "beta"],
+                ["Luty 2026", "€ 0,00", "beta"],
+              ].map(([p, a, s]) => (
+                <tr key={p}>
+                  <td>{p}</td>
+                  <td className="num">{a}</td>
+                  <td>
+                    <Pill kind="info">{s}</Pill>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="card card-pad">
+          <h2 className="section-title" style={{ marginTop: 0 }}>
+            Metoda płatności
+          </h2>
+          <p style={{ color: "var(--secondary)" }}>
+            Brak metody płatności — rozliczenia nieaktywne w becie zamkniętej.
+          </p>
+          <Button variant="secondary" disabled>
+            Dodaj kartę
+          </Button>
+        </div>
+      </div>
+    </Page>
+  );
+}
+
+/** Admin · Prywatność & RODO (Admin Privacy.html). EU-hosting + audit
+ *  retention are real facts; erasure requests / consents are representative. */
+export function AdminPrivacy() {
+  return (
+    <Page
+      crumbs={["Speqify Internal", "Prywatność & RODO"]}
+      actions={
+        <>
+          <Button variant="secondary" disabled title="DPA — poza V1">
+            DPA · pobierz
+          </Button>
+          <Button disabled title="Raport zgodności — poza V1">
+            Wystaw raport
+          </Button>
+        </>
+      }
+    >
+      <div className="page-h">
+        <div>
+          <h1>Prywatność & RODO</h1>
+          <p className="sub">Retencja danych · żądania usunięcia · zgody · DPO</p>
+        </div>
+      </div>
+      <RepNote>Żądania usunięcia, zgody i polityki retencji to makieta.</RepNote>
+
+      <div className="stats">
+        <Stat label="Aktywne zgody" value="28" delta={<span className="sp">dane przykładowe</span>} />
+        <Stat
+          label="Żądania usunięcia"
+          value="3"
+          deltaNeg
+          delta={<span className="sp">1 wymaga akcji</span>}
+        />
+        <Stat label="Eksporty danych" value="7" delta={<span className="sp">dane przykładowe</span>} />
+        <Stat label="Auto-usunięte" value="218" delta={<span className="sp">retencja 90d</span>} />
+        <Stat label="Hosting" value="EU" delta={<span className="sp">eu-warsaw-01 · realne</span>} />
+      </div>
+
+      <div className="card">
+        <div className="card-h">
+          <div>
+            <h2>Żądania usunięcia danych</h2>
+            <p className="sub">Art. 17 RODO · prawo do bycia zapomnianym · dane przykładowe</p>
+          </div>
+        </div>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Podmiot</th>
+              <th>Zakres</th>
+              <th>Termin</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              { e: "k.nowak@old-firma.com", z: "Pełne usunięcie konta + treści", t: "do 16.06.2026", s: "warn", l: "w toku" },
+              { e: "r.kowalski@external.com", z: "Anonimizacja transkrypcji", t: "do 11.06.2026", s: "info", l: "zaakceptowane" },
+              { e: "m.lewandowska@partner.io", z: "Tylko nagrania audio", t: "ukończono 09.05", s: "live", l: "ukończone" },
+            ].map((r) => (
+              <tr key={r.e}>
+                <td className="mono" style={{ fontSize: ".8125rem" }}>
+                  {r.e}
+                </td>
+                <td style={{ fontSize: ".8125rem", color: "var(--secondary)" }}>{r.z}</td>
+                <td style={{ fontSize: ".8125rem" }}>{r.t}</td>
+                <td>
+                  <Pill kind={r.s as "warn" | "info" | "live"}>{r.l}</Pill>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="grid-2" style={{ marginTop: 20 }}>
+        <div className="card card-pad">
+          <h2 className="section-title" style={{ marginTop: 0 }}>
+            Polityka retencji
+          </h2>
+          <ul style={{ margin: 0, paddingLeft: 18, color: "var(--secondary)", fontSize: ".875rem" }}>
+            <li>Audio / nagrania: 90 dni (dane przykładowe)</li>
+            <li>Zrzuty ekranu: 180 dni (dane przykładowe)</li>
+            <li>Adnotacje tekstowe: do usunięcia projektu</li>
+            <li>Audit log: in-memory (dev) · trwały = Phase 11</li>
+          </ul>
+        </div>
+        <div className="card card-pad">
+          <h2 className="section-title" style={{ marginTop: 0 }}>
+            Inspektor (DPO) & bezpieczeństwo
+          </h2>
+          <p style={{ color: "var(--secondary)", fontSize: ".875rem", margin: 0 }}>
+            Kontakt DPO: <span className="mono">dpo@speqify.io</span> · Hosting i przetwarzanie
+            LLM w UE · TLS 1.3 · sekrety envelope-encrypted (realne). SOC 2 — w toku
+            (reprezentatywne).
+          </p>
+        </div>
+      </div>
+    </Page>
+  );
+}
+
+const SETTINGS_TABS = ["Profil organizacji", "SSO & uwierzytelnianie", "API", "Strefa niebezpieczna"];
+
+/** Admin · Ustawienia organizacji (Admin Settings.html). All sections are
+ *  representative — org profile / SSO / API tokens have no V1 backend. */
+export function AdminSettings() {
+  const [tab, setTab] = useState(0);
+  const [forceSso, setForceSso] = useState(true);
+  const [scim, setScim] = useState(false);
+
+  return (
+    <Page crumbs={["Speqify Internal", "Ustawienia organizacji"]}>
+      <div className="page-h">
+        <div>
+          <h1>Ustawienia organizacji</h1>
+          <p className="sub">Dane firmy · SSO · API · strefa niebezpieczna</p>
+        </div>
+      </div>
+      <RepNote>Profil, SSO i API tokens to makieta.</RepNote>
+
+      <nav className="filter-bar" aria-label="Sekcje ustawień" style={{ gap: 4 }}>
+        {SETTINGS_TABS.map((t, i) => (
+          <button
+            key={t}
+            className={`state-tab${i === tab ? " active" : ""}`}
+            onClick={() => setTab(i)}
+            style={i === 3 ? { color: i === tab ? undefined : "var(--danger)" } : undefined}
+          >
+            {t}
+          </button>
+        ))}
+      </nav>
+
+      {tab === 0 ? (
+        <div className="card card-pad" style={{ maxWidth: 640 }}>
+          <h2 className="section-title" style={{ marginTop: 0 }}>
+            Profil organizacji
+          </h2>
+          <Field label="Nazwa organizacji" htmlFor="o-name">
+            <input id="o-name" className="input" defaultValue="Speqify Internal" disabled />
+          </Field>
+          <Field label="Strefa czasowa" htmlFor="o-tz">
+            <select id="o-tz" className="select" disabled defaultValue="warsaw">
+              <option value="warsaw">Europe/Warsaw · CET (+01:00)</option>
+              <option value="london">Europe/London · GMT (+00:00)</option>
+            </select>
+          </Field>
+          <Button disabled>Zapisz zmiany</Button>
+        </div>
+      ) : tab === 1 ? (
+        <div className="card">
+          <div className="card-h">
+            <div>
+              <h2>Single Sign-On</h2>
+              <p className="sub">SAML 2.0 / OIDC · wymuszanie domeny — reprezentatywne</p>
+            </div>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "14px 22px",
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 500, fontSize: ".875rem" }}>
+                Wymuszaj SSO dla domeny @speqify.io
+              </div>
+              <div style={{ fontSize: ".75rem", color: "var(--muted)" }}>
+                Firmowe e-maile logują się wyłącznie przez SSO.
+              </div>
+            </div>
+            <Toggle on={forceSso} onChange={setForceSso} label="Wymuszaj SSO" />
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "14px 22px",
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 500, fontSize: ".875rem" }}>SCIM provisioning</div>
+              <div style={{ fontSize: ".75rem", color: "var(--muted)" }}>
+                Synchronizacja użytkowników z IdP (Okta).
+              </div>
+            </div>
+            <Toggle on={scim} onChange={setScim} label="SCIM" />
+          </div>
+        </div>
+      ) : tab === 2 ? (
+        <div className="card">
+          <div className="card-h">
+            <div>
+              <h2>API tokens</h2>
+              <p className="sub">prywatne klucze server-to-server · dane przykładowe</p>
+            </div>
+            <Button variant="ghost" size="sm" disabled>
+              + Wygeneruj
+            </Button>
+          </div>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Nazwa</th>
+                <th>Klucz</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>ci-export</td>
+                <td className="mono" style={{ fontSize: ".75rem" }}>
+                  sk_live_••••4f2a
+                </td>
+                <td>
+                  <Pill kind="live">aktywny</Pill>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="card card-pad" style={{ maxWidth: 640 }}>
+          <h2 className="section-title" style={{ marginTop: 0, color: "var(--danger)" }}>
+            Strefa niebezpieczna
+          </h2>
+          <p style={{ color: "var(--secondary)" }}>
+            Usunięcie organizacji wraz ze wszystkimi projektami nie jest dostępne w V1 —
+            skontaktuj się z administratorem platformy.
+          </p>
+          <Button variant="danger-ghost" disabled title="Usunięcie organizacji — poza V1">
+            Usuń organizację
+          </Button>
+        </div>
+      )}
     </Page>
   );
 }
