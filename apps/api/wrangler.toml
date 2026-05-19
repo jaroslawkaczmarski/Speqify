@@ -3,6 +3,15 @@ main = "src/index.ts"
 compatibility_date = "2026-05-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Production custom domain (zone speqify.app must be in this account).
+# Wrangler provisions the hostname + edge cert automatically.
+routes = [{ pattern = "api.speqify.app", custom_domain = true }]
+
+# Non-secret runtime config (secrets are set via `wrangler secret put`).
+[vars]
+ENVIRONMENT = "production"
+PANEL_ORIGINS = "https://admin.speqify.app,https://speqify.app"
+
 # ---------------------------------------------------------------------------
 # Bindings. Secrets (SUPERADMIN_*, SESSION_SECRET) are NOT here — local dev via
 # apps/api/.dev.vars, production via Cloudflare Secrets Store (§9).

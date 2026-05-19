@@ -20,3 +20,8 @@ Thumbs.db
 # Claude Design handoff bundles (extracted prototypes — reference only)
 .design-pkg/
 .design-pkg2/
+
+# transient prod secret material (never commit)
+.prod-secrets.tmp.json
+
+.cf.tmp.mjs
