@@ -291,7 +291,16 @@ function Login(props: { onAuthed: (role: string) => void }) {
         <div className="form-foot">
           <span className="gdpr">
             <IconShield />
-            Hosted in EU · RODO-compliant
+            Nowy zespół?{" "}
+            <a
+              href="#/register"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate("/register");
+              }}
+            >
+              Załóż workspace
+            </a>
           </span>
           <span>© {new Date().getFullYear()} Speqify</span>
         </div>
@@ -340,6 +349,223 @@ function Login(props: { onAuthed: (role: string) => void }) {
           </div>
         </div>
       </aside>
+    </div>
+  );
+}
+
+/** Closed-beta note shared by the representative auth screens (§11). */
+function InviteOnlyNote() {
+  return (
+    <Alert kind="warning" title="Beta zamknięta — dostęp na zaproszenie">
+      W V1 konta i panele recenzentów tworzy SuperAdmin. Ten ekran jest poglądowy — samodzielna
+      rejestracja uruchomi się przy GA. Aby dołączyć, napisz na{" "}
+      <a href="mailto:hello@speqify.app">hello@speqify.app</a>.
+    </Alert>
+  );
+}
+
+function AuthAside(props: { eyebrow: string; title: string; lead: string; steps: string[] }) {
+  return (
+    <aside className="visual-pane" aria-hidden="true">
+      <div className="v-inner">
+        <span className="v-eyebrow">
+          <span className="live" />
+          {props.eyebrow}
+        </span>
+        <h2>{props.title}</h2>
+        <p>{props.lead}</p>
+        <div className="feed">
+          {props.steps.map((s, i) => (
+            <div className="feed-row" key={s}>
+              <Avatar initials={String(i + 1)} size="sm" />
+              <div className="info">
+                <div className="t">
+                  <span className="who">{s}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function Register() {
+  return (
+    <div className="auth">
+      <main className="form-pane">
+        <div className="form-top">
+          <span className="login-brand">
+            <span className="mark" aria-hidden="true">
+              <IconLogo />
+            </span>
+            Speqify
+          </span>
+          <div className="lang-switch" aria-hidden="true">
+            <button className="active" type="button">
+              PL
+            </button>
+          </div>
+        </div>
+
+        <div className="form-box">
+          <h1>Załóż workspace</h1>
+          <p className="sub">
+            Bezpłatna 14-dniowa wersja próbna. Bez karty kredytowej. Anuluj kiedy chcesz.
+          </p>
+
+          <InviteOnlyNote />
+
+          <form onSubmit={(e) => e.preventDefault()} noValidate style={{ marginTop: 16 }}>
+            <Field label="Imię i nazwisko" htmlFor="r-name">
+              <input id="r-name" className="input" placeholder="Marta Kowalska" disabled />
+            </Field>
+            <Field
+              label="E-mail służbowy"
+              htmlFor="r-email"
+              hint="Adresy z firmowej domeny przyspieszają zatwierdzenie konta."
+            >
+              <input
+                id="r-email"
+                type="email"
+                className="input"
+                placeholder="marta@firma.pl"
+                disabled
+              />
+            </Field>
+            <Field
+              label="Nazwa workspace"
+              htmlFor="r-ws"
+              hint="Można zmienić później w ustawieniach organizacji."
+            >
+              <input id="r-ws" className="input" placeholder="twoja-firma" disabled />
+            </Field>
+            <Field label="Hasło" htmlFor="r-pass">
+              <input
+                id="r-pass"
+                type="password"
+                className="input"
+                placeholder="min. 12 znaków"
+                disabled
+              />
+            </Field>
+            <label className="check" style={{ margin: "4px 0 20px" }}>
+              <input type="checkbox" disabled />
+              Akceptuję Regulamin i Politykę prywatności
+            </label>
+            <Button type="submit" disabled style={{ width: "100%" }}>
+              Załóż workspace
+            </Button>
+          </form>
+        </div>
+
+        <div className="form-foot">
+          <span className="gdpr">
+            <IconShield />
+            Masz już konto?{" "}
+            <a
+              href="#/"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate("/");
+              }}
+            >
+              Zaloguj się
+            </a>
+          </span>
+          <span>© {new Date().getFullYear()} Speqify</span>
+        </div>
+      </main>
+
+      <AuthAside
+        eyebrow="Onboarding"
+        title="Od zera do pierwszego ticketu w Jira — średnio 12 minut."
+        lead="Cztery kroki dzielą Cię od pierwszego zadania wygenerowanego przez AI."
+        steps={[
+          "Załóż workspace",
+          "Wklej snippet SDK na env review",
+          "Zaproś recenzentów — magic link na maila",
+          "Uruchom analizę AI",
+        ]}
+      />
+    </div>
+  );
+}
+
+function AcceptInvite() {
+  return (
+    <div className="auth">
+      <main className="form-pane">
+        <div className="form-top">
+          <span className="login-brand">
+            <span className="mark" aria-hidden="true">
+              <IconLogo />
+            </span>
+            Speqify
+          </span>
+          <div className="lang-switch" aria-hidden="true">
+            <button className="active" type="button">
+              PL
+            </button>
+          </div>
+        </div>
+
+        <div className="form-box">
+          <h1>Dołącz jako recenzent</h1>
+          <p className="sub">
+            <strong>Lumen Lab — Q1 Review</strong> · rola <strong>Reviewer</strong>. Zaznaczanie
+            elementów UI z automatycznym kontekstem technicznym oraz notatki głosowe i tekstowe.
+          </p>
+
+          <InviteOnlyNote />
+
+          <form onSubmit={(e) => e.preventDefault()} noValidate style={{ marginTop: 16 }}>
+            <Field
+              label="Twój e-mail"
+              htmlFor="i-email"
+              hint="Adres z zaproszenia. Aby zmienić, poproś o ponowne zaproszenie."
+            >
+              <input
+                id="i-email"
+                type="email"
+                className="input"
+                defaultValue="tomek.wojcik@lumen-lab.com"
+                disabled
+              />
+            </Field>
+            <Field label="Imię i nazwisko" htmlFor="i-name">
+              <input id="i-name" className="input" placeholder="Tomek Wójcik" disabled />
+            </Field>
+            <p style={{ fontSize: ".75rem", color: "var(--muted)", margin: "0 0 18px" }}>
+              Nie będziesz mieć dostępu do zadań, eksportu ani ustawień organizacji — tylko
+              nakładka recenzenta.
+            </p>
+            <Button type="submit" disabled style={{ width: "100%" }}>
+              Dołącz do sesji review
+            </Button>
+          </form>
+        </div>
+
+        <div className="form-foot">
+          <span className="gdpr">
+            <IconShield />
+            Hosted in EU · RODO-compliant
+          </span>
+          <span>© {new Date().getFullYear()} Speqify</span>
+        </div>
+      </main>
+
+      <AuthAside
+        eyebrow="Co zobaczysz po akceptacji"
+        title="Aplikacja, której używasz — z nakładką do zostawiania uwag."
+        lead="Recenzja zajmuje tyle, ile normalne korzystanie z aplikacji."
+        steps={[
+          "Wskaż element — SDK zapisze selektor, XPath, HTML, zrzut",
+          "Powiedz, co Cię boli — głos lub tekst",
+          "Wyślij na koniec sesji — PO uruchomi analizę AI",
+        ]}
+      />
     </div>
   );
 }
@@ -466,7 +692,11 @@ export function App() {
         </span>
       </div>
     );
-  if (!role) return <Login onAuthed={setRole} />;
+  if (!role) {
+    if (route === "/register") return <Register />;
+    if (route === "/accept-invite") return <AcceptInvite />;
+    return <Login onAuthed={setRole} />;
+  }
 
   const here = route === "" ? "/" : route;
   const signOut = (): void => {
