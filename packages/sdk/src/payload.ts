@@ -29,6 +29,7 @@ export function buildAnnotationPayload(args: {
   pageUrl: string;
   element?: ElementCapture | null;
   textNote?: string | null;
+  tags?: string[];
   screenshot?: MediaRef | null;
   voice?: MediaRef | null;
   recordingVideo?: MediaRef | null;
@@ -52,6 +53,7 @@ export function buildAnnotationPayload(args: {
     recordingVideo: args.recordingVideo ?? null,
     recordingAudio: args.recordingAudio ?? null,
     textNote: args.textNote ?? null,
+    tags: args.tags ?? [],
     structured: args.structured ?? null,
     technical: args.technical ?? null,
     hostApp: args.hostApp ?? null,

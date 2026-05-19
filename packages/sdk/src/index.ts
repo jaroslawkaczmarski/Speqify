@@ -50,10 +50,20 @@ export async function init(options: SpeqifyInitOptions): Promise<SpeqifyInstance
   window.addEventListener("online", onOnline);
   const timer = window.setInterval(flush, FLUSH_INTERVAL_MS);
 
+  let sessionLabel = info.projectName ?? info.environmentUrl;
+  if (!info.projectName) {
+    try {
+      sessionLabel = new URL(info.environmentUrl).host;
+    } catch {
+      /* keep raw value if it is not a parseable URL */
+    }
+  }
+
   const overlay = mountOverlay(client, {
     technical: technical.snapshot,
     breadcrumb: breadcrumb.steps,
     sendAnnotation: (p) => outbox.send(p, sender),
+    sessionLabel,
     ...(options.context ? { hostApp: options.context } : {}),
     ...(options.html2canvasUrl ? { screenshotUrl: options.html2canvasUrl } : {}),
   });

@@ -6,6 +6,8 @@ export interface PanelInfo {
   audience: string;
   status: string;
   environmentUrl: string;
+  /** Project display name — shown in the overlay status pill. */
+  projectName?: string;
 }
 
 export class SpeqifyClient {
