@@ -16,24 +16,6 @@ export const UserRole = {
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
-/** A panel's intended audience; inherited by every annotation captured through it. */
-export const PanelAudience = {
-  Client: "client",
-  Tester: "tester",
-  ProductOwner: "po",
-} as const;
-export type PanelAudience = (typeof PanelAudience)[keyof typeof PanelAudience];
-
-// ---------------------------------------------------------------------------
-// Panel lifecycle
-// ---------------------------------------------------------------------------
-
-export const PanelStatus = {
-  Open: "open",
-  Closed: "closed",
-} as const;
-export type PanelStatus = (typeof PanelStatus)[keyof typeof PanelStatus];
-
 /** Project lifecycle (SA-controlled, no strict machine — any → any). */
 export const ProjectStatus = {
   Live: "live",
@@ -42,10 +24,61 @@ export const ProjectStatus = {
 } as const;
 export type ProjectStatus = (typeof ProjectStatus)[keyof typeof ProjectStatus];
 
-const PANEL_TRANSITIONS: Record<PanelStatus, readonly PanelStatus[]> = {
-  open: ["closed"],
-  closed: ["open"],
+// ---------------------------------------------------------------------------
+// Review session lifecycle (the "campaign" window that activates the SDK UI
+// for a specific group of reviewers).
+//
+//   draft  --PO publishes--> live
+//   live   --PO closes-------> closed
+//   draft  --PO discards-----> closed
+// ---------------------------------------------------------------------------
+
+export const ReviewSessionStatus = {
+  Draft: "draft",
+  Live: "live",
+  Closed: "closed",
+} as const;
+export type ReviewSessionStatus =
+  (typeof ReviewSessionStatus)[keyof typeof ReviewSessionStatus];
+
+const REVIEW_SESSION_TRANSITIONS: Record<ReviewSessionStatus, readonly ReviewSessionStatus[]> = {
+  draft: ["live", "closed"],
+  live: ["closed"],
+  closed: [],
 };
+
+// ---------------------------------------------------------------------------
+// Reviewer (invitee) status — driven by their interaction with the magic link.
+//   pending  --first SDK welcome accept-----> active
+//   pending  --PO revokes invitation--------> declined
+//   active   --PO revokes-------------------> declined
+// ---------------------------------------------------------------------------
+
+export const ReviewerStatus = {
+  Pending: "pending",
+  Active: "active",
+  Declined: "declined",
+} as const;
+export type ReviewerStatus = (typeof ReviewerStatus)[keyof typeof ReviewerStatus];
+
+// ---------------------------------------------------------------------------
+// Task type — controls which per-type ProjectTemplate analysis applies.
+// ---------------------------------------------------------------------------
+
+export const TaskType = {
+  Bug: "bug",
+  Change: "change",
+  Feature: "feature",
+  Polish: "polish",
+} as const;
+export type TaskType = (typeof TaskType)[keyof typeof TaskType];
+
+export const TASK_TYPES: readonly TaskType[] = [
+  TaskType.Bug,
+  TaskType.Change,
+  TaskType.Feature,
+  TaskType.Polish,
+];
 
 // ---------------------------------------------------------------------------
 // Annotation lifecycle:  draft --Send--> submitted --AI analysis--> processed
@@ -118,8 +151,10 @@ function canTransition<T extends string>(map: Record<T, readonly T[]>, from: T, 
   return map[from]?.includes(to) ?? false;
 }
 
-export const canTransitionPanel = (from: PanelStatus, to: PanelStatus): boolean =>
-  canTransition(PANEL_TRANSITIONS, from, to);
+export const canTransitionReviewSession = (
+  from: ReviewSessionStatus,
+  to: ReviewSessionStatus,
+): boolean => canTransition(REVIEW_SESSION_TRANSITIONS, from, to);
 
 export const canTransitionAnnotation = (from: AnnotationStatus, to: AnnotationStatus): boolean =>
   canTransition(ANNOTATION_TRANSITIONS, from, to);

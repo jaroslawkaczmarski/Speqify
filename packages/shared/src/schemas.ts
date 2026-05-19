@@ -164,3 +164,55 @@ export const requestUploadSchema = z.object({
     .max(512 * 1024 * 1024),
 });
 export type RequestUploadInput = z.infer<typeof requestUploadSchema>;
+
+// ---------------------------------------------------------------------------
+// Review sessions + reviewers (RS-1). The PO panel CRUDs sessions and invites
+// reviewers; the SDK gates its UI on the resulting token pair carried in URL.
+// ---------------------------------------------------------------------------
+
+export const taskTypeSchema = z.enum(["bug", "change", "feature", "polish"]);
+
+export const projectTemplateSchema = z.object({
+  language: z.enum(["pl", "en"]),
+  userStory: z.boolean(),
+  acceptanceCriteria: z.boolean(),
+  labels: z.array(z.string().max(64)).max(50),
+  components: z.array(z.string().max(64)).max(50),
+  versions: z.array(z.string().max(64)).max(50),
+  customFields: z.record(z.string(), z.string().max(200)),
+});
+export type ProjectTemplateInput = z.infer<typeof projectTemplateSchema>;
+
+/** Required-keys map: every TaskType must have a template (no fallbacks). */
+export const projectTemplatesSchema = z.object({
+  bug: projectTemplateSchema,
+  change: projectTemplateSchema,
+  feature: projectTemplateSchema,
+  polish: projectTemplateSchema,
+});
+
+/** Body of POST /admin/projects/:id/sessions — PO/SA creates a review window. */
+export const createReviewSessionSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(4_000).default(""),
+  instructions: z.string().max(8_000).default(""),
+  envUrl: z.string().url().max(2_048),
+  startsAt: z.string().datetime().nullable().default(null),
+  endsAt: z.string().datetime().nullable().default(null),
+});
+export type CreateReviewSessionInput = z.infer<typeof createReviewSessionSchema>;
+
+/** Body of PATCH /admin/sessions/:id — partial update of editable fields. */
+export const updateReviewSessionSchema = createReviewSessionSchema.partial();
+
+/** Body of POST /admin/sessions/:id/status — publish / close. */
+export const reviewSessionStatusSchema = z.object({
+  status: z.enum(["draft", "live", "closed"]),
+});
+
+/** Body of POST /admin/sessions/:id/reviewers — invite a single reviewer. */
+export const inviteReviewerSchema = z.object({
+  name: z.string().min(1).max(200),
+  email: z.string().email().max(320),
+});
+export type InviteReviewerInput = z.infer<typeof inviteReviewerSchema>;

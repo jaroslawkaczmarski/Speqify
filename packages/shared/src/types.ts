@@ -7,10 +7,11 @@
 import type {
   AnnotationStatus,
   AnnotationType,
-  PanelAudience,
-  PanelStatus,
   ProjectStatus,
+  ReviewerStatus,
+  ReviewSessionStatus,
   TaskStatus,
+  TaskType,
   TranscriptionStatus,
   UserRole,
 } from "./states.js";
@@ -44,7 +45,9 @@ export interface Project {
   environmentUrls: string[];
   /** SA-controlled lifecycle (design SA projects table status pill). */
   status: ProjectStatus;
-  template: ProjectTemplate;
+  /** One template per task type — analysis picks the right one based on
+   *  the AI's classification of the generated task. */
+  templates: ProjectTemplates;
   exportConfigId: Id | null;
   createdAt: IsoTimestamp;
 }
@@ -59,6 +62,9 @@ export interface ProjectTemplate {
   customFields: Record<string, string>;
 }
 
+/** Per-task-type template bundle. Each Project carries one of these. */
+export type ProjectTemplates = Record<TaskType, ProjectTemplate>;
+
 export type ExportTarget = "jira" | "github" | "json" | "csv";
 
 export interface ExportConfig {
@@ -71,22 +77,72 @@ export interface ExportConfig {
   defaults: Record<string, string>;
 }
 
-export interface Panel {
+/** A review-session campaign — the PO-defined window during which a chosen
+ *  group of reviewers can annotate the host app. The SDK is otherwise dark
+ *  (no UI) even when installed on production. */
+export interface ReviewSession {
   id: Id;
   projectId: Id;
-  audience: PanelAudience;
-  /** Capability token — unguessable, revocable, scoped to panel+role+env (§9). */
-  secretToken: string;
-  environmentUrl: string;
-  status: PanelStatus;
+  /** Shown to PO + as the welcome-modal heading on the reviewer side. */
+  name: string;
+  /** "What is this session about" — markdown-light, rendered in welcome modal. */
+  description: string;
+  /** "What to focus on / how to give feedback" — also in welcome modal. */
+  instructions: string;
+  /** The host-app URL the invitation will deep-link to. The SDK reads its
+   *  session+reviewer tokens from query params, regardless of which page
+   *  inside this host they land on. */
+  envUrl: string;
+  /** Public session token; invitation URLs carry `?speqify_session=<token>`. */
+  token: string;
+  status: ReviewSessionStatus;
+  startsAt: IsoTimestamp | null;
+  endsAt: IsoTimestamp | null;
+  createdBy: Id;
   createdAt: IsoTimestamp;
+}
+
+/** An invited reviewer for one ReviewSession. Per-reviewer-per-session secret
+ *  token is the only identity vector (no reviewer accounts in V1, §11). */
+export interface Reviewer {
+  id: Id;
+  sessionId: Id;
+  name: string;
+  email: string;
+  /** Secret; included in invitation URL as `?speqify_reviewer=<token>`.
+   *  Never echoed to anyone except the reviewer's own welcome bootstrap. */
+  token: string;
+  status: ReviewerStatus;
+  invitedAt: IsoTimestamp;
+  /** First time the reviewer accepted the welcome modal — also flips
+   *  status pending → active. */
+  acceptedAt: IsoTimestamp | null;
+  /** Last time this reviewer submitted via the SDK. */
+  lastSeenAt: IsoTimestamp | null;
+}
+
+/** Public reviewer view used in the PO panel — token replaced with a short
+ *  hint so the operator can still identify entries without leaking the secret. */
+export type ReviewerView = Omit<Reviewer, "token"> & { tokenHint: string };
+
+/** What the SDK fetches once the reviewer opens the invitation URL — drives
+ *  the welcome modal copy. Server-side checks session+reviewer tokens, so a
+ *  successful response is also the access gate. */
+export interface SdkSessionIntro {
+  projectName: string;
+  sessionName: string;
+  description: string;
+  instructions: string;
+  /** First-name shown in the welcome modal ("Witaj {firstName}!"). */
+  reviewerName: string;
 }
 
 /** A reviewer's "Send" batch — the unit AI analysis snapshots (§4, §14). */
 export interface Submission {
   id: Id;
-  panelId: Id;
-  /** Ephemeral per-browser client id; reviewers have no account in V1. */
+  sessionId: Id;
+  reviewerId: Id;
+  /** Ephemeral per-browser client id; identifies the originating tab/device. */
   clientId: string;
   complete: boolean;
   createdAt: IsoTimestamp;
@@ -131,11 +187,11 @@ export interface NavigationStep {
 
 export interface Annotation {
   id: Id;
-  panelId: Id;
+  sessionId: Id;
+  reviewerId: Id;
   submissionId: Id;
   type: AnnotationType;
   status: AnnotationStatus;
-  audience: PanelAudience;
   pageUrl: string;
   breadcrumb: NavigationStep[];
   element: ElementRef | null;
