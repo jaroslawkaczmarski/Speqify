@@ -241,7 +241,7 @@ export interface AnalysisRun {
 
 /** Platform-wide provider config (SuperAdmin, §9). Keys live in Secrets Store. */
 export interface PlatformProviderConfig {
-  aiProvider: "claude" | "openai" | "gemini" | "azure" | "custom";
+  aiProvider: "claude" | "openai" | "openrouter" | "gemini" | "azure" | "custom";
   aiModel: string;
   aiEndpoint?: string;
   transcriptionProvider: "workers-ai" | "groq" | "openai" | "azure" | "self-hosted";

@@ -20,6 +20,9 @@ export class HttpLlmProvider implements LlmProvider {
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${this.apiKey}`,
+        // OpenRouter ranking attribution (ignored by non-OR providers).
+        "HTTP-Referer": "https://speqify.app",
+        "X-Title": "Speqify",
       },
       body: JSON.stringify({
         model: this.model,
@@ -31,10 +34,30 @@ export class HttpLlmProvider implements LlmProvider {
         temperature: 0.2,
       }),
     });
-    if (!r.ok) throw new Error(`LLM provider failed (${r.status})`);
+    if (!r.ok) {
+      const detail = await r.text().catch(() => "");
+      throw new Error(
+        `LLM provider failed (${r.status})${detail ? `: ${detail.slice(0, 200)}` : ""}`,
+      );
+    }
     const data = (await r.json()) as {
       choices?: { message?: { content?: string } }[];
     };
     return data.choices?.[0]?.message?.content ?? "";
+  }
+}
+
+/** Resolves config per-call so SA Providers UI takes effect without redeploy.
+ *  Returns null when neither DB nor env have a usable config — `complete()`
+ *  then throws the same friendly "no provider configured" error. */
+export type LlmResolved = { endpoint: string; apiKey: string; model: string };
+
+export class DynamicLlmProvider implements LlmProvider {
+  constructor(private readonly resolve: () => Promise<LlmResolved | null>) {}
+
+  async complete(input: LlmCompletion): Promise<string> {
+    const cfg = await this.resolve();
+    if (!cfg) throw new Error("No LLM provider configured (SuperAdmin platform config)");
+    return new HttpLlmProvider(cfg.endpoint, cfg.apiKey, cfg.model).complete(input);
   }
 }

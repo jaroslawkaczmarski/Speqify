@@ -1632,7 +1632,18 @@ export function Panels() {
   );
 }
 
-const AI_PROVIDERS = ["claude", "openai", "gemini", "azure", "custom"] as const;
+const AI_PROVIDERS = ["claude", "openai", "openrouter", "gemini", "azure", "custom"] as const;
+/** OpenAI-compatible endpoint + sensible default model per provider preset. */
+const AI_PRESETS: Record<string, { endpoint: string; model: string }> = {
+  openrouter: {
+    endpoint: "https://openrouter.ai/api/v1/chat/completions",
+    model: "anthropic/claude-haiku-4.5",
+  },
+  openai: {
+    endpoint: "https://api.openai.com/v1/chat/completions",
+    model: "gpt-4o-mini",
+  },
+};
 const STT_PROVIDERS = ["workers-ai", "groq", "openai", "azure", "self-hosted"] as const;
 
 export function Providers() {
@@ -1696,7 +1707,16 @@ export function Providers() {
             id="ai-prov"
             className="select"
             value={aiProvider}
-            onChange={(e) => setAiProvider(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setAiProvider(next);
+              // Soft preset: only fill empties; never clobber user input.
+              const preset = AI_PRESETS[next];
+              if (preset) {
+                if (!aiEndpoint.trim()) setAiEndpoint(preset.endpoint);
+                if (!aiModel.trim() || aiModel === "claude-sonnet-4-6") setAiModel(preset.model);
+              }
+            }}
           >
             {AI_PROVIDERS.map((p) => (
               <option key={p} value={p}>

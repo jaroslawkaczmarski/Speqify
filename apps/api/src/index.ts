@@ -1,7 +1,8 @@
-import { HttpLlmProvider, NoopLlmProvider } from "./analysis/providers.js";
+import { DynamicLlmProvider } from "./analysis/providers.js";
 import type { LlmProvider } from "./analysis/types.js";
 import { createApp } from "./app.js";
 import { resolveConfig, type Env } from "./env.js";
+import { decryptJson } from "./lib/crypto.js";
 import { InMemoryMediaStore } from "./media/memory.js";
 import { R2MediaStore } from "./media/r2.js";
 import type { MediaStore } from "./media/types.js";
@@ -24,6 +25,12 @@ interface Runtime {
  * entry and the transcription `queue` consumer so both behave identically.
  * Without a D1 binding it falls back to in-memory adapters (local dev only).
  */
+/** Default OpenAI-compatible endpoint when the SA UI omits it. */
+const DEFAULT_ENDPOINTS: Record<string, string> = {
+  openrouter: "https://openrouter.ai/api/v1/chat/completions",
+  openai: "https://api.openai.com/v1/chat/completions",
+};
+
 function buildRuntime(env: Env): Runtime {
   const repo: Repository = env.DB ? new D1Repository(env.DB) : new InMemoryRepository();
   const mediaStore: MediaStore = env.MEDIA ? new R2MediaStore(env.MEDIA) : new InMemoryMediaStore();
@@ -36,10 +43,37 @@ function buildRuntime(env: Env): Runtime {
       env.TRANSCRIBE_MODEL ?? "whisper-1",
     );
   else transcriber = new NoopTranscriber();
-  const llm: LlmProvider =
-    env.LLM_ENDPOINT && env.LLM_API_KEY
-      ? new HttpLlmProvider(env.LLM_ENDPOINT, env.LLM_API_KEY, env.LLM_MODEL ?? "gpt-4o-mini")
-      : new NoopLlmProvider();
+
+  // LLM is dynamic: SA Providers UI (D1) is the source of truth at request
+  // time; env.LLM_* stays as a deploy-time fallback. Reading per call is
+  // cheap and avoids stale config until redeploy.
+  const llm: LlmProvider = new DynamicLlmProvider(async () => {
+    const cfg = await repo.getPlatformConfigInternal();
+    if (cfg?.aiKeyRef) {
+      try {
+        const envelopeKey = env.ENVELOPE_MASTER_KEY;
+        if (envelopeKey) {
+          const { aiKey } = await decryptJson<{ aiKey: string }>(envelopeKey, cfg.aiKeyRef);
+          const endpoint =
+            cfg.config.aiEndpoint?.trim() || DEFAULT_ENDPOINTS[cfg.config.aiProvider] || "";
+          if (endpoint) {
+            return { endpoint, apiKey: aiKey, model: cfg.config.aiModel };
+          }
+        }
+      } catch {
+        // fall through to env fallback below
+      }
+    }
+    if (env.LLM_ENDPOINT && env.LLM_API_KEY) {
+      return {
+        endpoint: env.LLM_ENDPOINT,
+        apiKey: env.LLM_API_KEY,
+        model: env.LLM_MODEL ?? "gpt-4o-mini",
+      };
+    }
+    return null;
+  });
+
   return { repo, mediaStore, transcriber, llm };
 }
 

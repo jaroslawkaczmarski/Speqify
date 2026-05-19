@@ -137,7 +137,7 @@ export const projectStatusSchema = z.object({
 
 /** Body of PUT /admin/providers — platform AI/transcription config (SA, §9). */
 export const providerConfigSchema = z.object({
-  aiProvider: z.enum(["claude", "openai", "gemini", "azure", "custom"]),
+  aiProvider: z.enum(["claude", "openai", "openrouter", "gemini", "azure", "custom"]),
   aiModel: z.string().min(1).max(120),
   aiEndpoint: z.string().url().max(2_048).optional(),
   /** Write-only; never echoed back in plaintext. Omit/blank to keep existing. */

@@ -45,6 +45,7 @@ export class InMemoryRepository implements Repository {
   private tasks = new Map<string, Task>();
   private audit: AuditEntry[] = [];
   private platform: PlatformProviderConfigView | null = null;
+  private platformKeyRef: string | null = null;
   private leads: Lead[] = [];
 
   private panelById(panelId: string): Panel | undefined {
@@ -280,6 +281,15 @@ export class InMemoryRepository implements Repository {
     return this.platform;
   }
 
+  async getPlatformConfigInternal(): Promise<{
+    config: PlatformProviderConfig;
+    aiKeyRef: string | null;
+  } | null> {
+    if (!this.platform) return null;
+    const { aiKeyConfigured: _ac, aiKeyHint: _ah, ...config } = this.platform;
+    return { config, aiKeyRef: this.platformKeyRef };
+  }
+
   async setPlatformConfig(args: {
     config: PlatformProviderConfig;
     aiKeyRef: string | null;
@@ -293,6 +303,7 @@ export class InMemoryRepository implements Repository {
       aiKeyHint: args.aiKeyRef === null ? (this.platform?.aiKeyHint ?? null) : args.aiKeyHint,
     };
     this.platform = view;
+    if (!keepRef) this.platformKeyRef = args.aiKeyRef;
     return view;
   }
 

@@ -763,6 +763,30 @@ export class D1Repository implements Repository {
     };
   }
 
+  async getPlatformConfigInternal(): Promise<{
+    config: PlatformProviderConfig;
+    aiKeyRef: string | null;
+  } | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.platformConfig)
+      .where(eq(schema.platformConfig.id, "default"))
+      .limit(1);
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      config: {
+        aiProvider: r.aiProvider as PlatformProviderConfig["aiProvider"],
+        aiModel: r.aiModel,
+        ...(r.aiEndpoint ? { aiEndpoint: r.aiEndpoint } : {}),
+        transcriptionProvider:
+          r.transcriptionProvider as PlatformProviderConfig["transcriptionProvider"],
+        ...(r.transcriptionEndpoint ? { transcriptionEndpoint: r.transcriptionEndpoint } : {}),
+      },
+      aiKeyRef: r.aiKeyRef ?? null,
+    };
+  }
+
   async setPlatformConfig(args: {
     config: PlatformProviderConfig;
     aiKeyRef: string | null;

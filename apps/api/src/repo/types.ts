@@ -206,6 +206,14 @@ export interface Repository {
 
   getPlatformConfig(): Promise<PlatformProviderConfigView | null>;
 
+  /** Internal: returns the encrypted `aiKeyRef` for runtime decryption.
+   *  NEVER expose this to clients — used only by `buildRuntime` to construct
+   *  the LLM provider from SA Providers config. */
+  getPlatformConfigInternal(): Promise<{
+    config: PlatformProviderConfig;
+    aiKeyRef: string | null;
+  } | null>;
+
   /** `aiKeyRef`/`aiKeyHint` are pre-computed by the caller (envelope-encrypted). */
   setPlatformConfig(args: {
     config: PlatformProviderConfig;
