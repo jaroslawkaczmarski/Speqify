@@ -9,7 +9,7 @@ export type ErrorCode =
   | "forbidden"
   | "not_found"
   | "conflict"
-  | "panel_closed"
+  | "session_unavailable"
   | "internal_error";
 
 const STATUS: Record<ErrorCode, number> = {
@@ -18,7 +18,8 @@ const STATUS: Record<ErrorCode, number> = {
   forbidden: 403,
   not_found: 404,
   conflict: 409,
-  panel_closed: 423,
+  // 423 Locked — the resource exists but the review window is not currently open.
+  session_unavailable: 423,
   internal_error: 500,
 };
 
