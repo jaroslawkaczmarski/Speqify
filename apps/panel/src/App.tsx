@@ -30,6 +30,7 @@ import {
   PoNewSession,
   PoOverview,
   PoReviewers,
+  PoSessionDetail,
   PoSessions,
   PoTasks,
   PoTemplate,
@@ -589,6 +590,8 @@ function renderPage(role: string, route: string): ReactNode {
   if (r === "/export") return <PoExport />;
   if (r === "/tasks") return <PoTasks />;
   if (r === "/sessions/new") return <PoNewSession />;
+  if (r.startsWith("/sessions/"))
+    return <PoSessionDetail id={r.slice("/sessions/".length)} />;
   if (r === "/sessions") return <PoSessions />;
   if (r === "/annotations") return <PoAnnotations />;
   if (r === "/reviewers") return <PoReviewers />;

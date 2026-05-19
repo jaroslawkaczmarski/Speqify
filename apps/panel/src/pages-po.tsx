@@ -1264,7 +1264,19 @@ export function PoSessions() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {active.map((s) => (
-          <Card key={s.name}>
+          <Card
+            key={s.name}
+            role="button"
+            tabIndex={0}
+            style={{ cursor: "pointer" }}
+            onClick={() => (window.location.hash = `/sessions/${REP_SESSIONS.indexOf(s)}`)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                window.location.hash = `/sessions/${REP_SESSIONS.indexOf(s)}`;
+              }
+            }}
+          >
             <div
               style={{
                 padding: "18px 22px",
@@ -1400,7 +1412,19 @@ export function PoSessions() {
         </div>
 
         {done.map((s) => (
-          <Card key={s.name}>
+          <Card
+            key={s.name}
+            role="button"
+            tabIndex={0}
+            style={{ cursor: "pointer" }}
+            onClick={() => (window.location.hash = `/sessions/${REP_SESSIONS.indexOf(s)}`)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                window.location.hash = `/sessions/${REP_SESSIONS.indexOf(s)}`;
+              }
+            }}
+          >
             <div
               style={{
                 padding: "14px 22px",
@@ -2100,6 +2124,371 @@ export function PoReviewers() {
             ))}
           </tbody>
         </table>
+      </Card>
+    </Page>
+  );
+}
+
+type TlEntry = {
+  time: string;
+  who: string;
+  ini: string;
+  action: string;
+  env?: "prod" | "stg" | "dev";
+  annId: string;
+  selector: string;
+  voice?: string;
+  note: string;
+  tags: string[];
+};
+
+const REP_TIMELINE: TlEntry[] = [
+  {
+    time: "14:32",
+    who: "Tomek Wójcik",
+    ini: "TW",
+    action: "dodał głos + tekst",
+    env: "prod",
+    annId: "SPQ-A-091",
+    selector: 'button.btn-export[data-action="export"]',
+    voice: "0:42",
+    note: "Po eksporcie raport powinien lądować na e-mailu PO oraz jako załącznik w Slacku — w tej chwili pobiera się tylko CSV. To jeden z top requestów zespołu finansów.",
+    tags: ["eksport", "notyfikacje"],
+  },
+  {
+    time: "13:58",
+    who: "Anna Lis",
+    ini: "AL",
+    action: "dodała notatkę tekstową",
+    env: "prod",
+    annId: "SPQ-A-090",
+    selector: ".status-pill--cancelled",
+    note: 'Etykiety „anulowane" i „zwrócone" mają identyczny kolor — łatwo je pomylić na liście zamówień.',
+    tags: ["UX", "statusy"],
+  },
+  {
+    time: "11:20",
+    who: "Anna Lis",
+    ini: "AL",
+    action: "dodała głos",
+    env: "prod",
+    annId: "SPQ-A-088",
+    selector: "button.btn-export",
+    voice: "0:18",
+    note: "Brakuje notyfikacji dla zespołu, że ktoś pobrał raport — przydałby się ślad w audycie.",
+    tags: ["eksport"],
+  },
+];
+
+/** PO · Sesja review — detail (PO Session.html). Representative: there is
+ *  no session entity in V1; annotations/tasks live at project scope. */
+export function PoSessionDetail({ id }: { id: string }) {
+  const idx = Math.max(0, Math.min(REP_SESSIONS.length - 1, Number(id) || 0));
+  const s = REP_SESSIONS[idx];
+  if (!s) {
+    return (
+      <Page crumbs={["Mój projekt", "Sesje review", "Sesja"]}>
+        <EmptyState
+          icon={<IconInfo />}
+          title="Nie znaleziono sesji"
+          description="Ta sesja nie istnieje lub została zakończona."
+          action={
+            <Button variant="secondary" onClick={() => (window.location.hash = "/sessions")}>
+              Wróć do sesji
+            </Button>
+          }
+        />
+      </Page>
+    );
+  }
+
+  return (
+    <Page
+      crumbs={["Mój projekt", "Sesje review", s.name]}
+      env={s.env}
+      actions={
+        <>
+          <Button variant="secondary" onClick={() => (window.location.hash = "/sessions")}>
+            Wszystkie sesje
+          </Button>
+          <Button onClick={() => (window.location.hash = "/tasks")}>
+            <IconZap width={14} height={14} />
+            Uruchom analizę AI
+          </Button>
+        </>
+      }
+    >
+      <div
+        style={{
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: 14,
+          padding: "22px 26px",
+          display: "flex",
+          alignItems: "center",
+          gap: 18,
+          marginBottom: 18,
+        }}
+      >
+        <div
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: 11,
+            background: "linear-gradient(135deg,#22C55E,#0EA5E9)",
+            flex: "none",
+          }}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 4,
+              flexWrap: "wrap",
+            }}
+          >
+            <h1 style={{ margin: 0, fontSize: "1.375rem", fontWeight: 700, letterSpacing: "-.015em" }}>
+              {s.name}
+            </h1>
+            <span className={`env-pill env-${s.env}`}>{s.env}</span>
+            <Pill kind={s.done ? "archived" : s.state}>{s.stateLabel}</Pill>
+          </div>
+          <div
+            style={{
+              fontSize: ".8125rem",
+              color: "var(--muted)",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <span className="mono">{s.url}</span>
+            <span>·</span>
+            <span>
+              <strong style={{ color: "var(--primary)" }}>{s.range}</strong>
+            </span>
+            <span>·</span>
+            <span>
+              owner: <strong style={{ color: "var(--secondary)" }}>{s.by}</strong>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <RepBanner>
+          Widok pojedynczej sesji (timeline + nagrania) to makieta — w V1 adnotacje są zbierane
+          przez panele i analizowane w kolejce zadań bez warstwy sesji.
+        </RepBanner>
+      </div>
+
+      <div className="stats" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 20 }}>
+        <Stat label="Adnotacje" value={s.anns} delta="+8 dzisiaj" />
+        <Stat label="Głosowe" value={Math.round(s.anns * 0.65)} delta="avg 0:34" />
+        <Stat label="Recenzenci" value={s.people.length} delta="6 aktywnych w 24h" />
+        <Stat label="Postęp" value={`${s.pct}%`} delta={s.pctNote} />
+      </div>
+
+      <nav
+        style={{
+          display: "flex",
+          gap: 2,
+          borderBottom: "1px solid var(--border)",
+          marginBottom: 18,
+        }}
+      >
+        {["Timeline", "Adnotacje", "Recenzenci", "Analiza AI", "Ustawienia"].map((t, i) => (
+          <span
+            key={t}
+            style={{
+              padding: "11px 14px",
+              fontSize: ".875rem",
+              fontWeight: i === 0 ? 600 : 500,
+              color: i === 0 ? "var(--primary)" : "var(--muted)",
+              borderBottom: `2px solid ${i === 0 ? "var(--primary)" : "transparent"}`,
+              marginBottom: -1,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+            }}
+          >
+            {t}
+            {i === 0 ? (
+              <span
+                className="mono"
+                style={{
+                  fontSize: ".6875rem",
+                  fontWeight: 700,
+                  background: "#FEF2F2",
+                  color: "var(--accent)",
+                  padding: "1px 6px",
+                  borderRadius: 999,
+                }}
+              >
+                {s.anns}
+              </span>
+            ) : null}
+          </span>
+        ))}
+      </nav>
+
+      <Card>
+        <div className="card-h">
+          <div>
+            <h2>Timeline adnotacji</h2>
+            <p className="sub">chronologicznie · ostatnie 24h · poglądowo</p>
+          </div>
+        </div>
+        <div style={{ padding: "6px 0" }}>
+          <div
+            style={{
+              padding: "14px 22px 4px",
+              fontSize: ".6875rem",
+              fontWeight: 700,
+              color: "var(--muted)",
+              letterSpacing: ".06em",
+              textTransform: "uppercase",
+            }}
+          >
+            Dziś
+          </div>
+          {REP_TIMELINE.map((e, i) => (
+            <div
+              key={e.annId}
+              style={{
+                padding: "14px 22px",
+                borderBottom:
+                  i < REP_TIMELINE.length - 1 ? "1px solid var(--border)" : "none",
+                display: "flex",
+                gap: 14,
+              }}
+            >
+              <div style={{ width: 40, textAlign: "right", flex: "none" }}>
+                <div
+                  className="mono"
+                  style={{ fontSize: ".75rem", fontWeight: 600, color: "var(--primary)" }}
+                >
+                  {e.time}
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  flex: "none",
+                }}
+              >
+                <Avatar initials={e.ini} size="sm" />
+                {i < REP_TIMELINE.length - 1 ? (
+                  <div
+                    style={{
+                      width: 2,
+                      flex: 1,
+                      background: "var(--border)",
+                      marginTop: 6,
+                    }}
+                  />
+                ) : null}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginBottom: 6,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <strong style={{ fontWeight: 600, fontSize: ".875rem" }}>{e.who}</strong>
+                  <span style={{ fontSize: ".75rem", color: "var(--muted)" }}>{e.action}</span>
+                  {e.env ? <span className={`env-pill env-${e.env}`}>{e.env}</span> : null}
+                  <span
+                    className="mono"
+                    style={{
+                      marginLeft: "auto",
+                      fontSize: ".6875rem",
+                      color: "var(--muted)",
+                    }}
+                  >
+                    {e.annId}
+                  </span>
+                </div>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: ".75rem",
+                    color: "var(--primary)",
+                    background: "var(--surface-muted)",
+                    padding: "5px 10px",
+                    borderRadius: 6,
+                    marginBottom: 8,
+                    display: "inline-block",
+                    wordBreak: "break-all",
+                  }}
+                >
+                  {e.selector}
+                </div>
+                {e.voice ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontSize: ".75rem",
+                      color: "var(--accent)",
+                      fontWeight: 600,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <IconMic width={13} height={13} />
+                    Nagranie głosowe · {e.voice}
+                  </div>
+                ) : null}
+                <div
+                  style={{
+                    fontSize: ".8125rem",
+                    lineHeight: 1.55,
+                    color: "var(--secondary)",
+                    fontStyle: "italic",
+                  }}
+                >
+                  „{e.note}"
+                </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    flexWrap: "wrap",
+                    fontSize: ".6875rem",
+                  }}
+                >
+                  {e.tags.map((t) => (
+                    <span
+                      key={t}
+                      style={{
+                        background: "var(--surface-muted)",
+                        border: "1px solid var(--border)",
+                        padding: "2px 7px",
+                        borderRadius: 999,
+                        color: "var(--secondary)",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </Card>
     </Page>
   );
