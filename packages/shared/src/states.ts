@@ -34,6 +34,14 @@ export const PanelStatus = {
 } as const;
 export type PanelStatus = (typeof PanelStatus)[keyof typeof PanelStatus];
 
+/** Project lifecycle (SA-controlled, no strict machine — any → any). */
+export const ProjectStatus = {
+  Live: "live",
+  Paused: "paused",
+  Archived: "archived",
+} as const;
+export type ProjectStatus = (typeof ProjectStatus)[keyof typeof ProjectStatus];
+
 const PANEL_TRANSITIONS: Record<PanelStatus, readonly PanelStatus[]> = {
   open: ["closed"],
   closed: ["open"],

@@ -96,6 +96,8 @@ export const createAnnotationSchema = z.object({
   recordingVideo: mediaRefSchema.nullable().default(null),
   recordingAudio: mediaRefSchema.nullable().default(null),
   textNote: z.string().max(10_000).nullable().default(null),
+  /** Free-form reviewer labels (overlay "Etykiety"); AI uses them as hints. */
+  tags: z.array(z.string().max(64)).max(20).default([]),
   structured: structuredSchema.nullable().default(null),
   technical: technicalContextSchema.nullable().default(null),
   hostApp: hostAppContextSchema.nullable().default(null),
@@ -108,6 +110,47 @@ export const submitSchema = z.object({
   clientId: z.string().min(1).max(64),
 });
 export type SubmitInput = z.infer<typeof submitSchema>;
+
+/** Body of PUT /po/tasks/:id — PO inline edit while a task is `generated`. */
+export const taskEditSchema = z.object({
+  title: z.string().min(1).max(300),
+  description: z.string().max(20_000),
+  acceptanceCriteria: z.array(z.string().max(2_000)).max(30),
+  labels: z.array(z.string().max(64)).max(30),
+  component: z.string().max(120).nullable(),
+  version: z.string().max(64).nullable(),
+  priority: z.enum(["low", "medium", "high"]).nullable(),
+  subtaskType: z.enum(["backend", "frontend", "integration", "other"]).nullable(),
+  expectedRev: z.number().int().nonnegative(),
+});
+
+/** Body of POST /po/tasks/:id/{accept,reject,regenerate} — optimistic guard. */
+export const taskActionSchema = z.object({
+  expectedRev: z.number().int().nonnegative(),
+  reason: z.string().max(2_000).optional(),
+});
+
+/** Body of POST /admin/projects/:id/status. */
+export const projectStatusSchema = z.object({
+  status: z.enum(["live", "paused", "archived"]),
+});
+
+/** Body of PUT /admin/providers — platform AI/transcription config (SA, §9). */
+export const providerConfigSchema = z.object({
+  aiProvider: z.enum(["claude", "openai", "gemini", "azure", "custom"]),
+  aiModel: z.string().min(1).max(120),
+  aiEndpoint: z.string().url().max(2_048).optional(),
+  /** Write-only; never echoed back in plaintext. Omit/blank to keep existing. */
+  aiKey: z.string().max(4_096).optional(),
+  transcriptionProvider: z.enum(["workers-ai", "groq", "openai", "azure", "self-hosted"]),
+  transcriptionEndpoint: z.string().url().max(2_048).optional(),
+});
+
+/** Body of POST /leads — closed-beta lead from the landing page. */
+export const leadSchema = z.object({
+  email: z.string().email().max(320),
+  locale: z.enum(["pl", "en"]).optional(),
+});
 
 /** Body of POST /panels/:token/uploads — request a scoped R2 upload target. */
 export const requestUploadSchema = z.object({

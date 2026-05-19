@@ -8,6 +8,27 @@
       "when": 1779107956554,
       "tag": "0000_daily_thunderbolts",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1779190000000,
+      "tag": "0001_task_review_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779190100000,
+      "tag": "0002_admin_status_audit_providers",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1779190200000,
+      "tag": "0003_ingest_tags_and_leads",
+      "breakpoints": true
     }
   ]
 }

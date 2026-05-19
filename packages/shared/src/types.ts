@@ -9,6 +9,7 @@ import type {
   AnnotationType,
   PanelAudience,
   PanelStatus,
+  ProjectStatus,
   TaskStatus,
   TranscriptionStatus,
   UserRole,
@@ -41,6 +42,8 @@ export interface Project {
   productOwnerId: Id;
   /** Allowed environment origins — also the CORS allowlist for ingest (§9). */
   environmentUrls: string[];
+  /** SA-controlled lifecycle (design SA projects table status pill). */
+  status: ProjectStatus;
   template: ProjectTemplate;
   exportConfigId: Id | null;
   createdAt: IsoTimestamp;
@@ -144,6 +147,8 @@ export interface Annotation {
   transcript: string | null;
   transcriptionStatus: TranscriptionStatus | null;
   textNote: string | null;
+  /** Free-form reviewer labels (overlay "Etykiety"). */
+  tags: string[];
   /** Lightweight structured signal captured on the overlay form (§13). */
   structured: { kind: "bug" | "change"; severity: "low" | "medium" | "high" } | null;
   technical: TechnicalContext | null;
@@ -153,6 +158,9 @@ export interface Annotation {
   serverCreatedAt: IsoTimestamp;
   correlationId: string;
 }
+
+/** Sub-task discipline tag (design "Backend / Frontend / Integration" chip). */
+export type SubtaskType = "backend" | "frontend" | "integration" | "other";
 
 export interface Task {
   id: Id;
@@ -164,14 +172,60 @@ export interface Task {
   acceptanceCriteria: string[];
   labels: string[];
   component: string | null;
+  /** Product/release version (e.g. "1.0"), not the optimistic-lock rev. */
   version: string | null;
   priority: "low" | "medium" | "high" | null;
+  /** AI confidence 0–1 (design review list/detail). Null until analysis sets it. */
+  confidence: number | null;
+  /** Sub-task discipline; null for parent tasks. */
+  subtaskType: SubtaskType | null;
   annotationIds: Id[];
   screenshotKeys: string[];
   /** External issue id once exported — also the idempotency key (§14). */
   externalId: string | null;
   exportError: string | null;
+  /** PO review timestamp (accept/reject); null while `generated`. */
+  reviewedAt: IsoTimestamp | null;
+  /** Optimistic-lock revision; bumped on every PO edit/transition (§14). */
+  rev: number;
   createdAt: IsoTimestamp;
+}
+
+/** Editable fields a PO may change while a task is `generated` (Phase 8). */
+export interface TaskEditInput {
+  title: string;
+  description: string;
+  acceptanceCriteria: string[];
+  labels: string[];
+  component: string | null;
+  version: string | null;
+  priority: "low" | "medium" | "high" | null;
+  subtaskType: SubtaskType | null;
+  /** Optimistic-lock guard — must equal the current `Task.rev`. */
+  expectedRev: number;
+}
+
+/** Resolved source annotation for the PO review detail ("Adnotacje źródłowe"). */
+export interface PoSourceAnnotation {
+  id: Id;
+  type: AnnotationType;
+  selector: string | null;
+  textNote: string | null;
+  transcript: string | null;
+  transcriptionStatus: TranscriptionStatus | null;
+  voiceUrl: string | null;
+  screenshotUrl: string | null;
+  tags: string[];
+  structured: { kind: "bug" | "change"; severity: "low" | "medium" | "high" } | null;
+  createdAt: IsoTimestamp;
+}
+
+/** Closed-beta lead from the landing page (no self-serve signup in V1, §11). */
+export interface Lead {
+  id: Id;
+  email: string;
+  locale: "pl" | "en" | null;
+  at: IsoTimestamp;
 }
 
 /** A single AI analysis run; annotations are claimed against `id` (§14). */
@@ -192,6 +246,40 @@ export interface PlatformProviderConfig {
   aiEndpoint?: string;
   transcriptionProvider: "workers-ai" | "groq" | "openai" | "azure" | "self-hosted";
   transcriptionEndpoint?: string;
+}
+
+/** Stored platform provider config + masked key echo (SA "Dostawcy AI"). */
+export interface PlatformProviderConfigView extends PlatformProviderConfig {
+  /** True once an API key has been saved (never echoed in plaintext, §9). */
+  aiKeyConfigured: boolean;
+  /** Last 4 chars of the saved AI key, for recognisability only. */
+  aiKeyHint: string | null;
+}
+
+/** Append-only operational event (SA "Ostatnie zdarzenia" / audit log). */
+export interface AuditEntry {
+  id: Id;
+  at: IsoTimestamp;
+  /** Stable machine kind, e.g. "project.created", "analysis.finished". */
+  kind: string;
+  actor: string;
+  summary: string;
+  severity: "ok" | "warn" | "danger";
+  projectId: Id | null;
+}
+
+/** Live aggregates feeding the SA dashboard stat cards. */
+export interface AdminStats {
+  projects: number;
+  productOwners: number;
+  annotations: number;
+  submitted: number;
+  tasks: number;
+  accepted: number;
+  rejected: number;
+  exported: number;
+  /** accepted / (accepted + rejected), 0–1; null when nothing reviewed yet. */
+  acceptRate: number | null;
 }
 
 export interface ApiError {

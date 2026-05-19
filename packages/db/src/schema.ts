@@ -4,7 +4,7 @@
  * `@speqify/shared` (stored as text, typed via `$type`).
  */
 import { relations, sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import type {
   ElementRef,
   HostAppContext,
@@ -38,8 +38,47 @@ export const projects = sqliteTable("projects", {
     .notNull()
     .references(() => users.id),
   environmentUrls: text("environment_urls", { mode: "json" }).notNull().$type<string[]>(),
+  // SA-controlled lifecycle (design SA projects table).
+  status: text("status").notNull().default("live"),
   template: text("template", { mode: "json" }).notNull().$type<ProjectTemplate>(),
   exportConfigId: text("export_config_id"),
+  createdAt: now(),
+});
+
+// Append-only operational events (SA audit log / "Ostatnie zdarzenia").
+export const auditLog = sqliteTable(
+  "audit_log",
+  {
+    id: id(),
+    kind: text("kind").notNull(),
+    actor: text("actor").notNull(),
+    summary: text("summary").notNull(),
+    severity: text("severity").notNull().default("ok"),
+    projectId: text("project_id"),
+    createdAt: now(),
+  },
+  (t) => ({
+    byCreated: index("audit_created_idx").on(t.createdAt),
+  }),
+);
+
+// Singleton platform provider config (SA). Key is envelope-encrypted (§9).
+export const platformConfig = sqliteTable("platform_config", {
+  id: text("id").primaryKey(), // always "default"
+  aiProvider: text("ai_provider").notNull(),
+  aiModel: text("ai_model").notNull(),
+  aiEndpoint: text("ai_endpoint"),
+  aiKeyRef: text("ai_key_ref"),
+  aiKeyHint: text("ai_key_hint"),
+  transcriptionProvider: text("transcription_provider").notNull(),
+  transcriptionEndpoint: text("transcription_endpoint"),
+});
+
+// Closed-beta leads from the landing page (no self-serve signup in V1, §11).
+export const leads = sqliteTable("leads", {
+  id: id(),
+  email: text("email").notNull(),
+  locale: text("locale"),
   createdAt: now(),
 });
 
@@ -113,6 +152,8 @@ export const annotations = sqliteTable(
     transcript: text("transcript"),
     transcriptionStatus: text("transcription_status"),
     textNote: text("text_note"),
+    // Free-form reviewer labels (overlay "Etykiety").
+    tags: text("tags", { mode: "json" }).notNull().default([]).$type<string[]>(),
     structured: text("structured", { mode: "json" }).$type<{
       kind: "bug" | "change";
       severity: "low" | "medium" | "high";
@@ -158,10 +199,17 @@ export const tasks = sqliteTable(
     component: text("component"),
     version: text("version"),
     priority: text("priority"),
+    // AI confidence 0–1 (Phase 8 review). Nullable until analysis sets it.
+    confidence: real("confidence"),
+    // Sub-task discipline tag; null for parents.
+    subtaskType: text("subtask_type"),
     annotationIds: text("annotation_ids", { mode: "json" }).notNull().$type<string[]>(),
     screenshotKeys: text("screenshot_keys", { mode: "json" }).notNull().$type<string[]>(),
     externalId: text("external_id"),
     exportError: text("export_error"),
+    // PO review timestamp (accept/reject); optimistic-lock revision.
+    reviewedAt: text("reviewed_at"),
+    rev: integer("rev").notNull().default(1),
     createdAt: now(),
   },
   (t) => ({

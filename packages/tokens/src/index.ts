@@ -35,7 +35,10 @@ export const colors = {
 } as const;
 
 const sans = "InterVariable, Inter, -apple-system, system-ui, sans-serif";
-const mono = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+// "JetBrains Mono" is the design's mono face (technical detail: selectors,
+// XPath, state-machine names). Falls back to the system mono stack when the
+// web font is unavailable, so it is safe everywhere.
+const mono = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 /** [fontSize, { lineHeight, letterSpacing, fontWeight }] — Tailwind fontSize tuple. */
 export const fontSize = {
