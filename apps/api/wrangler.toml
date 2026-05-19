@@ -3,9 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2026-05-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Production custom domain (zone speqify.app must be in this account).
-# Wrangler provisions the hostname + edge cert automatically.
-routes = [{ pattern = "api.speqify.app", custom_domain = true }]
+# Custom domain `api.speqify.app` is provisioned once (already live) and
+# persists as an account resource — intentionally NOT declared here so CI
+# deploys don't need Zone:Workers-Routes:Edit. To (re)create it:
+#   npx wrangler deploy --route 'api.speqify.app/*' --routes ... (or dashboard)
+# See DEPLOYMENT.md.
 
 # Non-secret runtime config (secrets are set via `wrangler secret put`).
 [vars]
