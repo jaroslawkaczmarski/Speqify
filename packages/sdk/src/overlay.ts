@@ -31,6 +31,8 @@ import { captureElement } from "./selector.js";
 import { getClientId, getSubmissionId, resetSubmission } from "./session.js";
 
 const CONSENT_KEY = "speqify.consent";
+/** Optional camera-narration consent (separate, opt-in) for screen recording. */
+const CONSENT_CAM_KEY = "speqify.consent.cam";
 
 /** Shadow-root stylesheet — ported from the Convergence SDK Overlay design. */
 const STYLE = `
@@ -261,16 +263,45 @@ button{font-family:inherit;cursor:pointer}
 .sp-submit:disabled{opacity:.5;cursor:not-allowed}
 .sp-submit svg{width:14px;height:14px}
 
-/* Consent gate */
-.consent{padding:24px 20px;display:flex;flex-direction:column;gap:14px}
-.consent h3{margin:0;font-size:16px;font-weight:700;color:var(--primary)}
-.consent p{margin:0;font-size:13px;color:var(--secondary);line-height:1.6}
-.consent .acts{display:flex;gap:8px;margin-top:4px}
-.consent .agree{background:var(--primary);color:#fff;border:0;height:40px;padding:0 16px;
-  border-radius:8px;font-weight:600;font-size:14px}
+/* Consent gate (RODO disclosure) */
+.consent{display:flex;flex-direction:column}
+.consent-head{padding:22px 22px 0}
+.consent-head .logo{width:42px;height:42px;border-radius:11px;background:var(--primary);
+  color:#fff;display:grid;place-items:center;margin-bottom:14px;position:relative}
+.consent-head .logo::after{content:"";position:absolute;width:9px;height:9px;border-radius:50%;
+  background:var(--accent);top:-2px;right:-2px;box-shadow:0 0 0 2px var(--surface)}
+.consent-head .logo svg{width:19px;height:19px}
+.consent-head h3{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em;
+  line-height:1.3;color:var(--primary)}
+.consent-head p{margin:7px 0 0;color:var(--secondary);font-size:13px;line-height:1.6}
+.consent-head p strong{color:var(--primary);font-weight:600}
+.consent-list{list-style:none;padding:16px 22px 0;margin:0;display:flex;
+  flex-direction:column;gap:8px}
+.consent-list li{display:flex;align-items:flex-start;gap:11px;padding:11px 13px;
+  background:var(--surface-muted);border-radius:10px;font-size:12.5px;line-height:1.5;
+  color:var(--secondary)}
+.consent-list li .ic{width:26px;height:26px;border-radius:8px;background:var(--surface);
+  color:var(--info);display:grid;place-items:center;flex:none}
+.consent-list li .ic svg{width:13px;height:13px}
+.consent-list li strong{color:var(--primary);font-weight:600}
+.consent-checks{padding:16px 22px;display:flex;flex-direction:column;gap:9px}
+.consent-checks label{display:flex;align-items:flex-start;gap:9px;font-size:12.5px;
+  line-height:1.5;color:var(--secondary);cursor:pointer}
+.consent-checks label input{margin-top:1px;width:17px;height:17px;
+  accent-color:var(--primary);flex:none}
+.consent-checks label strong{color:var(--primary);font-weight:600}
+.consent-foot{padding:14px 22px;border-top:1px solid var(--border);
+  background:var(--surface-muted);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.consent-foot a{font-size:11.5px;color:var(--info);font-weight:500;cursor:pointer}
+.consent-foot .btn-row{margin-left:auto;display:flex;gap:8px}
+.consent .agree{background:var(--primary);color:#fff;border:0;height:38px;padding:0 16px;
+  border-radius:8px;font-weight:600;font-size:13.5px;display:inline-flex;
+  align-items:center;gap:6px}
 .consent .agree:hover{background:var(--primary-hover)}
-.consent .decline{background:transparent;border:1px solid var(--border-strong);
-  color:var(--primary);height:40px;padding:0 16px;border-radius:8px;font-weight:600;font-size:14px}
+.consent .agree:disabled{opacity:.45;cursor:not-allowed}
+.consent .decline{background:transparent;border:0;color:var(--secondary);height:38px;
+  padding:0 12px;border-radius:8px;font-weight:600;font-size:13.5px}
+.consent .decline:hover{color:var(--primary)}
 
 @keyframes sp-pulse{0%{transform:scale(.98);opacity:.4}100%{transform:scale(1.08);opacity:0}}
 @keyframes sp-bar{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
@@ -827,18 +858,59 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     }
     panel.hidden = false;
     if (!consented()) {
+      const codeIcon = '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>';
       panel.innerHTML = `<div class="consent">
-        <h3>Zanim zaczniesz</h3>
-        <p>Aby zamienić Twój feedback w zadania, Speqify zapisuje wskazane elementy, Twoje
-        notatki oraz kontekst techniczny (konsola, sieć, błędy, przeglądarka). Sekrety są
-        usuwane w przeglądarce przed wysłaniem. Kontynuować?</p>
-        <div class="acts">
-          <button class="agree" data-agree>Zgadzam się</button>
-          <button class="decline" data-decline>Nie teraz</button>
+        <div class="consent-head">
+          <span class="logo" aria-hidden="true">${svg(ICON.logo, "2.5")}</span>
+          <h3>Witaj w sesji review · ${esc(sessionLabel)}</h3>
+          <p>Zostałeś zaproszony do dodawania adnotacji wprost na działającej aplikacji.
+          Zanim zaczniesz, potrzebujemy Twojej zgody.</p>
+        </div>
+        <ul class="consent-list">
+          <li>
+            <span class="ic">${svg(ICON.mic)}</span>
+            <span><strong>Mikrofon</strong> — nagrywanie głosu tylko podczas Twoich sesji
+            review. Możesz wstrzymać w każdej chwili.</span>
+          </li>
+          <li>
+            <span class="ic">${svg(ICON.shot)}</span>
+            <span><strong>Zrzuty viewportu</strong> — robione w momencie tworzenia adnotacji.
+            Sekrety i PII maskujemy automatycznie w przeglądarce.</span>
+          </li>
+          <li>
+            <span class="ic">${svg(codeIcon)}</span>
+            <span><strong>Kontekst techniczny</strong> — selektor, XPath, fragment HTML,
+            konsola, sieć i build. Bez danych biznesowych.</span>
+          </li>
+        </ul>
+        <div class="consent-checks">
+          <label><input type="checkbox" data-consent-req checked> <span>Wyrażam zgodę na
+          nagrywanie głosu i zbieranie kontekstu technicznego podczas sesji review w projekcie
+          <strong>${esc(sessionLabel)}</strong>.</span></label>
+          <label><input type="checkbox" data-consent-cam> <span>Zgadzam się na włączenie
+          kamery do nagrań screen-cast z narracją (opcjonalne).</span></label>
+        </div>
+        <div class="consent-foot">
+          <span style="font-size:11.5px;color:var(--muted)">Polityka prywatności · sekrety
+          usuwane przed wysłaniem</span>
+          <div class="btn-row">
+            <button class="decline" data-decline>Nie teraz</button>
+            <button class="agree" data-agree>Akceptuj i zacznij ${svg(ICON.arrow, "2.4")}</button>
+          </div>
         </div>
       </div>`;
-      panel.querySelector("[data-agree]")?.addEventListener("click", () => {
+      const reqCb = panel.querySelector<HTMLInputElement>("[data-consent-req]");
+      const camCb = panel.querySelector<HTMLInputElement>("[data-consent-cam]");
+      const agreeBtn = panel.querySelector<HTMLButtonElement>("[data-agree]");
+      const syncAgree = (): void => {
+        if (agreeBtn) agreeBtn.disabled = !reqCb?.checked;
+      };
+      reqCb?.addEventListener("change", syncAgree);
+      syncAgree();
+      agreeBtn?.addEventListener("click", () => {
+        if (!reqCb?.checked) return;
         localStorage.setItem(CONSENT_KEY, "1");
+        localStorage.setItem(CONSENT_CAM_KEY, camCb?.checked ? "1" : "0");
         render();
       });
       panel.querySelector("[data-decline]")?.addEventListener("click", () => {
