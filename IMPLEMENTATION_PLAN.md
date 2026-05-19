@@ -4,7 +4,7 @@
 > relevant phase. Record every meaningful change in the **Revision Log** at the bottom.
 > Keep this file in sync with reality — it is the single source of truth for scope and status.
 
-- **Status:** In progress — Phases 0–7 shipped (logic) + full SA/PO panel UI; Phase 8 (Review) next. Plan kept in sync per phase.
+- **Status:** In progress — Phases 0–7 shipped (logic) + full SA/PO panel UI; Phase 8 (Review) next. Plan kept in sync per phase. **Correction (2026-05-19):** Cloudflare Queues are on the **Free** plan since 2026-02-04 and Workflows are on **both Free and Paid** — they were never a Workers-Paid gate. Workers Paid is now purchased anyway (rationale: 30s CPU/invocation vs Free's 10ms — PBKDF2 auth + analysis JSON parsing — plus headroom), and the transcription Queue runtime is now wired.
 - **Last updated:** 2026-05-19
 - **Owner:** TBD
 - **Related docs:** [`DESIGN.md`](./DESIGN.md) (Convergence design system — landing page authority)
@@ -162,7 +162,7 @@ Task:        generated ──Review──▶ accepted ──export──▶ expo
 
 ### Phase 0 — Foundations & scaffolding  ✅ done
 - [x] Init monorepo (pnpm workspaces + Turborepo), TS strict, ESLint, Prettier, Vitest
-- [~] Cloudflare resources: D1 ✓ (EU/WEUR, migrated+seeded) · R2 ✓ (speqify-media) · Queue ✗ (Workers Paid) · Secrets Store ✗ (local `.dev.vars`; prod TODO)
+- [~] Cloudflare resources: D1 ✓ (EU/WEUR, migrated+seeded) · R2 ✓ (speqify-media) · Queue `speqify-transcription` ✓ (on Free since 2026-02-04; Workers Paid now active) · Secrets Store ✗ (local `.dev.vars`; prod TODO)
 - [x] `wrangler` config per app + staging/production envs (D1/R2 bound; queues/AI commented for Phase 6)
 - [x] GitHub Actions: lint, typecheck, test, build — [~] `wrangler deploy` step deferred to deploy phase
 - [x] `packages/shared`: types, zod schemas, state machines (+ tests)
@@ -217,15 +217,15 @@ Task:        generated ──Review──▶ accepted ──export──▶ expo
 - [~] Accessibility/browser-matrix — basic; full a11y + Safari QA deferred
 - [~] **SDK distribution**: esbuild IIFE bundle produced; CDN serving + npm publish = deploy/ops (§7)
 
-### Phase 6 — Async transcription  ✅ logic done (runtime trigger = Workers Paid)
+### Phase 6 — Async transcription  ✅ logic + queue runtime wired
 - [x] Audio (voice + recording-audio) uploaded to R2
-- [~] Provider abstraction + `runOnce` done & tested; Cloudflare Queue+Cron runtime trigger deferred (Workers Paid). Manual `POST /admin/transcribe/run` provided.
+- [x] Provider abstraction + `runOnce` done & tested; Cloudflare **Queue runtime wired** — producer pokes `TRANSCRIPTION_QUEUE` on panel submit, `queue()` consumer runs the idempotent `runOnce` sweep. Manual `POST /admin/transcribe/run` kept as backstop. (Queues on Free since 2026-02-04 — no Workers-Paid gate.) Cron backstop still optional/deferred.
 - [x] Language hint param + PO-editable transcript (`PUT /po/annotations/:id/transcript`) + manual re-run
 - [~] `superseded` status modelled; retry-on-next-run; segmentation + dead-letter cap deferred
 - [~] Empty/silent → flagged done; long-audio segment/stitch deferred
 - [x] Transcript write-back; failed → retried next run; PO manual transcript
 
-### Phase 7 — AI analysis  ✅ logic done (runtime/e2e = Workers Paid + LLM key)
+### Phase 7 — AI analysis  ✅ logic done (e2e needs an LLM provider key — NOT a plan gate)
 - [x] PO trigger (`POST /po/analyze`); **single in-flight run per project** (repo lock → 409)
 - [x] **Snapshot submitted+unprocessed annotations at run start** (re-run incremental)
 - [x] Collect: annotations + template + transcript + technical + host-app into prompt
@@ -235,18 +235,36 @@ Task:        generated ──Review──▶ accepted ──export──▶ expo
 - [x] **Persist tasks THEN mark `processed`** (failure ⇒ re-analyzable, no tasks persisted) — true D1 atomic batch deferred
 - [x] Zero annotations → no-op success; provider/invalid → run failed (actionable); idempotent
 - [x] Re-run incremental; **only inserts new tasks — existing never mutated**
-- [~] Runtime trigger = Cloudflare Workflow + LLM provider key (Workers Paid + SuperAdmin config) — manual `POST /po/analyze` provided
+- [x] **`confidence` (0–1) per generated task** in the structured output + repair schema (surfaced in PO review list/detail per design); `subtaskType` added too; prompt instructs both
+- [~] Runtime trigger = Cloudflare Workflow (available on **both Free and Paid** — no plan gate) + LLM provider key (SuperAdmin config) — manual `POST /po/analyze` provided
 
-### Phase 8 — Review & accept
-- [ ] Review UI: list, filters, keyboard shortcuts (accept/reject/next/edit)
-- [ ] Inline edit: title, description, AC, labels, component, version; split/merge (preserve annotation↔task link integrity)
-- [ ] Triage: `priority` + `labels`; optional Kanban board view
-- [ ] Attach/detach screenshots/video; orphan media → cleanup job
+### Phase 8 — Review & accept  ✅ core shipped (accept/reject/edit/regenerate + source annotations; split/merge + media attach deferred)
+> **Design-derived (handoff = requirements).** The PO Panel prototype is the
+> review screen; these are the concrete endpoints/fields it needs.
+- [x] **API: task review endpoints** — `GET /po/tasks/:id`,
+      `POST /po/tasks/:id/accept`, `POST /po/tasks/:id/reject`,
+      `PUT /po/tasks/:id` (edit), `POST /po/tasks/:id/regenerate` — ownership +
+      `canTransitionTask` + optimistic `rev` guard (409 on conflict). 9 tests.
+- [x] **API: source annotations for a task** — `GET /po/tasks/:id/annotations`
+      returns `PoSourceAnnotation` (selector, textNote, transcript + status,
+      voice/screenshot public URLs, structured) — design "Adnotacje źródłowe"
+- [x] **Model: `Task.confidence`** (0–1) from analysis output; `Task.reviewedAt`;
+      `Task.rev` optimistic lock (separate from product `version`) — shared type,
+      Drizzle schema + migration `0001`, memory + d1 adapters
+- [x] **Model: sub-task typing** — `Task.subtaskType` (`backend|frontend|integration|other`); design sub-task chips render it
+- [x] Review UI wired (PO panel): state-tab filters, list sorted by AI confidence,
+      per-task accept (+auto-advance)/reject/inline-edit/regenerate, source
+      annotations w/ voice playback + transcript; rev-conflict surfaced + auto-reload
+- [~] **regenerate** = scoped re-analysis of the task's annotations (done); split/merge still pending
 - [ ] Rejected task's annotations stay `processed` unless PO explicitly "send back for re-analysis"
-- [ ] Optimistic locking for concurrent PO edits (version; conflict surfaced)
-- [ ] State transitions persisted; survive analysis re-runs
+- [x] Optimistic locking for concurrent PO edits (`rev`; 409 conflict surfaced in UI)
+- [x] State transitions guarded (`canTransitionTask`); immutable statuses (accepted/exported) refuse edit/regenerate
+- [ ] Attach/detach screenshots/video; orphan media → cleanup job; optional Kanban view; survive analysis re-runs (analysis already only-inserts)
 
-### Phase 9 — Export
+### Phase 9 — Export  ✅ JSON/CSV shipped (idempotent); Jira/GitHub live push deferred (needs PO creds)
+- [x] **JSON / CSV export first** (self-contained, no external creds) — `POST
+      /po/tasks/export?format=json|csv`: accepted→exported, stable `speqify:<id>`
+      externalId, idempotent full-snapshot re-run; design "Eksportuj N" + CSV button wired (client download). Jira/GitHub live push still below.
 - [ ] Re-validate Jira/GitHub credentials at export time (may have expired since "test task")
 - [ ] Jira (create-only): issue type, components, versions, field mapping, **sub-tasks/issue links**
 - [ ] GitHub Issues: labels, body, **task-list/linked issues**; media as hosted R2 links
@@ -258,14 +276,34 @@ Task:        generated ──Review──▶ accepted ──export──▶ expo
 - [ ] **Create-only & frozen**: post-export edits in Speqify do NOT sync (V1) — PO clearly informed
 
 ### Phase 10 — Landing page  (see §8 for full spec)
-- [ ] Convergence tokens → CSS variables / Tailwind config (from `DESIGN.md` front-matter)
-- [ ] Page sections (benefit bar, header, hero, how-it-works, features, integrations, social proof, CTA, footer)
-- [ ] **SDK / Get-started section** with copy-paste snippet + link to docs
+- [x] Convergence tokens → CSS variables (design prototype `Speqify.html` ported verbatim)
+- [x] Page sections (benefit bar, header, hero+product mock, problems, how-it-works, features, state machines, compare, privacy/RODO, bottom CTA, footer)
+- [x] **PL + EN** locale switch (header toggle, `<html lang>` + title sync, localStorage/?lang)
+- [~] **SDK / Get-started section**: design has no dedicated SDK snippet block — landing footer links to (unbuilt) `/docs/sdk`; snippet still lives in PO panel Install. Decide if landing needs the §7.3 SDK section explicitly.
 - [ ] WCAG 2.2 AA audit (Lighthouse contrast pass), CWV budget (LCP<2.5s, INP<200ms, CLS<0.1)
-- [ ] Mobile-first; sticky bottom CTA on mobile
+- [-] Sticky bottom CTA on mobile — **not in the design prototype**; prototype uses benefit bar + header CTA + bottom email form only (design treated as authority)
 - [ ] Responsive QA on real devices
 
 ### Phase 11 — Security, privacy, observability
+> **Design-derived (Admin Panel prototype):** these turn the SA dashboard's
+> representative cards into real data.
+- [x] **AI providers as entities** — `GET/PUT /admin/providers`, `PlatformProviderConfig`
+      stored + envelope-encrypted key (masked 4-char echo); SA "Dostawcy AI" page +
+      Drizzle `platform_config` + migration. (health/p95 live-probe still Phase 11)
+- [x] **Admin analytics** — `GET /admin/stats` (live projects/POs/annotations/
+      submitted/tasks/accepted/rejected/exported/accept-rate) feeds the 5 stat cards
+- [x] **`Project.status`** (`live|paused|archived`) — model + migration + `POST
+      /admin/projects/:id/status`, real status pill + SA selector. (env pill stays a URL heuristic — env is not a model field; flagged)
+- [x] **Audit log** entity + `GET /admin/audit` + `appendAudit` emitted on
+      user/project/panel create+delete, project status, analysis finish, task
+      accept/reject, export, lead — design "Ostatnie zdarzenia" live
+- [ ] **AI budget / cost guards** per org + alerts (design "Budżet AI") — still representative (token metering = real Phase 11 work)
+- [ ] Billing & limits, Webhooks, Org settings, per-project Privacy/retention pages (design nav) — backend + screens
+- [x] **SDK ingest: annotation `tags[]`** — `CreateAnnotationInput` + schema +
+      Drizzle + migration + memory/d1 persistence; overlay sends them; surfaced in PO source annotations
+- [x] **`GET /panels/:token` returns project display name** — overlay status pill uses it (falls back to env host)
+- [x] **Landing closed-beta lead endpoint** — `POST /leads` (public CORS) → stored
+      + audited; landing form posts best-effort, acknowledgement always shown (locked §11 invite-only)
 - [ ] Secrets handling review (no plaintext keys in D1; master key in Secrets Store)
 - [ ] CORS lockdown + capability-token revocation tests
 - [ ] Rate limiting on ingest + auth endpoints
@@ -423,7 +461,7 @@ angle is *requirements gathering on your live app + voice + AI → Jira/GitHub*.
 > so it can be approved quickly.
 
 ### P0 — confirm before Phase 0/1 (foundational)
-- [ ] Cloudflare account + **Workers Paid plan** (required for Queues/Workflows/Containers) + `speqify.app` domain + billing owner. *No default — operational prerequisite.*
+- [x] Cloudflare account + **Workers Paid plan** purchased 2026-05-19 (per-account, shared with other projects). *Correction: Queues are Free since 2026-02-04 and Workflows are Free+Paid — Paid is NOT required for them. Paid is justified by 30s CPU/invocation (Free = 10ms; PBKDF2 auth + analysis JSON parsing risk `1102 exceededCpu`) + headroom. Containers/Dynamic Workers remain Paid-only but are not used in V1.* `speqify.app` domain + billing owner still TODO.
 - [ ] Panel app framework: **React + Vite SPA** (recommended) vs Next.js. *Default: React+Vite SPA.*
 - [ ] Cardinality PO ↔ Project — affects schema. *Default: a PO may own many projects; a project has exactly one PO (V1).*
 - [ ] SA auth modeling in Better Auth. *Default: seeded `superadmin` account, rotatable password, rate-limited.*
@@ -570,3 +608,8 @@ surface than requirements gathering).
 | 2026-05-18 | — | Implementation Phases 0–6 shipped & pushed (private repo, CI green): monorepo+CI, Convergence landing, D1(EU)+R2 provisioned, core API (Hono/D1/Drizzle), SuperAdmin (backend+UI), PO config (template+encrypted export), panel lifecycle, full overlay SDK 0.5.0 (capture/redaction/recording/offline), transcription logic. 43 tests. Roadmap §6 checkboxes reconciled; deferred items flagged. Manual prerequisites still outstanding: Workers Paid (Queues/Workflows runtime) + LLM provider key (Phase 7 e2e). |
 | 2026-05-19 | — | Phase 7 (AI analysis) logic shipped: LLM port + prompt (injection-hardened) + `runAnalysis` with §14 correctness (single in-flight lock, snapshot, structured-output validate+repair, persist-then-process, no mutation of existing tasks); `POST /po/analyze` + `GET /po/tasks`. 47 tests, cloud-free. §6 Phase 7 reconciled. |
 | 2026-05-19 | — | Panel UI rebuilt on Convergence: extracted tokens to shared `@speqify/tokens` (landing re-exports; §8.3 single source), Tailwind in panel, app shell (sidebar + hash-routed subpages), role-branched SA/PO, accessible buttons (fixed dark-on-dark hover) + labelled forms. Phase 3 PO UI delivered (Overview/Template/Export+Test/Tasks). Added CORS for the SPA↔API cross-origin (real Phase 2/3 gap) + Node dev server. Phases 2/3 reconciled. |
+| 2026-05-19 | — | **Cloudflare plan correction + transcription queue runtime.** Verified against current CF docs: Queues on Free since 2026-02-04; Workflows on Free+Paid — neither was ever a Workers-Paid gate (plan premise was stale, lines 165/220/228/238/426 corrected). Workers Paid purchased anyway (per-account; rationale: 30s CPU/invocation vs Free 10ms for PBKDF2 auth + analysis JSON parsing, + headroom). Wired Phase 6 Queue runtime: producer pokes `TRANSCRIPTION_QUEUE` on panel submit; `queue()` consumer runs idempotent `runOnce` sweep; manual `POST /admin/transcribe/run` kept as backstop. Provisioned `speqify-transcription` queue. |
+| 2026-05-19 | — | **Phase 8 (PO review) core shipped + verified.** Model: `Task.confidence`/`subtaskType`/`reviewedAt`/`rev` (shared type + zod + Drizzle + migration `0001` + memory/d1 adapters); `PoSourceAnnotation` + `TaskEditInput` contracts. Analysis: structured-output `confidence`+`subtaskType` (schema/service/prompt). API: `GET /po/tasks/:id`, `GET /po/tasks/:id/annotations`, `POST .../accept|reject|regenerate`, `PUT /po/tasks/:id` — ownership + `canTransitionTask` + optimistic `rev` (409) + immutable-status guards. Panel PO review wired: confidence-sorted list w/ bars, detail meta pewność, inline edit form, source annotations (voice playback + transcript), accept auto-advance, conflict auto-reload; dev-server seeded w/ demo review queue (offline). 33 API tests (9 new) + 18 SDK + 5 shared green; all typechecks + builds green; verified live (PO login → list/detail/source-annotations → Accept → state+list update). Plan §6 Phase 7/8 reconciled. |
+| 2026-05-19 | — | **Tranches B/C/D shipped + verified (turn design "representative" data into real).** **B — SA dashboard real data:** `Project.status` (model+migration+`POST /admin/projects/:id/status`+pill+selector); `GET /admin/stats` live aggregates → 5 stat cards; append-only audit log (`audit_log` table, `appendAudit` on user/project/panel/status/analysis/task/export/lead, `GET /admin/audit`); `PlatformProviderConfig` entity (`platform_config` table, `GET/PUT /admin/providers`, envelope-encrypted key + 4-char masked echo, new SA "Dostawcy AI" page). **C — Phase 9 export:** `POST /po/tasks/export?format=json|csv`, accepted→exported with stable `speqify:<id>` externalId, idempotent full-snapshot re-run, "Eksportuj N"+CSV buttons wired to client download. **D — cross-cutting:** annotation `tags[]` end-to-end (schema/Drizzle/migration/memory+d1/overlay send/PO source-annotation surface); `GET /panels/:token` returns project name (overlay pill); public `POST /leads` (CORS *, stored+audited) + landing form best-effort post. Migrations `0001–0003` + journal. 45 API tests (16 new across B/C/D) + 18 SDK + 5 shared green; all typechecks + landing/panel builds + SDK IIFE bundle green; verified live (SA dashboard live stats/status/providers/audit; PO accept→export json/csv→`exported`; lead 201; tags persisted). §6 Phases 9/11 reconciled. Remaining: AI budget metering, billing/webhooks/org-settings/privacy screens, Jira/GitHub live push. |
+| 2026-05-19 | — | **Plan expanded with design-derived requirements + Phase 8 build started.** Folded the gap report into the roadmap: Phase 7 (+task `confidence`), Phase 8 (concrete review endpoints, source-annotation endpoint, `Task.confidence/version/subtaskType`, wired accept/reject/edit/regenerate), Phase 9 (JSON/CSV-first export), Phase 11 (AI-provider entities, `/admin/stats`, `Project.status`, audit log, AI budget, billing/webhooks/privacy screens, ingest `tags[]`, panel-token project name, landing lead endpoint). Implementation underway, vertical-slice + tested per tranche. |
+| 2026-05-19 | — | **Design handoff implemented (Claude Design bundle → treated as requirements).** Ported 4 prototypes pixel-faithfully: SDK overlay rebuilt (`packages/sdk/src/overlay.ts` — status pill + dark toolbar + 440px right panel w/ Nowa adnotacja/Sesja/Kontekst tabs; all capture preserved; on-page accent pin via document-level style; +JetBrains Mono token w/ system fallback). Panel rebuilt on the Admin/PO design (dark sidebar, role-pill SA=accent/PO=muted, project/org selector, icon nav groups, topbar+env, Page layout helper, `icons.tsx`); SA dashboard (5 stats + projects table + AI providers + budget + audit), PO two-pane review queue (state-tab filters + task list + rich detail: Opis/AC G-W-T/metadane+sub-taski/adnotacje źródłowe/eksport podgląd); design-only routes are honest Placeholder pages. Landing fully rebuilt **PL+EN** (i18n module, header lang switch, `<html lang>`/title sync) with the full design (benefit bar→hero+product mock→problems→how→features→state machines→compare→privacy→bottom CTA→footer). JetBrains Mono via Google-Fonts `<link>` (panel+landing); Inter stays bundled. All typechecks + 18 SDK tests + landing/panel `vite build` + SDK IIFE bundle green; landing PL/EN switch and SA/PO shells verified live against the seeded dev API. Panel UI copy is Polish to match the design (design = authority); code/identifiers stay English. **Design-vs-impl gaps surfaced** (designs now requirements): PO accept/reject/edit/regenerate + AI-confidence + source-annotation playback/transcript + sub-task type (Phase 8); review→export action (Phase 9); SA AI-provider entities + analytics/sparklines/project-status + budget/audit/billing/webhooks/org-settings/GDPR retention (Phase 7 cfg / 11); annotation-level tags not in ingest schema; landing closed-beta form has no lead backend (locked §11 invite-only); `Project` lacks env/status fields (env pill heuristic); `GET /panels/:token` exposes no project display name (overlay uses env host). Phase 10 partially reconciled. |
