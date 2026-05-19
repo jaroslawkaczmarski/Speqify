@@ -410,7 +410,8 @@ export function PoTasks() {
   }, [tasks]);
 
   const visible = useMemo(
-    () => tasks.filter((t) => !t.parentTaskId).filter((t) => filter === "all" || t.status === filter),
+    () =>
+      tasks.filter((t) => !t.parentTaskId).filter((t) => filter === "all" || t.status === filter),
     [tasks, filter],
   );
   const sel = visible.find((t) => t.id === selId) ?? visible[0] ?? null;
@@ -451,7 +452,9 @@ export function PoTasks() {
         const { tasks: ts } = await api.listTasks();
         setTasks(ts);
         if (advance) {
-          const nextGen = ts.find((t) => !t.parentTaskId && t.status === "generated" && t.id !== task.id);
+          const nextGen = ts.find(
+            (t) => !t.parentTaskId && t.status === "generated" && t.id !== task.id,
+          );
           setSelId(nextGen?.id ?? task.id);
         } else {
           setSelId(task.id);
@@ -464,11 +467,9 @@ export function PoTasks() {
       }
     });
 
-  const accept = (t: Task): void =>
-    act("Akceptacja", () => api.acceptTask(t.id, t.rev), true);
+  const accept = (t: Task): void => act("Akceptacja", () => api.acceptTask(t.id, t.rev), true);
   const reject = (t: Task): void => act("Odrzucenie", () => api.rejectTask(t.id, t.rev));
-  const regenerate = (t: Task): void =>
-    act("Regeneracja", () => api.regenerateTask(t.id, t.rev));
+  const regenerate = (t: Task): void => act("Regeneracja", () => api.regenerateTask(t.id, t.rev));
   const saveEdit = (t: Task): void => {
     if (!editForm) return;
     act("Zapis edycji", () => api.editTask(t.id, { ...editForm, expectedRev: t.rev }));
@@ -808,11 +809,7 @@ export function PoTasks() {
                       <Button onClick={() => saveEdit(sel)} disabled={busy}>
                         Zapisz zmiany
                       </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() => setEditForm(null)}
-                        disabled={busy}
-                      >
+                      <Button variant="secondary" onClick={() => setEditForm(null)} disabled={busy}>
                         Anuluj
                       </Button>
                     </div>
@@ -970,9 +967,7 @@ export function PoTasks() {
                                   })}
                                 </span>
                               </div>
-                              {a.selector ? (
-                                <div className="src-selector">{a.selector}</div>
-                              ) : null}
+                              {a.selector ? <div className="src-selector">{a.selector}</div> : null}
                               {a.voiceUrl ? (
                                 <div className="voice-bar">
                                   <button
@@ -1084,8 +1079,8 @@ export function PoTasks() {
 function RepBanner({ children }: { children: ReactNode }) {
   return (
     <Alert kind="warning" title="Widok poglądowy">
-      {children} Dane i akcje są reprezentatywne — encja sesji / recenzentów nie istnieje
-      w V1 (Phase 11). Adnotacje i zadania w pozostałych widokach pochodzą z realnego API.
+      {children} Dane i akcje są reprezentatywne — encja sesji / recenzentów nie istnieje w V1
+      (Phase 11). Adnotacje i zadania w pozostałych widokach pochodzą z realnego API.
     </Alert>
   );
 }
@@ -1507,11 +1502,7 @@ export function PoNewSession() {
                 alignItems: "center",
                 gap: 10,
                 padding: "10px 16px",
-                background: doneStep
-                  ? "var(--success)"
-                  : cur
-                    ? "var(--primary)"
-                    : "var(--surface)",
+                background: doneStep ? "var(--success)" : cur ? "var(--primary)" : "var(--surface)",
                 color: doneStep || cur ? "#fff" : "var(--muted)",
                 border: doneStep || cur ? 0 : "1px solid var(--border)",
                 borderRadius:
@@ -1523,8 +1514,7 @@ export function PoNewSession() {
                   width: 24,
                   height: 24,
                   borderRadius: "50%",
-                  background:
-                    doneStep || cur ? "rgba(255,255,255,.2)" : "var(--surface-muted)",
+                  background: doneStep || cur ? "rgba(255,255,255,.2)" : "var(--surface-muted)",
                   fontWeight: 700,
                   fontSize: ".75rem",
                   display: "grid",
@@ -1770,7 +1760,11 @@ export function PoAnnotations() {
         <Stat
           label="Z klasyfikacją AI"
           value={rows ? stats.classified : "—"}
-          delta={rows && stats.total ? `${Math.round((stats.classified / stats.total) * 100)}%` : undefined}
+          delta={
+            rows && stats.total
+              ? `${Math.round((stats.classified / stats.total) * 100)}%`
+              : undefined
+          }
         />
       </div>
 
@@ -1910,8 +1904,7 @@ export function PoAnnotations() {
                                 : "info"
                           }
                         >
-                          {a.structured.kind === "bug" ? "bug" : "zmiana"} ·{" "}
-                          {a.structured.severity}
+                          {a.structured.kind === "bug" ? "bug" : "zmiana"} · {a.structured.severity}
                         </Pill>
                       ) : (
                         <span style={{ color: "var(--muted)" }}>—</span>
@@ -1976,12 +1969,72 @@ type RepReviewer = {
 };
 
 const REP_REVIEWERS: RepReviewer[] = [
-  { initials: "TW", name: "Tomek Wójcik", email: "tomek.wojcik@lumen-lab.com", role: "Lead", sessions: 3, anns: 28, last: "8 min temu · online", twofa: true, status: "active" },
-  { initials: "AL", name: "Anna Lis", email: "anna.lis@lumen-lab.com", role: "Reviewer", sessions: 3, anns: 24, last: "2 godz. temu", twofa: true, status: "active" },
-  { initials: "JK", name: "Jacek Kowal", email: "j.kowal@fintech-co.pl", role: "Reviewer", sessions: 2, anns: 18, last: "wczoraj", twofa: true, status: "active" },
-  { initials: "PG", name: "Patrycja Górska", email: "p.gorska@northstack.io", role: "Reviewer", sessions: 2, anns: 14, last: "wczoraj", twofa: false, status: "idle" },
-  { initials: "MN", name: "Marek Nowak", email: "m.nowak@lumen-lab.com", role: "Reviewer", sessions: 1, anns: 8, last: "3 dni temu", twofa: false, status: "idle" },
-  { initials: "SK", name: "Sebastian Kotowicz", email: "s.kotowicz@lumen-lab.com", role: "Reviewer", sessions: 1, anns: 3, last: "12 dni temu", twofa: false, status: "idle" },
+  {
+    initials: "TW",
+    name: "Tomek Wójcik",
+    email: "tomek.wojcik@lumen-lab.com",
+    role: "Lead",
+    sessions: 3,
+    anns: 28,
+    last: "8 min temu · online",
+    twofa: true,
+    status: "active",
+  },
+  {
+    initials: "AL",
+    name: "Anna Lis",
+    email: "anna.lis@lumen-lab.com",
+    role: "Reviewer",
+    sessions: 3,
+    anns: 24,
+    last: "2 godz. temu",
+    twofa: true,
+    status: "active",
+  },
+  {
+    initials: "JK",
+    name: "Jacek Kowal",
+    email: "j.kowal@fintech-co.pl",
+    role: "Reviewer",
+    sessions: 2,
+    anns: 18,
+    last: "wczoraj",
+    twofa: true,
+    status: "active",
+  },
+  {
+    initials: "PG",
+    name: "Patrycja Górska",
+    email: "p.gorska@northstack.io",
+    role: "Reviewer",
+    sessions: 2,
+    anns: 14,
+    last: "wczoraj",
+    twofa: false,
+    status: "idle",
+  },
+  {
+    initials: "MN",
+    name: "Marek Nowak",
+    email: "m.nowak@lumen-lab.com",
+    role: "Reviewer",
+    sessions: 1,
+    anns: 8,
+    last: "3 dni temu",
+    twofa: false,
+    status: "idle",
+  },
+  {
+    initials: "SK",
+    name: "Sebastian Kotowicz",
+    email: "s.kotowicz@lumen-lab.com",
+    role: "Reviewer",
+    sessions: 1,
+    anns: 3,
+    last: "12 dni temu",
+    twofa: false,
+    status: "idle",
+  },
 ];
 
 export function PoReviewers() {
@@ -2007,8 +2060,8 @@ export function PoReviewers() {
 
       <div style={{ marginBottom: 20 }}>
         <RepBanner>
-          W V1 „recenzent" to rola panelu, którą wydaje SuperAdmin — dedykowana lista osób z 2FA
-          i statystykami jest poglądowa.
+          W V1 „recenzent" to rola panelu, którą wydaje SuperAdmin — dedykowana lista osób z 2FA i
+          statystykami jest poglądowa.
         </RepBanner>
       </div>
 
@@ -2073,7 +2126,14 @@ export function PoReviewers() {
                 <td style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
                   <RoleBadge role="rev" />
                   {r.role === "Lead" ? (
-                    <span style={{ marginLeft: 6, fontSize: ".6875rem", color: "var(--info)", fontWeight: 700 }}>
+                    <span
+                      style={{
+                        marginLeft: 6,
+                        fontSize: ".6875rem",
+                        color: "var(--info)",
+                        fontWeight: 700,
+                      }}
+                    >
                       Lead
                     </span>
                   ) : null}
@@ -2110,7 +2170,9 @@ export function PoReviewers() {
                 </td>
                 <td style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
                   {r.twofa ? (
-                    <span style={{ fontSize: ".6875rem", color: "var(--success)", fontWeight: 600 }}>
+                    <span
+                      style={{ fontSize: ".6875rem", color: "var(--success)", fontWeight: 600 }}
+                    >
                       ✓ 2FA
                     </span>
                   ) : (
@@ -2249,7 +2311,9 @@ export function PoSessionDetail({ id }: { id: string }) {
               flexWrap: "wrap",
             }}
           >
-            <h1 style={{ margin: 0, fontSize: "1.375rem", fontWeight: 700, letterSpacing: "-.015em" }}>
+            <h1
+              style={{ margin: 0, fontSize: "1.375rem", fontWeight: 700, letterSpacing: "-.015em" }}
+            >
               {s.name}
             </h1>
             <span className={`env-pill env-${s.env}`}>{s.env}</span>
@@ -2360,8 +2424,7 @@ export function PoSessionDetail({ id }: { id: string }) {
               key={e.annId}
               style={{
                 padding: "14px 22px",
-                borderBottom:
-                  i < REP_TIMELINE.length - 1 ? "1px solid var(--border)" : "none",
+                borderBottom: i < REP_TIMELINE.length - 1 ? "1px solid var(--border)" : "none",
                 display: "flex",
                 gap: 14,
               }}

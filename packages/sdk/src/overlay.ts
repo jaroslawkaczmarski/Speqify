@@ -597,9 +597,11 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   root.appendChild(sessionPill);
 
   const annWord = (n: number): string =>
-    n === 1 ? "adnotacja" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)
-      ? "adnotacje"
-      : "adnotacji";
+    n === 1
+      ? "adnotacja"
+      : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)
+        ? "adnotacje"
+        : "adnotacji";
   const renderIdle = (): void => {
     const n = session.length;
     sessionPill.innerHTML = `
@@ -690,7 +692,12 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       rows.push(
         `<div class="kv"><div class="kv-row"><span class="l">Ścieżka</span><span class="v">${
           bc.length
-            ? esc(bc.slice(-6).map((s) => new URL(s.url).pathname).join(" → "))
+            ? esc(
+                bc
+                  .slice(-6)
+                  .map((s) => new URL(s.url).pathname)
+                  .join(" → "),
+              )
             : esc(location.pathname)
         }</span></div></div>`,
       );
@@ -716,11 +723,11 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         </div>`;
 
     const recState = recorder ? "live" : voiceBlob ? "done" : "idle";
-    const recCls =
-      recState === "idle" ? "rec idle" : recState === "done" ? "rec done" : "rec live";
+    const recCls = recState === "idle" ? "rec idle" : recState === "done" ? "rec done" : "rec live";
     const bars = Array.from(
       { length: 24 },
-      (_, i) => `<span style="height:${6 + ((i * 7) % 26)}px;animation-delay:${(i % 8) * 0.08}s"></span>`,
+      (_, i) =>
+        `<span style="height:${6 + ((i * 7) % 26)}px;animation-delay:${(i % 8) * 0.08}s"></span>`,
     ).join("");
     const recBlock = `<div class="${recCls}">
         <div class="rec-row">
@@ -803,18 +810,26 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       <div class="row-2">
         <div class="sec">
           <span class="sec-label">Rodzaj</span>
-          ${seg("kind", [
-            { v: "bug", label: "Błąd", cls: "danger" },
-            { v: "change", label: "Zmiana", cls: "ok" },
-          ], kind)}
+          ${seg(
+            "kind",
+            [
+              { v: "bug", label: "Błąd", cls: "danger" },
+              { v: "change", label: "Zmiana", cls: "ok" },
+            ],
+            kind,
+          )}
         </div>
         <div class="sec">
           <span class="sec-label">Priorytet</span>
-          ${seg("sev", [
-            { v: "low", label: "Niski", cls: "ok" },
-            { v: "medium", label: "Średni", cls: "warn" },
-            { v: "high", label: "Wysoki", cls: "danger" },
-          ], severity)}
+          ${seg(
+            "sev",
+            [
+              { v: "low", label: "Niski", cls: "ok" },
+              { v: "medium", label: "Średni", cls: "warn" },
+              { v: "high", label: "Wysoki", cls: "danger" },
+            ],
+            severity,
+          )}
         </div>
       </div>
       <div class="sec">
@@ -970,30 +985,24 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     note?.addEventListener("input", () => (noteText = note.value));
 
     panel.querySelector("[data-pick]")?.addEventListener("click", startPick);
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-kind]")
-      .forEach((b) =>
-        b.addEventListener("click", () => {
-          kind = b.dataset.kind as "bug" | "change";
-          render();
-        }),
-      );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-sev]")
-      .forEach((b) =>
-        b.addEventListener("click", () => {
-          severity = b.dataset.sev as SevKey;
-          render();
-        }),
-      );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-tag-del]")
-      .forEach((b) =>
-        b.addEventListener("click", () => {
-          tags.splice(Number(b.dataset.tagDel), 1);
-          render();
-        }),
-      );
+    panel.querySelectorAll<HTMLButtonElement>("[data-kind]").forEach((b) =>
+      b.addEventListener("click", () => {
+        kind = b.dataset.kind as "bug" | "change";
+        render();
+      }),
+    );
+    panel.querySelectorAll<HTMLButtonElement>("[data-sev]").forEach((b) =>
+      b.addEventListener("click", () => {
+        severity = b.dataset.sev as SevKey;
+        render();
+      }),
+    );
+    panel.querySelectorAll<HTMLButtonElement>("[data-tag-del]").forEach((b) =>
+      b.addEventListener("click", () => {
+        tags.splice(Number(b.dataset.tagDel), 1);
+        render();
+      }),
+    );
     panel.querySelector("[data-tag-add]")?.addEventListener("click", () => {
       const v = window.prompt("Etykieta:");
       if (v && v.trim()) {
@@ -1138,7 +1147,8 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       let recordingAudio = null;
       if (screenOut) {
         recordingVideo = await client.upload("recording-video", screenOut.video);
-        if (screenOut.audio) recordingAudio = await client.upload("recording-audio", screenOut.audio);
+        if (screenOut.audio)
+          recordingAudio = await client.upload("recording-audio", screenOut.audio);
       }
       const body = buildAnnotationPayload({
         submissionId: getSubmissionId(),

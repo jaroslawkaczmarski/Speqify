@@ -641,11 +641,7 @@ export class D1Repository implements Repository {
   }
 
   async getTask(id: string): Promise<Task | null> {
-    const rows = await this.db
-      .select()
-      .from(schema.tasks)
-      .where(eq(schema.tasks.id, id))
-      .limit(1);
+    const rows = await this.db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1);
     return rows[0] ? toTask(rows[0]) : null;
   }
 
@@ -796,7 +792,12 @@ export class D1Repository implements Repository {
       .values({ id: newId(), email, locale })
       .returning();
     const r = inserted[0] as typeof schema.leads.$inferSelect;
-    return { id: r.id, email: r.email, locale: (r.locale as Lead["locale"]) ?? null, at: r.createdAt };
+    return {
+      id: r.id,
+      email: r.email,
+      locale: (r.locale as Lead["locale"]) ?? null,
+      at: r.createdAt,
+    };
   }
 
   async listLeads(limit: number): Promise<Lead[]> {

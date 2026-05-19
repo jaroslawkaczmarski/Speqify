@@ -26,9 +26,7 @@ interface Runtime {
  */
 function buildRuntime(env: Env): Runtime {
   const repo: Repository = env.DB ? new D1Repository(env.DB) : new InMemoryRepository();
-  const mediaStore: MediaStore = env.MEDIA
-    ? new R2MediaStore(env.MEDIA)
-    : new InMemoryMediaStore();
+  const mediaStore: MediaStore = env.MEDIA ? new R2MediaStore(env.MEDIA) : new InMemoryMediaStore();
   let transcriber: Transcriber;
   if (env.AI) transcriber = new WorkersAiTranscriber(env.AI);
   else if (env.TRANSCRIBE_ENDPOINT && env.TRANSCRIBE_API_KEY)
@@ -81,7 +79,12 @@ export default {
     try {
       const r = await runTranscription({ repo, mediaStore, transcriber });
       console.log(
-        JSON.stringify({ level: "info", msg: "transcription_queue_run", messages: batch.messages.length, ...r }),
+        JSON.stringify({
+          level: "info",
+          msg: "transcription_queue_run",
+          messages: batch.messages.length,
+          ...r,
+        }),
       );
       batch.ackAll();
     } catch (err) {

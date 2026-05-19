@@ -237,7 +237,9 @@ export function App() {
                       </div>
                     ))}
                   </div>
-                  <span className="app-btn">{locale === "pl" ? "Eksportuj raport" : "Export report"}</span>
+                  <span className="app-btn">
+                    {locale === "pl" ? "Eksportuj raport" : "Export report"}
+                  </span>
                 </main>
               </div>
 
@@ -413,9 +415,7 @@ export function App() {
                 <div className="state-flow">
                   {c.nodes.map((n, i) => (
                     <Fragment key={n}>
-                      <div
-                        className={`state-node ${i === 0 ? "start" : i === 1 ? "mid" : "end"}`}
-                      >
+                      <div className={`state-node ${i === 0 ? "start" : i === 1 ? "mid" : "end"}`}>
                         {n}
                       </div>
                       {i < c.nodes.length - 1 ? <Arrow /> : null}

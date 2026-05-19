@@ -145,10 +145,34 @@ const SSO = [
 ];
 
 const LOGIN_FEED = [
-  { ini: "MK", t: "Marta Kowalska uruchomiła analizę AI", m: "lumen-lab/q1-2026 · 12 nowych zadań", s: "gen", st: "generated" },
-  { ini: "TW", t: "Tomek Wójcik dodał adnotację głosową 0:42", m: ".btn-export · „Po eksporcie raport…”", s: "rec", st: "voice" },
-  { ini: "AL", t: "Anna Lis zaakceptowała SPQ-126", m: "„Brak paginacji w tabeli zamówień…”", s: "acc", st: "accepted" },
-  { ini: "PŚ", t: "Paweł Świątek wyeksportował 4 zadania", m: "LUM · Sprint 24 · idempotency-ok", s: "exp", st: "exported" },
+  {
+    ini: "MK",
+    t: "Marta Kowalska uruchomiła analizę AI",
+    m: "lumen-lab/q1-2026 · 12 nowych zadań",
+    s: "gen",
+    st: "generated",
+  },
+  {
+    ini: "TW",
+    t: "Tomek Wójcik dodał adnotację głosową 0:42",
+    m: ".btn-export · „Po eksporcie raport…”",
+    s: "rec",
+    st: "voice",
+  },
+  {
+    ini: "AL",
+    t: "Anna Lis zaakceptowała SPQ-126",
+    m: "„Brak paginacji w tabeli zamówień…”",
+    s: "acc",
+    st: "accepted",
+  },
+  {
+    ini: "PŚ",
+    t: "Paweł Świątek wyeksportował 4 zadania",
+    m: "LUM · Sprint 24 · idempotency-ok",
+    s: "exp",
+    st: "exported",
+  },
 ];
 
 function Login(props: { onAuthed: (role: string) => void }) {
@@ -315,8 +339,8 @@ function Login(props: { onAuthed: (role: string) => void }) {
           </span>
           <h2>Twój zespół zbiera wymagania wprost na żywej aplikacji.</h2>
           <p>
-            Po zalogowaniu zobaczysz aktualną kolejkę zadań wygenerowanych przez AI z sesji
-            review klientów.
+            Po zalogowaniu zobaczysz aktualną kolejkę zadań wygenerowanych przez AI z sesji review
+            klientów.
           </p>
           <div className="feed">
             {LOGIN_FEED.map((f) => (
@@ -539,8 +563,8 @@ function AcceptInvite() {
               <input id="i-name" className="input" placeholder="Tomek Wójcik" disabled />
             </Field>
             <p style={{ fontSize: ".75rem", color: "var(--muted)", margin: "0 0 18px" }}>
-              Nie będziesz mieć dostępu do zadań, eksportu ani ustawień organizacji — tylko
-              nakładka recenzenta.
+              Nie będziesz mieć dostępu do zadań, eksportu ani ustawień organizacji — tylko nakładka
+              recenzenta.
             </p>
             <Button type="submit" disabled style={{ width: "100%" }}>
               Dołącz do sesji review
@@ -590,8 +614,7 @@ function renderPage(role: string, route: string): ReactNode {
   if (r === "/export") return <PoExport />;
   if (r === "/tasks") return <PoTasks />;
   if (r === "/sessions/new") return <PoNewSession />;
-  if (r.startsWith("/sessions/"))
-    return <PoSessionDetail id={r.slice("/sessions/".length)} />;
+  if (r.startsWith("/sessions/")) return <PoSessionDetail id={r.slice("/sessions/".length)} />;
   if (r === "/sessions") return <PoSessions />;
   if (r === "/annotations") return <PoAnnotations />;
   if (r === "/reviewers") return <PoReviewers />;

@@ -5,15 +5,7 @@
  *
  * Single import surface for pages: re-exports Page/Placeholder/useAsync etc.
  */
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
 import { IconAlert, IconCheck, IconInfo, IconX } from "./icons.js";
 
@@ -104,13 +96,7 @@ export function RoleBadge({ role }: { role: "sa" | "po" | "rev" }) {
   );
 }
 
-export function CountChip({
-  children,
-  tone,
-}: {
-  children: ReactNode;
-  tone?: "hot" | "info";
-}) {
+export function CountChip({ children, tone }: { children: ReactNode; tone?: "hot" | "info" }) {
   return <span className={`count-chip${tone ? ` ${tone}` : ""}`}>{children}</span>;
 }
 
@@ -337,13 +323,7 @@ function gradientFor(seed: string): string {
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return GRADIENTS[h % GRADIENTS.length] as string;
 }
-export function Avatar({
-  initials,
-  size = "md",
-}: {
-  initials: string;
-  size?: "sm" | "md" | "lg";
-}) {
+export function Avatar({ initials, size = "md" }: { initials: string; size?: "sm" | "md" | "lg" }) {
   return (
     <span
       className={`av${size === "sm" ? " av-sm" : size === "lg" ? " av-lg" : ""}`}
@@ -567,8 +547,8 @@ export function Placeholder(props: { crumbs: string[]; title: string; note: stri
       <Card pad style={{ maxWidth: 640 }}>
         <Alert kind="info">{props.note}</Alert>
         <p className="hint">
-          Makieta tego ekranu jest częścią dostarczonego designu. Logika/endpoint API nie
-          wchodzi w zakres bieżącej fazy — patrz raport luk w odpowiedzi.
+          Makieta tego ekranu jest częścią dostarczonego designu. Logika/endpoint API nie wchodzi w
+          zakres bieżącej fazy — patrz raport luk w odpowiedzi.
         </p>
       </Card>
     </PageLayout>

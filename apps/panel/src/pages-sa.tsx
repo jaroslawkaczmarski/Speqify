@@ -226,12 +226,7 @@ export function Dashboard() {
                       </td>
                       <td>
                         <svg className="spark" viewBox="0 0 80 24" preserveAspectRatio="none">
-                          <polyline
-                            fill="none"
-                            stroke="#15803D"
-                            strokeWidth="1.5"
-                            points={SPARK}
-                          />
+                          <polyline fill="none" stroke="#15803D" strokeWidth="1.5" points={SPARK} />
                         </svg>
                       </td>
                       <td>
@@ -289,7 +284,9 @@ export function Dashboard() {
                   </div>
                   <div className="ai-meta">
                     <div className="n">Transkrypcja · {providers.transcriptionProvider}</div>
-                    <div className="d">{providers.transcriptionEndpoint ?? "endpoint domyślny"}</div>
+                    <div className="d">
+                      {providers.transcriptionEndpoint ?? "endpoint domyślny"}
+                    </div>
                   </div>
                   <div className="ai-st">
                     <span className="pill live">
@@ -416,8 +413,7 @@ export function ProductOwners() {
   const ql = q.trim().toLowerCase();
   const visible = ql
     ? users.filter(
-        (u) =>
-          u.displayName.toLowerCase().includes(ql) || u.email.toLowerCase().includes(ql),
+        (u) => u.displayName.toLowerCase().includes(ql) || u.email.toLowerCase().includes(ql),
       )
     : users;
 
@@ -637,8 +633,7 @@ export function AdminAudit() {
   const auto = entries.filter((e) => e.actor === "system").length;
 
   const exportCsv = (): void => {
-    const esc = (s: string): string =>
-      /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    const esc = (s: string): string => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
     const rows = entries.map((e) =>
       [e.at, e.kind, e.severity, e.actor, e.projectId ?? "", e.summary].map(esc).join(","),
     );
@@ -674,8 +669,16 @@ export function AdminAudit() {
       {error ? <Alert kind="danger">{error}</Alert> : null}
 
       <div className="stats">
-        <Stat label="Zdarzenia" value={entries.length} delta={<span className="sp">dane na żywo</span>} />
-        <Stat label="Ostatnie 24h" value={last24} delta={<span className="sp">dane na żywo</span>} />
+        <Stat
+          label="Zdarzenia"
+          value={entries.length}
+          delta={<span className="sp">dane na żywo</span>}
+        />
+        <Stat
+          label="Ostatnie 24h"
+          value={last24}
+          delta={<span className="sp">dane na żywo</span>}
+        />
         <Stat
           label="Akcje ludzi"
           value={human}
@@ -740,10 +743,7 @@ export function AdminAudit() {
                     </td>
                     <td>
                       <div style={{ fontWeight: 500 }}>{e.actor}</div>
-                      <div
-                        className="mono"
-                        style={{ fontSize: ".6875rem", color: "var(--muted)" }}
-                      >
+                      <div className="mono" style={{ fontSize: ".6875rem", color: "var(--muted)" }}>
                         {e.kind}
                       </div>
                     </td>
@@ -782,8 +782,7 @@ export function Projects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const { error, run } = useAsync();
 
-  const load = (): void =>
-    void run(async () => setProjects((await api.listProjects()).projects));
+  const load = (): void => void run(async () => setProjects((await api.listProjects()).projects));
   useEffect(() => load(), []);
 
   const changeStatus = (id: string, status: ProjectStatus): void =>
@@ -839,11 +838,7 @@ export function Projects() {
                 return (
                   <tr key={p.id}>
                     <td>
-                      <a
-                        href={`#/projects/${p.id}`}
-                        className="name"
-                        style={{ color: "inherit" }}
-                      >
+                      <a href={`#/projects/${p.id}`} className="name" style={{ color: "inherit" }}>
                         <span className="sq" />
                         <div>
                           <div className="n">{p.name}</div>
@@ -1035,8 +1030,8 @@ export function CreateProject() {
                 />
               </Field>
               <Alert kind="info">
-                Routing AI / integracje (Jira/GitHub) konfiguruje PO po utworzeniu projektu —
-                poza tym kreatorem.
+                Routing AI / integracje (Jira/GitHub) konfiguruje PO po utworzeniu projektu — poza
+                tym kreatorem.
               </Alert>
             </>
           ) : (
@@ -1045,8 +1040,8 @@ export function CreateProject() {
                 Zespół & finalizacja
               </h2>
               <p style={{ color: "var(--secondary)", marginTop: 0 }}>
-                Po utworzeniu projektu dodasz panele (linki recenzentów) w zakładce
-                „Recenzenci”, a PO skonfiguruje szablon i eksport.
+                Po utworzeniu projektu dodasz panele (linki recenzentów) w zakładce „Recenzenci”, a
+                PO skonfiguruje szablon i eksport.
               </p>
               <div
                 style={{
@@ -1068,8 +1063,8 @@ export function CreateProject() {
                   <b>Środowiska:</b> {csvToList(urls).join(", ") || "—"}
                 </div>
                 <div>
-                  <b>Szablon:</b> {lang.toUpperCase()} ·{" "}
-                  {userStory ? "user-story" : "prosty"} · {acc ? "z AC" : "bez AC"}
+                  <b>Szablon:</b> {lang.toUpperCase()} · {userStory ? "user-story" : "prosty"} ·{" "}
+                  {acc ? "z AC" : "bez AC"}
                 </div>
               </div>
             </>
@@ -1123,10 +1118,7 @@ export function CreateProject() {
                 ["Env", `${csvToList(urls).length} adresów`],
                 ["Szablon", lang.toUpperCase()],
               ].map(([k, v]) => (
-                <div
-                  key={k}
-                  style={{ display: "flex", justifyContent: "space-between", gap: 12 }}
-                >
+                <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                   <span style={{ color: "var(--muted)" }}>{k}</span>
                   <span style={{ color: "var(--primary)", fontWeight: 500 }}>{v}</span>
                 </div>
@@ -1137,7 +1129,9 @@ export function CreateProject() {
             <h2 className="section-title" style={{ marginTop: 0 }}>
               Co dalej
             </h2>
-            <ul style={{ margin: 0, paddingLeft: 18, color: "var(--secondary)", fontSize: ".875rem" }}>
+            <ul
+              style={{ margin: 0, paddingLeft: 18, color: "var(--secondary)", fontSize: ".875rem" }}
+            >
               <li>Utwórz panele recenzentów (tokeny capability)</li>
               <li>PO konfiguruje szablon zadań i eksport (Jira/GitHub)</li>
               <li>Wklej snippet SDK w aplikacji środowiska</li>
@@ -1173,10 +1167,7 @@ export function AdminProject(props: { id: string }) {
 
   const load = (): void =>
     void run(async () => {
-      const [{ projects }, { users }] = await Promise.all([
-        api.listProjects(),
-        api.listUsers(),
-      ]);
+      const [{ projects }, { users }] = await Promise.all([api.listProjects(), api.listUsers()]);
       const p = projects.find((x) => x.id === props.id) ?? null;
       setProject(p);
       setOwner(users.find((u) => u.id === p?.productOwnerId) ?? null);
@@ -1316,8 +1307,8 @@ export function AdminProject(props: { id: string }) {
                 <code>{sdkSnippet(firstPanel.secretToken)}</code>
               </pre>
               <p className="hint">
-                Token panelu „{firstPanel.audience}” ({firstPanel.environmentUrl}). CSP/CORS:
-                dodaj API origin do <span className="mono">connect-src</span>.
+                Token panelu „{firstPanel.audience}” ({firstPanel.environmentUrl}). CSP/CORS: dodaj
+                API origin do <span className="mono">connect-src</span>.
               </p>
             </>
           ) : (
@@ -1325,9 +1316,7 @@ export function AdminProject(props: { id: string }) {
               icon={<IconLink />}
               title="Brak panelu"
               description="Utwórz panel recenzenta w zakładce „Recenzenci”, aby wygenerować token i snippet."
-              action={
-                <Button onClick={() => setTab(2)}>Przejdź do Recenzenci</Button>
-              }
+              action={<Button onClick={() => setTab(2)}>Przejdź do Recenzenci</Button>}
             />
           )}
         </div>
@@ -1419,8 +1408,8 @@ export function AdminProject(props: { id: string }) {
             Strefa niebezpieczna
           </h2>
           <p style={{ color: "var(--secondary)" }}>
-            Archiwizacja zatrzymuje zgłoszenia i ukrywa projekt z aktywnej listy. Trwałe
-            usunięcie projektu wraz z adnotacjami nie jest dostępne w V1.
+            Archiwizacja zatrzymuje zgłoszenia i ukrywa projekt z aktywnej listy. Trwałe usunięcie
+            projektu wraz z adnotacjami nie jest dostępne w V1.
           </p>
           <Button
             variant="danger-ghost"
@@ -1564,11 +1553,7 @@ export function Panels() {
                           <Button variant="secondary" size="sm" onClick={() => toggle(p)}>
                             {p.status === "open" ? "Zamknij" : "Otwórz"}
                           </Button>
-                          <Button
-                            variant="danger-ghost"
-                            size="sm"
-                            onClick={() => setConfirmDel(p)}
-                          >
+                          <Button variant="danger-ghost" size="sm" onClick={() => setConfirmDel(p)}>
                             Usuń
                           </Button>
                         </div>
@@ -1729,7 +1714,11 @@ export function Providers() {
             required
           />
         </Field>
-        <Field label="Endpoint (opcjonalny)" htmlFor="ai-ep" hint="AI Gateway / endpoint OpenAI-kompatybilny">
+        <Field
+          label="Endpoint (opcjonalny)"
+          htmlFor="ai-ep"
+          hint="AI Gateway / endpoint OpenAI-kompatybilny"
+        >
           <input
             id="ai-ep"
             className="input"
@@ -1794,8 +1783,8 @@ export function Providers() {
 function RepNote({ children }: { children: ReactNode }) {
   return (
     <Alert kind="warning" title="Widok poglądowy">
-      {children} Dane i akcje są reprezentatywne — backend tej sekcji jest poza zakresem V1
-      (Phase 11). Liczby oznaczone „na żywo” pochodzą z realnego API.
+      {children} Dane i akcje są reprezentatywne — backend tej sekcji jest poza zakresem V1 (Phase
+      11). Liczby oznaczone „na żywo” pochodzą z realnego API.
     </Alert>
   );
 }
@@ -1973,16 +1962,28 @@ export function AdminPrivacy() {
       <RepNote>Żądania usunięcia, zgody i polityki retencji to makieta.</RepNote>
 
       <div className="stats">
-        <Stat label="Aktywne zgody" value="28" delta={<span className="sp">dane przykładowe</span>} />
+        <Stat
+          label="Aktywne zgody"
+          value="28"
+          delta={<span className="sp">dane przykładowe</span>}
+        />
         <Stat
           label="Żądania usunięcia"
           value="3"
           deltaNeg
           delta={<span className="sp">1 wymaga akcji</span>}
         />
-        <Stat label="Eksporty danych" value="7" delta={<span className="sp">dane przykładowe</span>} />
+        <Stat
+          label="Eksporty danych"
+          value="7"
+          delta={<span className="sp">dane przykładowe</span>}
+        />
         <Stat label="Auto-usunięte" value="218" delta={<span className="sp">retencja 90d</span>} />
-        <Stat label="Hosting" value="EU" delta={<span className="sp">eu-warsaw-01 · realne</span>} />
+        <Stat
+          label="Hosting"
+          value="EU"
+          delta={<span className="sp">eu-warsaw-01 · realne</span>}
+        />
       </div>
 
       <div className="card">
@@ -2003,9 +2004,27 @@ export function AdminPrivacy() {
           </thead>
           <tbody>
             {[
-              { e: "k.nowak@old-firma.com", z: "Pełne usunięcie konta + treści", t: "do 16.06.2026", s: "warn", l: "w toku" },
-              { e: "r.kowalski@external.com", z: "Anonimizacja transkrypcji", t: "do 11.06.2026", s: "info", l: "zaakceptowane" },
-              { e: "m.lewandowska@partner.io", z: "Tylko nagrania audio", t: "ukończono 09.05", s: "live", l: "ukończone" },
+              {
+                e: "k.nowak@old-firma.com",
+                z: "Pełne usunięcie konta + treści",
+                t: "do 16.06.2026",
+                s: "warn",
+                l: "w toku",
+              },
+              {
+                e: "r.kowalski@external.com",
+                z: "Anonimizacja transkrypcji",
+                t: "do 11.06.2026",
+                s: "info",
+                l: "zaakceptowane",
+              },
+              {
+                e: "m.lewandowska@partner.io",
+                z: "Tylko nagrania audio",
+                t: "ukończono 09.05",
+                s: "live",
+                l: "ukończone",
+              },
             ].map((r) => (
               <tr key={r.e}>
                 <td className="mono" style={{ fontSize: ".8125rem" }}>
@@ -2027,7 +2046,9 @@ export function AdminPrivacy() {
           <h2 className="section-title" style={{ marginTop: 0 }}>
             Polityka retencji
           </h2>
-          <ul style={{ margin: 0, paddingLeft: 18, color: "var(--secondary)", fontSize: ".875rem" }}>
+          <ul
+            style={{ margin: 0, paddingLeft: 18, color: "var(--secondary)", fontSize: ".875rem" }}
+          >
             <li>Audio / nagrania: 90 dni (dane przykładowe)</li>
             <li>Zrzuty ekranu: 180 dni (dane przykładowe)</li>
             <li>Adnotacje tekstowe: do usunięcia projektu</li>
@@ -2039,9 +2060,8 @@ export function AdminPrivacy() {
             Inspektor (DPO) & bezpieczeństwo
           </h2>
           <p style={{ color: "var(--secondary)", fontSize: ".875rem", margin: 0 }}>
-            Kontakt DPO: <span className="mono">dpo@speqify.io</span> · Hosting i przetwarzanie
-            LLM w UE · TLS 1.3 · sekrety envelope-encrypted (realne). SOC 2 — w toku
-            (reprezentatywne).
+            Kontakt DPO: <span className="mono">dpo@speqify.io</span> · Hosting i przetwarzanie LLM
+            w UE · TLS 1.3 · sekrety envelope-encrypted (realne). SOC 2 — w toku (reprezentatywne).
           </p>
         </div>
       </div>
@@ -2049,7 +2069,12 @@ export function AdminPrivacy() {
   );
 }
 
-const SETTINGS_TABS = ["Profil organizacji", "SSO & uwierzytelnianie", "API", "Strefa niebezpieczna"];
+const SETTINGS_TABS = [
+  "Profil organizacji",
+  "SSO & uwierzytelnianie",
+  "API",
+  "Strefa niebezpieczna",
+];
 
 /** Admin · Ustawienia organizacji (Admin Settings.html). All sections are
  *  representative — org profile / SSO / API tokens have no V1 backend. */
@@ -2179,8 +2204,8 @@ export function AdminSettings() {
             Strefa niebezpieczna
           </h2>
           <p style={{ color: "var(--secondary)" }}>
-            Usunięcie organizacji wraz ze wszystkimi projektami nie jest dostępne w V1 —
-            skontaktuj się z administratorem platformy.
+            Usunięcie organizacji wraz ze wszystkimi projektami nie jest dostępne w V1 — skontaktuj
+            się z administratorem platformy.
           </p>
           <Button variant="danger-ghost" disabled title="Usunięcie organizacji — poza V1">
             Usuń organizację

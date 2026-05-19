@@ -250,7 +250,8 @@ const repo = new InMemoryRepository({
       status: "generated",
       parentTaskId: null,
       title: "Dashboard NPS chart shows an empty state instead of “no data”",
-      description: "When there is no NPS data the chart area is blank; show an explicit empty state.",
+      description:
+        "When there is no NPS data the chart area is blank; show an explicit empty state.",
       acceptanceCriteria: [],
       labels: ["frontend"],
       component: "Dashboard",

@@ -27,4 +27,6 @@ await esbuild.build({
   logLevel: "info",
 });
 
-console.log(`speqify-loader.js rebuilt → ${outfile.replace(root + "\\", "").replace(root + "/", "")}`);
+console.log(
+  `speqify-loader.js rebuilt → ${outfile.replace(root + "\\", "").replace(root + "/", "")}`,
+);

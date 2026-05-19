@@ -59,7 +59,13 @@ export interface Dict {
     colFeature: string;
     colSpeqify: string;
     colOther: string;
-    rows: { f: string; s: string; o: string; sk: "yes" | "no" | "partial"; ok: "yes" | "no" | "partial" }[];
+    rows: {
+      f: string;
+      s: string;
+      o: string;
+      sk: "yes" | "no" | "partial";
+      ok: "yes" | "no" | "partial";
+    }[];
   };
   privacy: {
     eyebrow: string;
@@ -94,7 +100,12 @@ const pl: Dict = {
   metaTitle: "Speqify — zbieraj wymagania wprost na żywej aplikacji",
   metaDesc:
     "Recenzent klika element, mówi do mikrofonu, a AI zamienia notatki w gotowe tickety w Jira lub GitHub — według Twojego szablonu, w Twoim języku.",
-  benefit: ["Polski · zgodność z RODO", "SDK w 5 minut", "Eksport do Jira i GitHub", "Beta zamknięta — dołącz"],
+  benefit: [
+    "Polski · zgodność z RODO",
+    "SDK w 5 minut",
+    "Eksport do Jira i GitHub",
+    "Beta zamknięta — dołącz",
+  ],
   nav: { how: "Jak to działa", features: "Funkcje", compare: "Porównanie", privacy: "Prywatność" },
   ctaHeader: "Dołącz do bety",
   hero: {
@@ -106,7 +117,8 @@ const pl: Dict = {
     checks: ["Bez karty kredytowej", "SDK w 5 minut", "Hosted w UE"],
     mockUrl: "app.twojprodukt.pl/dashboard/orders",
     mockSelector: 'button.app-btn[data-action="export"]',
-    mockVoice: "„Po eksporcie raport powinien lądować na e-mailu PO oraz jako załącznik w Slacku — w tej chwili pobiera się tylko CSV…”",
+    mockVoice:
+      "„Po eksporcie raport powinien lądować na e-mailu PO oraz jako załącznik w Slacku — w tej chwili pobiera się tylko CSV…”",
     mockStatus: "submitted",
     mockChips: ["Chrome 124 · macOS", "XPath", "2 błędy JS"],
   },
@@ -123,15 +135,18 @@ const pl: Dict = {
     cards: [
       {
         before: "„ten przycisk na podstronie zamówień jest źle...”",
-        after: 'Element button[data-action="export"], screenshot, XPath, ścieżka nawigacji i nagranie głosowe 0:42.',
+        after:
+          'Element button[data-action="export"], screenshot, XPath, ścieżka nawigacji i nagranie głosowe 0:42.',
       },
       {
         before: "„opisz wymaganie w jednym akapicie i wyślij w mailu”",
-        after: "Notatka głosowa jako funkcja pierwszej klasy. PO mówi, AI transkrybuje i grupuje uwagi.",
+        after:
+          "Notatka głosowa jako funkcja pierwszej klasy. PO mówi, AI transkrybuje i grupuje uwagi.",
       },
       {
         before: "„przepisz 40 maili z feedbackiem na tickety w Jira”",
-        after: "Tytuł, opis, kryteria akceptacji, etykiety i sub-taski — według Twojego szablonu, gotowe do akceptacji.",
+        after:
+          "Tytuł, opis, kryteria akceptacji, etykiety i sub-taski — według Twojego szablonu, gotowe do akceptacji.",
       },
     ],
   },
@@ -140,22 +155,56 @@ const pl: Dict = {
     h2: "Cztery role, jeden przepływ.",
     lead: "Praca asynchroniczna — recenzent zgłasza wtedy, kiedy widzi problem; PO uruchamia analizę po sesji; developer dostaje gotowy ticket.",
     steps: [
-      { h: "Konfiguracja", p: "SA podpina klucze AI i projekt. PO definiuje szablon zadań i mapowanie eksportu (Jira / GitHub / JSON / CSV).", who: "role · SA → PO" },
-      { h: "Zgłoszenie", p: "Recenzent otwiera aplikację z nakładką SDK. Klika element, nagrywa głos, pisze tekst. Autosave offline, idempotentny Send.", who: "role · Recenzent" },
-      { h: "Analiza AI", p: "PO uruchamia analizę po sesji: transkrypcja audio, zrzuty z vision i szablon trafiają do LLM. Adnotacje grupowane w spójne zadania.", who: "role · PO" },
-      { h: "Review & eksport", p: "PO akceptuje, edytuje lub odrzuca propozycje. Idempotentny eksport: create-only, bez duplikatów w Twoim trackerze.", who: "role · PO → Dev" },
+      {
+        h: "Konfiguracja",
+        p: "SA podpina klucze AI i projekt. PO definiuje szablon zadań i mapowanie eksportu (Jira / GitHub / JSON / CSV).",
+        who: "role · SA → PO",
+      },
+      {
+        h: "Zgłoszenie",
+        p: "Recenzent otwiera aplikację z nakładką SDK. Klika element, nagrywa głos, pisze tekst. Autosave offline, idempotentny Send.",
+        who: "role · Recenzent",
+      },
+      {
+        h: "Analiza AI",
+        p: "PO uruchamia analizę po sesji: transkrypcja audio, zrzuty z vision i szablon trafiają do LLM. Adnotacje grupowane w spójne zadania.",
+        who: "role · PO",
+      },
+      {
+        h: "Review & eksport",
+        p: "PO akceptuje, edytuje lub odrzuca propozycje. Idempotentny eksport: create-only, bez duplikatów w Twoim trackerze.",
+        who: "role · PO → Dev",
+      },
     ],
   },
   features: {
     eyebrow: "Funkcje",
     h2: "Wszystko, czego brakuje narzędziom do bug-reportingu.",
     items: [
-      { h: "Adnotacje na elemencie", p: "Klik w UI zapisuje selektor CSS, XPath, fragment HTML, ścieżkę nawigacji i zrzut viewportu. Bez zgadywania, którego przycisku dotyczy uwaga." },
-      { h: "Notatki głosowe", p: "Funkcja pierwszej klasy, nie dodatek. PO mówi swobodnie, recenzent nagrywa narrację ekranu — transkrypcja po sesji, w wybranym języku." },
-      { h: "Kontekst techniczny", p: "Automatycznie: konsola, błędy JS, ostatnie żądania sieciowe, przeglądarka i OS. Plus kontekst aplikacji: build, środowisko, użytkownik, feature flags." },
-      { h: "AI wg Twojego szablonu", p: "LLM grupuje uwagi i pisze: tytuł, opis, kryteria akceptacji (Given/When/Then), etykiety, sub-taski. Dokładnie według szablonu projektu — nie generyczne." },
-      { h: "Eksport do Jira & GitHub", p: "Create-only, idempotentnie — bez duplikatów przy ponownym kliknięciu. Mapowanie pól per projekt. Backup do JSON i CSV w jednym kroku." },
-      { h: "Tryb asynchroniczny", p: "Recenzent nie czeka na PO. PO nie czeka na recenzenta. Analiza AI uruchamiana po sesji — nie w czasie rzeczywistym, bez kosztu wzajemnego blokowania." },
+      {
+        h: "Adnotacje na elemencie",
+        p: "Klik w UI zapisuje selektor CSS, XPath, fragment HTML, ścieżkę nawigacji i zrzut viewportu. Bez zgadywania, którego przycisku dotyczy uwaga.",
+      },
+      {
+        h: "Notatki głosowe",
+        p: "Funkcja pierwszej klasy, nie dodatek. PO mówi swobodnie, recenzent nagrywa narrację ekranu — transkrypcja po sesji, w wybranym języku.",
+      },
+      {
+        h: "Kontekst techniczny",
+        p: "Automatycznie: konsola, błędy JS, ostatnie żądania sieciowe, przeglądarka i OS. Plus kontekst aplikacji: build, środowisko, użytkownik, feature flags.",
+      },
+      {
+        h: "AI wg Twojego szablonu",
+        p: "LLM grupuje uwagi i pisze: tytuł, opis, kryteria akceptacji (Given/When/Then), etykiety, sub-taski. Dokładnie według szablonu projektu — nie generyczne.",
+      },
+      {
+        h: "Eksport do Jira & GitHub",
+        p: "Create-only, idempotentnie — bez duplikatów przy ponownym kliknięciu. Mapowanie pól per projekt. Backup do JSON i CSV w jednym kroku.",
+      },
+      {
+        h: "Tryb asynchroniczny",
+        p: "Recenzent nie czeka na PO. PO nie czeka na recenzenta. Analiza AI uruchamiana po sesji — nie w czasie rzeczywistym, bez kosztu wzajemnego blokowania.",
+      },
     ],
   },
   state: {
@@ -166,8 +215,10 @@ const pl: Dict = {
     task: "Zadanie",
     annNodes: ["draft", "submitted", "processed"],
     taskNodes: ["generated", "accepted", "exported"],
-    annNote: "Autosave offline w stanie draft. Idempotentny submit chroni przed duplikatami. processed = AI zwróciła kandydata na zadanie.",
-    taskNote: "Propozycja AI w stanie generated. PO akceptuje lub edytuje → accepted. Eksport do Jira/GitHub kończy cykl: exported.",
+    annNote:
+      "Autosave offline w stanie draft. Idempotentny submit chroni przed duplikatami. processed = AI zwróciła kandydata na zadanie.",
+    taskNote:
+      "Propozycja AI w stanie generated. PO akceptuje lub edytuje → accepted. Eksport do Jira/GitHub kończy cykl: exported.",
   },
   compare: {
     eyebrow: "Porównanie",
@@ -177,13 +228,55 @@ const pl: Dict = {
     colSpeqify: "Speqify",
     colOther: "Visual feedback klasyczny",
     rows: [
-      { f: "Adnotacja na żywej aplikacji", s: "✓ Wbudowane", o: "✓ Wbudowane", sk: "yes", ok: "yes" },
-      { f: "Notatki głosowe (pierwsza klasa)", s: "✓ Z transkrypcją AI", o: "— Brak lub załącznik", sk: "yes", ok: "no" },
-      { f: "AI pisze tickety wg szablonu", s: "✓ Tytuł, opis, AC, sub-taski", o: "~ Streszczenia / sugestie", sk: "yes", ok: "partial" },
-      { f: "Kontekst techniczny (konsola, sieć, build)", s: "✓ Automatycznie", o: "✓ Automatycznie", sk: "yes", ok: "yes" },
-      { f: "Idempotentny eksport (Jira / GitHub)", s: "✓ Create-only, bez duplikatów", o: "~ Integracje, ale duplikaty się zdarzają", sk: "yes", ok: "partial" },
-      { f: "Tryb asynchroniczny PO ↔ recenzent", s: "✓ Wbudowany przepływ", o: "~ Wymaga procesu zewnętrznego", sk: "yes", ok: "partial" },
-      { f: "Hosting w UE, narzędzia RODO", s: "✓ Domyślnie", o: "~ Zależnie od planu", sk: "yes", ok: "partial" },
+      {
+        f: "Adnotacja na żywej aplikacji",
+        s: "✓ Wbudowane",
+        o: "✓ Wbudowane",
+        sk: "yes",
+        ok: "yes",
+      },
+      {
+        f: "Notatki głosowe (pierwsza klasa)",
+        s: "✓ Z transkrypcją AI",
+        o: "— Brak lub załącznik",
+        sk: "yes",
+        ok: "no",
+      },
+      {
+        f: "AI pisze tickety wg szablonu",
+        s: "✓ Tytuł, opis, AC, sub-taski",
+        o: "~ Streszczenia / sugestie",
+        sk: "yes",
+        ok: "partial",
+      },
+      {
+        f: "Kontekst techniczny (konsola, sieć, build)",
+        s: "✓ Automatycznie",
+        o: "✓ Automatycznie",
+        sk: "yes",
+        ok: "yes",
+      },
+      {
+        f: "Idempotentny eksport (Jira / GitHub)",
+        s: "✓ Create-only, bez duplikatów",
+        o: "~ Integracje, ale duplikaty się zdarzają",
+        sk: "yes",
+        ok: "partial",
+      },
+      {
+        f: "Tryb asynchroniczny PO ↔ recenzent",
+        s: "✓ Wbudowany przepływ",
+        o: "~ Wymaga procesu zewnętrznego",
+        sk: "yes",
+        ok: "partial",
+      },
+      {
+        f: "Hosting w UE, narzędzia RODO",
+        s: "✓ Domyślnie",
+        o: "~ Zależnie od planu",
+        sk: "yes",
+        ok: "partial",
+      },
     ],
   },
   privacy: {
@@ -192,10 +285,22 @@ const pl: Dict = {
     p: "Zaprojektowane od podstaw pod europejskie wymagania zgodności. Bez kompromisów wymuszanych przez infrastrukturę spoza UE.",
     points: [
       { strong: "Zgoda przy pierwszym użyciu.", rest: "Recenzent wie, co i kiedy jest nagrywane." },
-      { strong: "Scrubbing sekretów.", rest: "Tokeny, hasła i klucze API automatycznie usuwane z zrzutów i HTML-a." },
-      { strong: "Blurowanie PII.", rest: "Narzędzia do zamazywania imion, adresów, numerów kart — manualne i automatyczne." },
-      { strong: "Retencja i prawo do usunięcia.", rest: "Polityki retencji per projekt, jednoklik delete dla użytkownika końcowego." },
-      { strong: "Dane w UE.", rest: "Hosting i przetwarzanie LLM w wybranym regionie europejskim." },
+      {
+        strong: "Scrubbing sekretów.",
+        rest: "Tokeny, hasła i klucze API automatycznie usuwane z zrzutów i HTML-a.",
+      },
+      {
+        strong: "Blurowanie PII.",
+        rest: "Narzędzia do zamazywania imion, adresów, numerów kart — manualne i automatyczne.",
+      },
+      {
+        strong: "Retencja i prawo do usunięcia.",
+        rest: "Polityki retencji per projekt, jednoklik delete dla użytkownika końcowego.",
+      },
+      {
+        strong: "Dane w UE.",
+        rest: "Hosting i przetwarzanie LLM w wybranym regionie europejskim.",
+      },
     ],
   },
   bottom: {
@@ -208,7 +313,8 @@ const pl: Dict = {
     fine: "Bez spamu. Twój adres nie trafi na żadną listę marketingową.",
   },
   footer: {
-    tagline: "Zbieranie wymagań i feedbacku wprost na żywej aplikacji webowej. Polski produkt, hostowany w UE.",
+    tagline:
+      "Zbieranie wymagań i feedbacku wprost na żywej aplikacji webowej. Polski produkt, hostowany w UE.",
     productH: "Produkt",
     product: ["Jak to działa", "Funkcje", "Porównanie", "Beta zamknięta"],
     resourcesH: "Zasoby",
@@ -225,7 +331,12 @@ const en: Dict = {
   metaTitle: "Speqify — collect requirements right on your live app",
   metaDesc:
     "A reviewer clicks an element, talks to the mic, and AI turns the notes into ready Jira or GitHub tickets — in your template, in your language.",
-  benefit: ["Polish-made · GDPR-ready", "SDK in 5 minutes", "Export to Jira & GitHub", "Closed beta — join in"],
+  benefit: [
+    "Polish-made · GDPR-ready",
+    "SDK in 5 minutes",
+    "Export to Jira & GitHub",
+    "Closed beta — join in",
+  ],
   nav: { how: "How it works", features: "Features", compare: "Compare", privacy: "Privacy" },
   ctaHeader: "Join the beta",
   hero: {
@@ -237,7 +348,8 @@ const en: Dict = {
     checks: ["No credit card", "SDK in 5 minutes", "Hosted in the EU"],
     mockUrl: "app.yourproduct.com/dashboard/orders",
     mockSelector: 'button.app-btn[data-action="export"]',
-    mockVoice: "“After export the report should land in the PO's email and as a Slack attachment — right now it only downloads a CSV…”",
+    mockVoice:
+      "“After export the report should land in the PO's email and as a Slack attachment — right now it only downloads a CSV…”",
     mockStatus: "submitted",
     mockChips: ["Chrome 124 · macOS", "XPath", "2 JS errors"],
   },
@@ -254,15 +366,18 @@ const en: Dict = {
     cards: [
       {
         before: "“that button on the orders page is wrong...”",
-        after: 'Element button[data-action="export"], a screenshot, XPath, the navigation path and a 0:42 voice note.',
+        after:
+          'Element button[data-action="export"], a screenshot, XPath, the navigation path and a 0:42 voice note.',
       },
       {
         before: "“describe the requirement in one paragraph and email it”",
-        after: "Voice notes as a first-class feature. The PO speaks, AI transcribes and groups the remarks.",
+        after:
+          "Voice notes as a first-class feature. The PO speaks, AI transcribes and groups the remarks.",
       },
       {
         before: "“rewrite 40 feedback emails into Jira tickets”",
-        after: "Title, description, acceptance criteria, labels and sub-tasks — in your template, ready to accept.",
+        after:
+          "Title, description, acceptance criteria, labels and sub-tasks — in your template, ready to accept.",
       },
     ],
   },
@@ -271,22 +386,56 @@ const en: Dict = {
     h2: "Four roles, one flow.",
     lead: "Asynchronous by design — the reviewer reports when they see the problem; the PO runs analysis after the session; the developer gets a ready ticket.",
     steps: [
-      { h: "Setup", p: "SA wires AI keys and the project. PO defines the task template and export mapping (Jira / GitHub / JSON / CSV).", who: "roles · SA → PO" },
-      { h: "Report", p: "The reviewer opens the app with the SDK overlay. Clicks an element, records voice, writes text. Offline autosave, idempotent Send.", who: "role · Reviewer" },
-      { h: "AI analysis", p: "After the session the PO runs analysis: audio transcription, vision screenshots and the template go to the LLM. Annotations grouped into coherent tasks.", who: "role · PO" },
-      { h: "Review & export", p: "PO accepts, edits or rejects the proposals. Idempotent export: create-only, no duplicates in your tracker.", who: "roles · PO → Dev" },
+      {
+        h: "Setup",
+        p: "SA wires AI keys and the project. PO defines the task template and export mapping (Jira / GitHub / JSON / CSV).",
+        who: "roles · SA → PO",
+      },
+      {
+        h: "Report",
+        p: "The reviewer opens the app with the SDK overlay. Clicks an element, records voice, writes text. Offline autosave, idempotent Send.",
+        who: "role · Reviewer",
+      },
+      {
+        h: "AI analysis",
+        p: "After the session the PO runs analysis: audio transcription, vision screenshots and the template go to the LLM. Annotations grouped into coherent tasks.",
+        who: "role · PO",
+      },
+      {
+        h: "Review & export",
+        p: "PO accepts, edits or rejects the proposals. Idempotent export: create-only, no duplicates in your tracker.",
+        who: "roles · PO → Dev",
+      },
     ],
   },
   features: {
     eyebrow: "Features",
     h2: "Everything bug-reporting tools are missing.",
     items: [
-      { h: "Element-level annotations", p: "A UI click captures the CSS selector, XPath, HTML fragment, navigation path and a viewport screenshot. No guessing which button the remark is about." },
-      { h: "Voice notes", p: "A first-class feature, not an add-on. The PO speaks freely, the reviewer narrates the screen — transcription after the session, in the chosen language." },
-      { h: "Technical context", p: "Automatically: console, JS errors, recent network requests, browser and OS. Plus app context: build, environment, user, feature flags." },
-      { h: "AI in your template", p: "The LLM groups remarks and writes: title, description, acceptance criteria (Given/When/Then), labels, sub-tasks. Exactly per the project template — not generic." },
-      { h: "Export to Jira & GitHub", p: "Create-only, idempotent — no duplicates on a repeat click. Per-project field mapping. JSON and CSV backup in one step." },
-      { h: "Asynchronous mode", p: "The reviewer doesn't wait for the PO. The PO doesn't wait for the reviewer. AI analysis runs after the session — not in real time, no mutual blocking cost." },
+      {
+        h: "Element-level annotations",
+        p: "A UI click captures the CSS selector, XPath, HTML fragment, navigation path and a viewport screenshot. No guessing which button the remark is about.",
+      },
+      {
+        h: "Voice notes",
+        p: "A first-class feature, not an add-on. The PO speaks freely, the reviewer narrates the screen — transcription after the session, in the chosen language.",
+      },
+      {
+        h: "Technical context",
+        p: "Automatically: console, JS errors, recent network requests, browser and OS. Plus app context: build, environment, user, feature flags.",
+      },
+      {
+        h: "AI in your template",
+        p: "The LLM groups remarks and writes: title, description, acceptance criteria (Given/When/Then), labels, sub-tasks. Exactly per the project template — not generic.",
+      },
+      {
+        h: "Export to Jira & GitHub",
+        p: "Create-only, idempotent — no duplicates on a repeat click. Per-project field mapping. JSON and CSV backup in one step.",
+      },
+      {
+        h: "Asynchronous mode",
+        p: "The reviewer doesn't wait for the PO. The PO doesn't wait for the reviewer. AI analysis runs after the session — not in real time, no mutual blocking cost.",
+      },
     ],
   },
   state: {
@@ -297,8 +446,10 @@ const en: Dict = {
     task: "Task",
     annNodes: ["draft", "submitted", "processed"],
     taskNodes: ["generated", "accepted", "exported"],
-    annNote: "Offline autosave in the draft state. Idempotent submit prevents duplicates. processed = AI returned a task candidate.",
-    taskNote: "AI proposal in the generated state. PO accepts or edits → accepted. Export to Jira/GitHub closes the cycle: exported.",
+    annNote:
+      "Offline autosave in the draft state. Idempotent submit prevents duplicates. processed = AI returned a task candidate.",
+    taskNote:
+      "AI proposal in the generated state. PO accepts or edits → accepted. Export to Jira/GitHub closes the cycle: exported.",
   },
   compare: {
     eyebrow: "Compare",
@@ -309,12 +460,48 @@ const en: Dict = {
     colOther: "Classic visual feedback",
     rows: [
       { f: "Annotation on the live app", s: "✓ Built in", o: "✓ Built in", sk: "yes", ok: "yes" },
-      { f: "Voice notes (first class)", s: "✓ With AI transcription", o: "— None or attachment", sk: "yes", ok: "no" },
-      { f: "AI writes tickets per template", s: "✓ Title, description, AC, sub-tasks", o: "~ Summaries / suggestions", sk: "yes", ok: "partial" },
-      { f: "Technical context (console, network, build)", s: "✓ Automatic", o: "✓ Automatic", sk: "yes", ok: "yes" },
-      { f: "Idempotent export (Jira / GitHub)", s: "✓ Create-only, no duplicates", o: "~ Integrations, but duplicates happen", sk: "yes", ok: "partial" },
-      { f: "Async PO ↔ reviewer mode", s: "✓ Built-in flow", o: "~ Needs an external process", sk: "yes", ok: "partial" },
-      { f: "EU hosting, GDPR tooling", s: "✓ By default", o: "~ Plan dependent", sk: "yes", ok: "partial" },
+      {
+        f: "Voice notes (first class)",
+        s: "✓ With AI transcription",
+        o: "— None or attachment",
+        sk: "yes",
+        ok: "no",
+      },
+      {
+        f: "AI writes tickets per template",
+        s: "✓ Title, description, AC, sub-tasks",
+        o: "~ Summaries / suggestions",
+        sk: "yes",
+        ok: "partial",
+      },
+      {
+        f: "Technical context (console, network, build)",
+        s: "✓ Automatic",
+        o: "✓ Automatic",
+        sk: "yes",
+        ok: "yes",
+      },
+      {
+        f: "Idempotent export (Jira / GitHub)",
+        s: "✓ Create-only, no duplicates",
+        o: "~ Integrations, but duplicates happen",
+        sk: "yes",
+        ok: "partial",
+      },
+      {
+        f: "Async PO ↔ reviewer mode",
+        s: "✓ Built-in flow",
+        o: "~ Needs an external process",
+        sk: "yes",
+        ok: "partial",
+      },
+      {
+        f: "EU hosting, GDPR tooling",
+        s: "✓ By default",
+        o: "~ Plan dependent",
+        sk: "yes",
+        ok: "partial",
+      },
     ],
   },
   privacy: {
@@ -323,10 +510,22 @@ const en: Dict = {
     p: "Designed from the ground up for European compliance. No compromises forced by non-EU infrastructure.",
     points: [
       { strong: "Consent on first use.", rest: "The reviewer knows what is recorded and when." },
-      { strong: "Secret scrubbing.", rest: "Tokens, passwords and API keys auto-stripped from screenshots and HTML." },
-      { strong: "PII blurring.", rest: "Tools to redact names, addresses, card numbers — manual and automatic." },
-      { strong: "Retention & right to erasure.", rest: "Per-project retention policies, one-click delete for the end user." },
-      { strong: "Data in the EU.", rest: "Hosting and LLM processing in the chosen European region." },
+      {
+        strong: "Secret scrubbing.",
+        rest: "Tokens, passwords and API keys auto-stripped from screenshots and HTML.",
+      },
+      {
+        strong: "PII blurring.",
+        rest: "Tools to redact names, addresses, card numbers — manual and automatic.",
+      },
+      {
+        strong: "Retention & right to erasure.",
+        rest: "Per-project retention policies, one-click delete for the end user.",
+      },
+      {
+        strong: "Data in the EU.",
+        rest: "Hosting and LLM processing in the chosen European region.",
+      },
     ],
   },
   bottom: {
@@ -339,7 +538,8 @@ const en: Dict = {
     fine: "No spam. Your address won't go on any marketing list.",
   },
   footer: {
-    tagline: "Requirements and feedback gathering right on your live web app. Polish-made, hosted in the EU.",
+    tagline:
+      "Requirements and feedback gathering right on your live web app. Polish-made, hosted in the EU.",
     productH: "Product",
     product: ["How it works", "Features", "Compare", "Closed beta"],
     resourcesH: "Resources",

@@ -412,8 +412,7 @@ section {
 /* Hero */
 .hero {
   background:
-    radial-gradient(ellipse 80% 60% at 50% -10%, #eff6ff 0%, transparent 60%),
-    var(--neutral);
+    radial-gradient(ellipse 80% 60% at 50% -10%, #eff6ff 0%, transparent 60%), var(--neutral);
   padding: 64px 0 96px;
   overflow: hidden;
 }

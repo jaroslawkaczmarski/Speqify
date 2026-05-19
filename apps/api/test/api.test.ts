@@ -860,13 +860,7 @@ describe("PO review (Phase 8)", () => {
     expect((await repo.getTask("tsk-1"))?.title).toBe("Edited title");
 
     await post(app, "/po/tasks/tsk-2/accept", tok, { expectedRev: 1 });
-    const blocked = await post(
-      app,
-      "/po/tasks/tsk-2",
-      tok,
-      { ...edit, expectedRev: 2 },
-      "PUT",
-    );
+    const blocked = await post(app, "/po/tasks/tsk-2", tok, { ...edit, expectedRev: 2 }, "PUT");
     expect(blocked.status).toBe(400);
   });
 
@@ -929,8 +923,7 @@ describe("PO review (Phase 8)", () => {
 });
 
 describe("SA dashboard data (Tranche B)", () => {
-  const sa = (app: ReturnType<typeof createApp>) =>
-    login(app, "admin@speqify.app", "s3cret-pass");
+  const sa = (app: ReturnType<typeof createApp>) => login(app, "admin@speqify.app", "s3cret-pass");
 
   it("returns live admin stats", async () => {
     const { app } = makeApp();

@@ -599,9 +599,7 @@ export function createApp(deps: {
     if (!project) throw new ApiException("not_found", "No project for this account");
     const format = c.req.query("format") === "csv" ? "csv" : "json";
     const all = await repo.listTasks(project.id);
-    const exportable = all.filter(
-      (t) => t.status === "accepted" || t.status === "exported",
-    );
+    const exportable = all.filter((t) => t.status === "accepted" || t.status === "exported");
     if (exportable.length === 0) {
       throw new ApiException("bad_request", "No accepted tasks to export");
     }
