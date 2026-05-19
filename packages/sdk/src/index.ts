@@ -1,11 +1,12 @@
 /**
  * @speqify/sdk — overlay SDK.
  *
- * Done: token validation, consent gate, element pick, structured fields,
- * text note, voice, screenshot + redaction tool, narrated screen recording
- * (parallel mic audio for transcription), automatic technical + breadcrumb +
- * host-app context, idempotent add + Send, offline-resilient outbox. Phase 5
- * complete.
+ * Dark-by-default install: the script can ship on production but only opens
+ * the overlay when a URL carries the session+reviewer token pair. All capture
+ * (token validation, consent gate, element pick, structured fields, text
+ * note, voice, screenshot + redaction, narrated screen recording, automatic
+ * technical + breadcrumb + host-app context, idempotent add + Send,
+ * offline-resilient outbox) is unchanged from Phase 5.
  */
 import type { HostAppContext } from "@speqify/shared";
 import { startBreadcrumb } from "./breadcrumb.js";
@@ -16,11 +17,13 @@ import { mountOverlay, type OverlayInstance } from "./overlay.js";
 import { startTechnicalCapture } from "./technical.js";
 
 export interface SpeqifyInitOptions {
-  /** Panel capability token (from URL/launcher). SDK stays dormant if invalid. */
-  token: string;
+  /** Session token (from `?speqify_session=`). */
+  sessionToken: string;
+  /** Reviewer token (from `?speqify_reviewer=`). */
+  reviewerToken: string;
   /** API base, e.g. https://api.speqify.app */
   apiBaseUrl: string;
-  /** Only activate in non-production / review environments. */
+  /** Master kill-switch. Leaves the script dormant even if URL tokens exist. */
   enabled: boolean;
   /** Host-app context bundled with every annotation (build/env/user/flags). */
   context?: HostAppContext;
@@ -33,15 +36,20 @@ export type SpeqifyInstance = OverlayInstance;
 const FLUSH_INTERVAL_MS = 30_000;
 
 export async function init(options: SpeqifyInitOptions): Promise<SpeqifyInstance | null> {
-  if (!options.enabled || !options.token) return null;
-  const client = new SpeqifyClient(options.apiBaseUrl, options.token);
-  const info = await client.validate();
-  if (!info || info.status !== "open") return null;
+  if (!options.enabled || !options.sessionToken || !options.reviewerToken) return null;
+  const client = new SpeqifyClient(options.apiBaseUrl, {
+    sessionToken: options.sessionToken,
+    reviewerToken: options.reviewerToken,
+  });
+  const intro = await client.fetchIntro();
+  if (!intro) return null;
 
   const technical = startTechnicalCapture();
   const breadcrumb = startBreadcrumb();
 
-  // Offline-resilient send: try now, persist + retry on failure (§14).
+  // Offline-resilient send: try now, persist + retry on failure (§14). The
+  // outbox holds payloads only — the bearer tokens live on the client closure
+  // so we never persist secrets to IndexedDB.
   const outbox = new Outbox(createOutboxStore());
   const sender: SendFn = (p) => client.createAnnotation(p);
   const flush = (): void => void outbox.flush(sender).catch(() => undefined);
@@ -50,20 +58,12 @@ export async function init(options: SpeqifyInitOptions): Promise<SpeqifyInstance
   window.addEventListener("online", onOnline);
   const timer = window.setInterval(flush, FLUSH_INTERVAL_MS);
 
-  let sessionLabel = info.projectName ?? info.environmentUrl;
-  if (!info.projectName) {
-    try {
-      sessionLabel = new URL(info.environmentUrl).host;
-    } catch {
-      /* keep raw value if it is not a parseable URL */
-    }
-  }
-
   const overlay = mountOverlay(client, {
     technical: technical.snapshot,
     breadcrumb: breadcrumb.steps,
     sendAnnotation: (p) => outbox.send(p, sender),
-    sessionLabel,
+    sessionLabel: intro.sessionName || intro.projectName || "",
+    intro,
     ...(options.context ? { hostApp: options.context } : {}),
     ...(options.html2canvasUrl ? { screenshotUrl: options.html2canvasUrl } : {}),
   });
@@ -81,6 +81,6 @@ export async function init(options: SpeqifyInitOptions): Promise<SpeqifyInstance
   };
 }
 
-export const SDK_VERSION = "0.5.0";
+export const SDK_VERSION = "0.6.0";
 export { SpeqifyClient } from "./client.js";
 export { buildAnnotationPayload } from "./payload.js";

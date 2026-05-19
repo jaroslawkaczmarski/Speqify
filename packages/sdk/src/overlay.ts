@@ -14,6 +14,7 @@ import type {
   CreateAnnotationInput,
   HostAppContext,
   NavigationStep,
+  SdkSessionIntro,
   TechnicalContext,
 } from "@speqify/shared";
 import type { SpeqifyClient } from "./client.js";
@@ -284,6 +285,11 @@ button{font-family:inherit;cursor:pointer}
   color:var(--info);display:grid;place-items:center;flex:none}
 .consent-list li .ic svg{width:13px;height:13px}
 .consent-list li strong{color:var(--primary);font-weight:600}
+.consent-about{padding:14px 22px 4px;display:flex;flex-direction:column;gap:10px}
+.consent-about .about-block{margin:0;padding:11px 13px;background:var(--surface-muted);
+  border-radius:10px;font-size:12.5px;line-height:1.55;color:var(--secondary);white-space:pre-wrap}
+.consent-about .about-block strong{display:block;font-size:11.5px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--primary);font-weight:600;margin-bottom:3px}
 .consent-checks{padding:16px 22px;display:flex;flex-direction:column;gap:9px}
 .consent-checks label{display:flex;align-items:flex-start;gap:9px;font-size:12.5px;
   line-height:1.5;color:var(--secondary);cursor:pointer}
@@ -402,6 +408,9 @@ export interface OverlayDeps {
   screenshotUrl?: string;
   /** Display name shown in the status pill / panel subtitle. */
   sessionLabel?: string;
+  /** PO-authored session intro (description + instructions + reviewer name).
+   *  Drives the welcome-modal copy. */
+  intro?: SdkSessionIntro;
   /** Offline-resilient send (outbox). Falls back to direct create if absent. */
   sendAnnotation?: (payload: CreateAnnotationInput) => Promise<"sent" | "queued">;
 }
@@ -874,13 +883,29 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     panel.hidden = false;
     if (!consented()) {
       const codeIcon = '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>';
+      const intro = deps.intro;
+      const reviewerName = intro?.reviewerName?.trim() ?? "";
+      const greeting = reviewerName ? `Witaj ${esc(reviewerName)}!` : "Witaj!";
+      const heading = intro?.sessionName
+        ? `${greeting} <span class="muted">·</span> ${esc(intro.sessionName)}`
+        : `${greeting} <span class="muted">·</span> ${esc(sessionLabel)}`;
+      const descBlock = intro?.description?.trim()
+        ? `<p class="about-block"><strong>O sesji</strong><br />${esc(intro.description)}</p>`
+        : "";
+      const instrBlock = intro?.instructions?.trim()
+        ? `<p class="about-block"><strong>Na co zwrócić uwagę</strong><br />${esc(intro.instructions)}</p>`
+        : "";
+      const aboutWrap = descBlock || instrBlock
+        ? `<div class="consent-about">${descBlock}${instrBlock}</div>`
+        : "";
       panel.innerHTML = `<div class="consent">
         <div class="consent-head">
           <span class="logo" aria-hidden="true">${svg(ICON.logo, "2.5")}</span>
-          <h3>Witaj w sesji review · ${esc(sessionLabel)}</h3>
+          <h3>${heading}</h3>
           <p>Zostałeś zaproszony do dodawania adnotacji wprost na działającej aplikacji.
           Zanim zaczniesz, potrzebujemy Twojej zgody.</p>
         </div>
+        ${aboutWrap}
         <ul class="consent-list">
           <li>
             <span class="ic">${svg(ICON.mic)}</span>
