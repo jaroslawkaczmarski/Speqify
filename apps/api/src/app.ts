@@ -49,7 +49,7 @@ const templateSchema = z.object({
   labels: z.array(z.string().max(64)).max(50),
   components: z.array(z.string().max(64)).max(50),
   versions: z.array(z.string().max(64)).max(50),
-  customFields: z.record(z.string().max(200)),
+  customFields: z.record(z.string(), z.string().max(200)),
 });
 
 const DEFAULT_TEMPLATE: ProjectTemplate = {
@@ -86,9 +86,9 @@ const transcriptEditSchema = z.object({ transcript: z.string().max(100_000) });
 
 const exportConfigSchema = z.object({
   target: z.enum(["jira", "github", "json", "csv"]),
-  credentials: z.record(z.string().max(4096)).optional(),
-  fieldMapping: z.record(z.string().max(200)).default({}),
-  defaults: z.record(z.string().max(200)).default({}),
+  credentials: z.record(z.string(), z.string().max(4096)).optional(),
+  fieldMapping: z.record(z.string(), z.string().max(200)).default({}),
+  defaults: z.record(z.string(), z.string().max(200)).default({}),
 });
 
 export function createApp(deps: {

@@ -1,7 +1,3 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /* Speqify panel — Convergence "Admin / PO Panel" design, ported verbatim.
    Tokens mirror @speqify/tokens (single source); kept as CSS vars so the
    markup is a near-1:1 port of the design prototypes. */

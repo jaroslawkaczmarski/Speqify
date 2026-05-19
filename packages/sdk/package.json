@@ -19,8 +19,8 @@
     "@speqify/shared": "workspace:*"
   },
   "devDependencies": {
-    "esbuild": "^0.25.12",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "esbuild": "^0.28.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
   }
 }

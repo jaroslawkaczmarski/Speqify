@@ -1,5 +1,9 @@
 "use strict";
 (() => {
+  var __defProp = Object.defineProperty;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+
   // packages/sdk/src/scrub.ts
   var SECRET_PATTERNS = [
     /\bBearer\s+[A-Za-z0-9._-]+/gi,
@@ -67,8 +71,8 @@
   // packages/sdk/src/client.ts
   var SpeqifyClient = class {
     constructor(base, token2) {
-      this.base = base;
-      this.token = token2;
+      __publicField(this, "base", base);
+      __publicField(this, "token", token2);
     }
     async validate() {
       try {
@@ -166,9 +170,9 @@
   }
   var Outbox = class {
     constructor(store, now = Date.now, maxQueue = MAX_QUEUE) {
-      this.store = store;
-      this.now = now;
-      this.maxQueue = maxQueue;
+      __publicField(this, "store", store);
+      __publicField(this, "now", now);
+      __publicField(this, "maxQueue", maxQueue);
     }
     /** Try to send now; queue on failure. Returns the outcome. */
     async send(payload, send) {
@@ -1046,7 +1050,9 @@ button{font-family:inherit;cursor:pointer}
           );
         }
         rows.push(
-          `<div class="kv"><div class="kv-row"><span class="l">\u015Acie\u017Cka</span><span class="v">${bc.length ? esc(bc.slice(-6).map((s) => new URL(s.url).pathname).join(" \u2192 ")) : esc(location.pathname)}</span></div></div>`
+          `<div class="kv"><div class="kv-row"><span class="l">\u015Acie\u017Cka</span><span class="v">${bc.length ? esc(
+            bc.slice(-6).map((s) => new URL(s.url).pathname).join(" \u2192 ")
+          ) : esc(location.pathname)}</span></div></div>`
         );
         return `<div class="sec"><span class="sec-label">Automatyczny kontekst techniczny</span>${rows.join("")}</div><p class="empty-note">Ten kontekst jest do\u0142\u0105czany automatycznie do ka\u017Cdej adnotacji w tej sesji.</p>`;
       }
@@ -1126,18 +1132,26 @@ button{font-family:inherit;cursor:pointer}
       <div class="row-2">
         <div class="sec">
           <span class="sec-label">Rodzaj</span>
-          ${seg("kind", [
-        { v: "bug", label: "B\u0142\u0105d", cls: "danger" },
-        { v: "change", label: "Zmiana", cls: "ok" }
-      ], kind)}
+          ${seg(
+        "kind",
+        [
+          { v: "bug", label: "B\u0142\u0105d", cls: "danger" },
+          { v: "change", label: "Zmiana", cls: "ok" }
+        ],
+        kind
+      )}
         </div>
         <div class="sec">
           <span class="sec-label">Priorytet</span>
-          ${seg("sev", [
-        { v: "low", label: "Niski", cls: "ok" },
-        { v: "medium", label: "\u015Aredni", cls: "warn" },
-        { v: "high", label: "Wysoki", cls: "danger" }
-      ], severity)}
+          ${seg(
+        "sev",
+        [
+          { v: "low", label: "Niski", cls: "ok" },
+          { v: "medium", label: "\u015Aredni", cls: "warn" },
+          { v: "high", label: "Wysoki", cls: "danger" }
+        ],
+        severity
+      )}
         </div>
       </div>
       <div class="sec">
@@ -1429,7 +1443,8 @@ button{font-family:inherit;cursor:pointer}
         let recordingAudio = null;
         if (screenOut) {
           recordingVideo = await client.upload("recording-video", screenOut.video);
-          if (screenOut.audio) recordingAudio = await client.upload("recording-audio", screenOut.audio);
+          if (screenOut.audio)
+            recordingAudio = await client.upload("recording-audio", screenOut.audio);
         }
         const body = buildAnnotationPayload({
           submissionId: getSubmissionId(),

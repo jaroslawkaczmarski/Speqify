@@ -78,7 +78,7 @@ export const hostAppContextSchema = z.object({
   buildSha: z.string().max(64).optional(),
   environment: z.string().max(64).optional(),
   testUser: z.string().max(256).optional(),
-  featureFlags: z.record(z.boolean()).optional(),
+  featureFlags: z.record(z.string(), z.boolean()).optional(),
 });
 
 /** Body of POST /panels/:token/annotations — client-generated ids = idempotent. */
