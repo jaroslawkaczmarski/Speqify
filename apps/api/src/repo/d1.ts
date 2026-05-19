@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "@speqify/db/schema";
 import type {
@@ -20,8 +20,24 @@ import type {
   User,
   UserRole,
 } from "@speqify/shared";
+import type {
+  AdminStats,
+  AuditEntry,
+  Lead,
+  PlatformProviderConfig,
+  PlatformProviderConfigView,
+  ProjectStatus,
+  SubtaskType,
+} from "@speqify/shared";
 import { newId } from "../lib/ids.js";
-import type { AnnotationCreate, Repository, TaskDraftInput, UserWithSecret } from "./types.js";
+import type {
+  AnnotationCreate,
+  Repository,
+  TaskDraftInput,
+  TaskMutation,
+  TaskPatch,
+  UserWithSecret,
+} from "./types.js";
 
 type Db = DrizzleD1Database<typeof schema>;
 type PanelRow = typeof schema.panels.$inferSelect;
@@ -59,10 +75,14 @@ function toTask(r: TaskRow): Task {
     component: r.component ?? null,
     version: r.version ?? null,
     priority: (r.priority as Task["priority"]) ?? null,
+    confidence: r.confidence ?? null,
+    subtaskType: (r.subtaskType as SubtaskType | null) ?? null,
     annotationIds: r.annotationIds,
     screenshotKeys: r.screenshotKeys,
     externalId: r.externalId ?? null,
     exportError: r.exportError ?? null,
+    reviewedAt: r.reviewedAt ?? null,
+    rev: r.rev ?? 1,
     createdAt: r.createdAt,
   };
 }
@@ -84,6 +104,7 @@ function toProject(r: ProjectRow): Project {
     name: r.name,
     productOwnerId: r.productOwnerId,
     environmentUrls: r.environmentUrls,
+    status: (r.status as ProjectStatus) ?? "live",
     template: r.template,
     exportConfigId: r.exportConfigId ?? null,
     createdAt: r.createdAt,
@@ -132,6 +153,7 @@ function toAnnotation(r: AnnotationRow): Annotation {
       ? (r.transcriptionStatus as Annotation["transcriptionStatus"])
       : null,
     textNote: r.textNote ?? null,
+    tags: r.tags ?? [],
     structured: r.structured ?? null,
     technical: r.technical ?? null,
     hostApp: r.hostApp ?? null,
@@ -223,6 +245,7 @@ export class D1Repository implements Repository {
         recordingVideo: input.recordingVideo,
         recordingAudio: input.recordingAudio,
         textNote: input.textNote,
+        tags: input.tags ?? [],
         structured: input.structured,
         technical: input.technical,
         hostApp: input.hostApp,
@@ -585,6 +608,8 @@ export class D1Repository implements Repository {
           component: d.component,
           version: d.version,
           priority: d.priority,
+          confidence: d.confidence,
+          subtaskType: d.subtaskType,
           annotationIds: d.annotationIds,
           screenshotKeys: d.screenshotKeys,
         })
@@ -613,5 +638,178 @@ export class D1Repository implements Repository {
       .from(schema.tasks)
       .where(eq(schema.tasks.projectId, projectId));
     return rows.map(toTask);
+  }
+
+  async getTask(id: string): Promise<Task | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.tasks)
+      .where(eq(schema.tasks.id, id))
+      .limit(1);
+    return rows[0] ? toTask(rows[0]) : null;
+  }
+
+  async getAnnotationsByIds(ids: string[]): Promise<Annotation[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db
+      .select()
+      .from(schema.annotations)
+      .where(inArray(schema.annotations.id, ids));
+    return rows.map(toAnnotation);
+  }
+
+  async updateTask(id: string, expectedRev: number, patch: TaskPatch): Promise<TaskMutation> {
+    // Optimistic write: the rev predicate makes the update a no-op under a
+    // concurrent edit; a follow-up read disambiguates not-found vs conflict.
+    const set: Record<string, unknown> = { rev: expectedRev + 1 };
+    if (patch.title !== undefined) set["title"] = patch.title;
+    if (patch.description !== undefined) set["description"] = patch.description;
+    if (patch.acceptanceCriteria !== undefined)
+      set["acceptanceCriteria"] = patch.acceptanceCriteria;
+    if (patch.labels !== undefined) set["labels"] = patch.labels;
+    if (patch.component !== undefined) set["component"] = patch.component;
+    if (patch.version !== undefined) set["version"] = patch.version;
+    if (patch.priority !== undefined) set["priority"] = patch.priority;
+    if (patch.subtaskType !== undefined) set["subtaskType"] = patch.subtaskType;
+    if (patch.confidence !== undefined) set["confidence"] = patch.confidence;
+    if (patch.status !== undefined) set["status"] = patch.status;
+    if (patch.reviewedAt !== undefined) set["reviewedAt"] = patch.reviewedAt;
+    if (patch.externalId !== undefined) set["externalId"] = patch.externalId;
+    if (patch.exportError !== undefined) set["exportError"] = patch.exportError;
+
+    const updated = await this.db
+      .update(schema.tasks)
+      .set(set)
+      .where(and(eq(schema.tasks.id, id), eq(schema.tasks.rev, expectedRev)))
+      .returning();
+    if (updated[0]) return { ok: true, task: toTask(updated[0]) };
+    const exists = await this.getTask(id);
+    return { ok: false, reason: exists ? "conflict" : "not_found" };
+  }
+
+  async setProjectStatus(projectId: string, status: ProjectStatus): Promise<Project | null> {
+    const updated = await this.db
+      .update(schema.projects)
+      .set({ status })
+      .where(eq(schema.projects.id, projectId))
+      .returning();
+    return updated[0] ? toProject(updated[0]) : null;
+  }
+
+  async appendAudit(entry: {
+    kind: string;
+    actor: string;
+    summary: string;
+    severity: "ok" | "warn" | "danger";
+    projectId: string | null;
+  }): Promise<void> {
+    await this.db.insert(schema.auditLog).values({ id: newId(), ...entry });
+  }
+
+  async listAudit(limit: number): Promise<AuditEntry[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.auditLog)
+      .orderBy(desc(schema.auditLog.createdAt))
+      .limit(limit);
+    return rows.map((r) => ({
+      id: r.id,
+      at: r.createdAt,
+      kind: r.kind,
+      actor: r.actor,
+      summary: r.summary,
+      severity: r.severity as AuditEntry["severity"],
+      projectId: r.projectId ?? null,
+    }));
+  }
+
+  async getAdminStats(): Promise<AdminStats> {
+    const [projects, users, anns, tasks] = await Promise.all([
+      this.db.select({ id: schema.projects.id }).from(schema.projects),
+      this.db.select({ role: schema.users.role }).from(schema.users),
+      this.db.select({ status: schema.annotations.status }).from(schema.annotations),
+      this.db.select({ status: schema.tasks.status }).from(schema.tasks),
+    ]);
+    const accepted = tasks.filter((t) => t.status === "accepted").length;
+    const rejected = tasks.filter((t) => t.status === "rejected").length;
+    const exported = tasks.filter((t) => t.status === "exported").length;
+    const reviewed = accepted + rejected;
+    return {
+      projects: projects.length,
+      productOwners: users.filter((u) => u.role === "product_owner").length,
+      annotations: anns.length,
+      submitted: anns.filter((a) => a.status === "submitted").length,
+      tasks: tasks.length,
+      accepted,
+      rejected,
+      exported,
+      acceptRate: reviewed === 0 ? null : accepted / reviewed,
+    };
+  }
+
+  async getPlatformConfig(): Promise<PlatformProviderConfigView | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.platformConfig)
+      .where(eq(schema.platformConfig.id, "default"))
+      .limit(1);
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      aiProvider: r.aiProvider as PlatformProviderConfig["aiProvider"],
+      aiModel: r.aiModel,
+      ...(r.aiEndpoint ? { aiEndpoint: r.aiEndpoint } : {}),
+      transcriptionProvider:
+        r.transcriptionProvider as PlatformProviderConfig["transcriptionProvider"],
+      ...(r.transcriptionEndpoint ? { transcriptionEndpoint: r.transcriptionEndpoint } : {}),
+      aiKeyConfigured: r.aiKeyRef !== null,
+      aiKeyHint: r.aiKeyHint ?? null,
+    };
+  }
+
+  async setPlatformConfig(args: {
+    config: PlatformProviderConfig;
+    aiKeyRef: string | null;
+    aiKeyHint: string | null;
+  }): Promise<PlatformProviderConfigView> {
+    const existing = await this.getPlatformConfig();
+    const keepKey = args.aiKeyRef === null && existing?.aiKeyConfigured;
+    const values = {
+      id: "default",
+      aiProvider: args.config.aiProvider,
+      aiModel: args.config.aiModel,
+      aiEndpoint: args.config.aiEndpoint ?? null,
+      transcriptionProvider: args.config.transcriptionProvider,
+      transcriptionEndpoint: args.config.transcriptionEndpoint ?? null,
+      ...(keepKey ? {} : { aiKeyRef: args.aiKeyRef, aiKeyHint: args.aiKeyHint }),
+    };
+    await this.db
+      .insert(schema.platformConfig)
+      .values(values)
+      .onConflictDoUpdate({ target: schema.platformConfig.id, set: values });
+    return (await this.getPlatformConfig()) as PlatformProviderConfigView;
+  }
+
+  async addLead(email: string, locale: "pl" | "en" | null): Promise<Lead> {
+    const inserted = await this.db
+      .insert(schema.leads)
+      .values({ id: newId(), email, locale })
+      .returning();
+    const r = inserted[0] as typeof schema.leads.$inferSelect;
+    return { id: r.id, email: r.email, locale: (r.locale as Lead["locale"]) ?? null, at: r.createdAt };
+  }
+
+  async listLeads(limit: number): Promise<Lead[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.leads)
+      .orderBy(desc(schema.leads.createdAt))
+      .limit(limit);
+    return rows.map((r) => ({
+      id: r.id,
+      email: r.email,
+      locale: (r.locale as Lead["locale"]) ?? null,
+      at: r.createdAt,
+    }));
   }
 }

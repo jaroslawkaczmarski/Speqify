@@ -4,7 +4,7 @@
  * Secrets come from Cloudflare Secrets Store in production (§9). Locally they
  * are provided via `.dev.vars`. Never commit real values.
  */
-import type { AiBinding } from "./transcribe/types.js";
+import type { AiBinding, TranscriptionMessage } from "./transcribe/types.js";
 
 export interface Env {
   readonly ENVIRONMENT?: string;
@@ -22,6 +22,8 @@ export interface Env {
   readonly MEDIA?: R2Bucket;
   /** Workers AI binding (default Whisper transcription). */
   readonly AI?: AiBinding;
+  /** Transcription queue — producer pokes it on submit; `queue()` consumes (Phase 6). */
+  readonly TRANSCRIPTION_QUEUE?: Queue<TranscriptionMessage>;
   /** External transcription provider (OpenAI/Groq-compatible) — optional. */
   readonly TRANSCRIBE_ENDPOINT?: string;
   readonly TRANSCRIBE_API_KEY?: string;

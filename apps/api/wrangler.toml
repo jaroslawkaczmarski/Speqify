@@ -16,17 +16,19 @@ database_id = "61034a64-138c-4c1a-9c85-7cde9af9c600"
 binding = "MEDIA"
 bucket_name = "speqify-media"
 
-# Phase 6 (needs Workers Paid):
-# [[queues.producers]]
-# binding = "TRANSCRIPTION_QUEUE"
-# queue = "speqify-transcription"
-# [[queues.consumers]]
-# queue = "speqify-transcription"
-# max_batch_size = 10
+# Phase 6 transcription queue. Queues are on the Free plan since 2026-02-04;
+# Workers Paid (active) only raises CPU/invocation + retention headroom.
+[[queues.producers]]
+binding = "TRANSCRIPTION_QUEUE"
+queue = "speqify-transcription"
 
-# Phase 6 (default Whisper transcription):
-# [ai]
-# binding = "AI"
+[[queues.consumers]]
+queue = "speqify-transcription"
+max_batch_size = 10
+
+# Default Whisper transcription (Workers AI).
+[ai]
+binding = "AI"
 
 [observability]
 enabled = true

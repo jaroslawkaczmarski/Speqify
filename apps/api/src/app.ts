@@ -3,12 +3,24 @@ import type { Context } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import {
+  canTransitionTask,
   createAnnotationSchema,
+  leadSchema,
+  projectStatusSchema,
+  providerConfigSchema,
   submitSchema,
+  taskActionSchema,
+  taskEditSchema,
+  IMMUTABLE_TASK_STATUSES,
   type CreateAnnotationInput,
+  type PlatformProviderConfig,
+  type PoSourceAnnotation,
   type ProjectTemplate,
   type SubmitInput,
+  type Task,
 } from "@speqify/shared";
+import { buildPrompt } from "./analysis/prompt.js";
+import { parseAnalysisOutput } from "./analysis/schema.js";
 import { runAnalysis } from "./analysis/service.js";
 import type { LlmProvider } from "./analysis/types.js";
 import { authenticate, requireRole } from "./auth/auth.js";
@@ -22,7 +34,7 @@ import { requireOpenPanel, withPanel } from "./middleware/panel.js";
 import { body, validateJson } from "./middleware/validate.js";
 import type { Repository } from "./repo/types.js";
 import { runOnce as runTranscription } from "./transcribe/service.js";
-import type { Transcriber } from "./transcribe/types.js";
+import type { Transcriber, TranscriptionMessage } from "./transcribe/types.js";
 import type { AppEnv } from "./types.js";
 
 const loginSchema = z.object({
@@ -104,6 +116,39 @@ export function createApp(deps: {
 
   app.get("/health", (c) => c.json({ status: "ok", service: "speqify-api" }));
 
+  // Public closed-beta lead capture from the marketing landing (any origin —
+  // it only accepts an email; no self-serve signup in V1, §11).
+  app.use(
+    "/leads",
+    cors({ origin: "*", allowMethods: ["POST", "OPTIONS"], allowHeaders: ["content-type"] }),
+  );
+  // The SDK runs inside the host app (a different origin from the API), so
+  // browser fetches to the capability-token endpoints are cross-origin and
+  // need CORS. The capability token is the auth boundary; ingest/submit also
+  // enforce the strict per-panel Origin allowlist server-side (requireOpenPanel).
+  app.use(
+    "/panels/*",
+    cors({
+      origin: (o) => o ?? "*",
+      allowMethods: ["GET", "POST", "OPTIONS"],
+      allowHeaders: ["content-type"],
+      maxAge: 86400,
+    }),
+  );
+
+  app.post("/leads", validateJson(leadSchema), async (c) => {
+    const b = body<z.infer<typeof leadSchema>>(c);
+    const lead = await repo.addLead(b.email, b.locale ?? null);
+    await repo.appendAudit({
+      kind: "lead.received",
+      actor: "landing",
+      summary: `Zgłoszenie do bety: ${b.email}`,
+      severity: "ok",
+      projectId: null,
+    });
+    return c.json({ ok: true, id: lead.id }, 201);
+  });
+
   // Public media (unguessable keys are the access control, §14). Stable URLs
   // so links embedded in exported tickets never rot.
   app.get("/media/*", async (c) => {
@@ -148,6 +193,13 @@ export function createApp(deps: {
         displayName: b.displayName,
         passwordHash,
       });
+      await repo.appendAudit({
+        kind: "user.created",
+        actor: c.get("session").sub,
+        summary: `Utworzono Product Ownera ${user.email}`,
+        severity: "ok",
+        projectId: null,
+      });
       return c.json({ id: user.id, email: user.email, password }, 201);
     } catch {
       throw new ApiException("conflict", "Email already exists");
@@ -165,6 +217,13 @@ export function createApp(deps: {
       productOwnerId: b.productOwnerId,
       environmentUrls: b.environmentUrls,
       template: b.template ?? DEFAULT_TEMPLATE,
+    });
+    await repo.appendAudit({
+      kind: "project.created",
+      actor: c.get("session").sub,
+      summary: `Dodano projekt „${project.name}”`,
+      severity: "ok",
+      projectId: project.id,
     });
     return c.json(project, 201);
   });
@@ -186,6 +245,13 @@ export function createApp(deps: {
       environmentUrl: b.environmentUrl,
       secretToken,
     });
+    await repo.appendAudit({
+      kind: "panel.created",
+      actor: c.get("session").sub,
+      summary: `Nowy panel (${b.audience}) dla „${project.name}”`,
+      severity: "ok",
+      projectId: project.id,
+    });
     const sep = b.environmentUrl.includes("?") ? "&" : "?";
     return c.json(
       { id: panel.id, secretToken, panelUrl: `${b.environmentUrl}${sep}speqify=${secretToken}` },
@@ -205,7 +271,65 @@ export function createApp(deps: {
   admin.delete("/panels/:panelId", async (c) => {
     const ok = await repo.deletePanel(c.req.param("panelId"));
     if (!ok) throw new ApiException("not_found", "Panel not found");
+    await repo.appendAudit({
+      kind: "panel.deleted",
+      actor: c.get("session").sub,
+      summary: `Usunięto panel ${c.req.param("panelId")} (link odwołany)`,
+      severity: "warn",
+      projectId: null,
+    });
     return c.json({ deleted: true });
+  });
+
+  // --- SA dashboard real data (Tranche B) ---
+
+  admin.get("/stats", async (c) => c.json(await repo.getAdminStats()));
+
+  admin.get("/audit", async (c) => {
+    const limit = Math.min(Number(c.req.query("limit")) || 20, 100);
+    return c.json({ entries: await repo.listAudit(limit) });
+  });
+
+  admin.post("/projects/:id/status", validateJson(projectStatusSchema), async (c) => {
+    const project = await repo.getProject(c.req.param("id"));
+    if (!project) throw new ApiException("not_found", "Project not found");
+    const { status } = body<z.infer<typeof projectStatusSchema>>(c);
+    const updated = await repo.setProjectStatus(project.id, status);
+    if (!updated) throw new ApiException("not_found", "Project not found");
+    await repo.appendAudit({
+      kind: "project.status",
+      actor: c.get("session").sub,
+      summary: `Projekt „${updated.name}” → ${status}`,
+      severity: status === "archived" ? "warn" : "ok",
+      projectId: updated.id,
+    });
+    return c.json({ id: updated.id, status: updated.status });
+  });
+
+  admin.get("/providers", async (c) => c.json({ config: await repo.getPlatformConfig() }));
+
+  admin.put("/providers", validateJson(providerConfigSchema), async (c) => {
+    const b = body<z.infer<typeof providerConfigSchema>>(c);
+    const key = b.aiKey?.trim();
+    // Key is envelope-encrypted at rest; only a 4-char hint is ever echoed (§9).
+    const aiKeyRef = key ? await encryptJson(config.envelopeKey, { aiKey: key }) : null;
+    const aiKeyHint = key ? key.slice(-4) : null;
+    const cfg: PlatformProviderConfig = {
+      aiProvider: b.aiProvider,
+      aiModel: b.aiModel,
+      ...(b.aiEndpoint ? { aiEndpoint: b.aiEndpoint } : {}),
+      transcriptionProvider: b.transcriptionProvider,
+      ...(b.transcriptionEndpoint ? { transcriptionEndpoint: b.transcriptionEndpoint } : {}),
+    };
+    const view = await repo.setPlatformConfig({ config: cfg, aiKeyRef, aiKeyHint });
+    await repo.appendAudit({
+      kind: "providers.updated",
+      actor: c.get("session").sub,
+      summary: `Zaktualizowano dostawcę AI: ${cfg.aiProvider}/${cfg.aiModel}`,
+      severity: "ok",
+      projectId: null,
+    });
+    return c.json({ config: view });
   });
 
   // Manual trigger now; a Cloudflare Queue consumer + Cron drives this in
@@ -326,6 +450,13 @@ export function createApp(deps: {
     if (!project) throw new ApiException("not_found", "No project for this account");
     const res = await runAnalysis({ repo, llm }, project);
     if (res.locked) throw new ApiException("conflict", "Analysis already running");
+    await repo.appendAudit({
+      kind: "analysis.finished",
+      actor: c.get("session").sub,
+      summary: `Analiza AI dla „${project.name}”: ${res.annotations} adnotacji → ${res.tasksCreated} zadań (${res.status})`,
+      severity: res.status === "succeeded" ? "ok" : "danger",
+      projectId: project.id,
+    });
     return c.json(res);
   });
 
@@ -335,6 +466,231 @@ export function createApp(deps: {
     return c.json({ tasks: await repo.listTasks(project.id) });
   });
 
+  // --- PO review (Phase 8) ---
+
+  /** Resolve a task that belongs to the requesting PO's project (else 404). */
+  const ownedTask = async (c: Context<AppEnv>): Promise<Task> => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    const id = c.req.param("id") ?? "";
+    const task = id ? await repo.getTask(id) : null;
+    if (!task || task.projectId !== project.id) {
+      throw new ApiException("not_found", "Task not found");
+    }
+    return task;
+  };
+
+  const applyMutation = (
+    r: { ok: true; task: Task } | { ok: false; reason: "not_found" | "conflict" },
+  ): Task => {
+    if (r.ok) return r.task;
+    if (r.reason === "conflict") {
+      throw new ApiException("conflict", "Task changed since you loaded it — reload and retry");
+    }
+    throw new ApiException("not_found", "Task not found");
+  };
+
+  po.get("/tasks/:id", async (c) => c.json({ task: await ownedTask(c) }));
+
+  po.get("/tasks/:id/annotations", async (c) => {
+    const task = await ownedTask(c);
+    const anns = await repo.getAnnotationsByIds(task.annotationIds);
+    const out: PoSourceAnnotation[] = anns.map((a) => ({
+      id: a.id,
+      type: a.type,
+      selector: a.element?.selector ?? null,
+      textNote: a.textNote,
+      transcript: a.transcript,
+      transcriptionStatus: a.transcriptionStatus,
+      voiceUrl: a.voice?.publicUrl ?? a.recordingAudio?.publicUrl ?? null,
+      screenshotUrl: a.screenshot?.publicUrl ?? null,
+      tags: a.tags,
+      structured: a.structured,
+      createdAt: a.serverCreatedAt,
+    }));
+    return c.json({ annotations: out });
+  });
+
+  const reviewTransition = (target: "accepted" | "rejected") => async (c: Context<AppEnv>) => {
+    const task = await ownedTask(c);
+    const b = body<z.infer<typeof taskActionSchema>>(c);
+    if (!canTransitionTask(task.status, target)) {
+      throw new ApiException(
+        "bad_request",
+        `Cannot ${target === "accepted" ? "accept" : "reject"} a task in "${task.status}"`,
+      );
+    }
+    const r = await repo.updateTask(task.id, b.expectedRev, {
+      status: target,
+      reviewedAt: new Date().toISOString(),
+    });
+    const out = applyMutation(r);
+    await repo.appendAudit({
+      kind: `task.${target}`,
+      actor: c.get("session").sub,
+      summary: `Zadanie „${out.title.slice(0, 80)}” → ${target}`,
+      severity: target === "rejected" ? "warn" : "ok",
+      projectId: out.projectId,
+    });
+    return c.json({ task: out });
+  };
+
+  po.post("/tasks/:id/accept", validateJson(taskActionSchema), reviewTransition("accepted"));
+  po.post("/tasks/:id/reject", validateJson(taskActionSchema), reviewTransition("rejected"));
+
+  po.put("/tasks/:id", validateJson(taskEditSchema), async (c) => {
+    const task = await ownedTask(c);
+    if (IMMUTABLE_TASK_STATUSES.includes(task.status)) {
+      throw new ApiException("bad_request", `A "${task.status}" task can no longer be edited`);
+    }
+    const b = body<z.infer<typeof taskEditSchema>>(c);
+    const r = await repo.updateTask(task.id, b.expectedRev, {
+      title: b.title,
+      description: b.description,
+      acceptanceCriteria: b.acceptanceCriteria,
+      labels: b.labels,
+      component: b.component,
+      version: b.version,
+      priority: b.priority,
+      subtaskType: b.subtaskType,
+    });
+    return c.json({ task: applyMutation(r) });
+  });
+
+  // Regenerate = scoped re-analysis of just this task's source annotations.
+  po.post("/tasks/:id/regenerate", validateJson(taskActionSchema), async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    const id = c.req.param("id") ?? "";
+    const task = id ? await repo.getTask(id) : null;
+    if (!task || task.projectId !== project.id) {
+      throw new ApiException("not_found", "Task not found");
+    }
+    if (IMMUTABLE_TASK_STATUSES.includes(task.status)) {
+      throw new ApiException("bad_request", `A "${task.status}" task can no longer be regenerated`);
+    }
+    const b = body<z.infer<typeof taskActionSchema>>(c);
+    const anns = await repo.getAnnotationsByIds(task.annotationIds);
+    if (anns.length === 0) {
+      throw new ApiException("bad_request", "Task has no source annotations to regenerate from");
+    }
+    const out = parseAnalysisOutput(await llm.complete(buildPrompt(project, anns)));
+    const fresh = out?.tasks[0];
+    if (!fresh) throw new ApiException("bad_request", "Regeneration did not return a valid task");
+    const r = await repo.updateTask(task.id, b.expectedRev, {
+      title: fresh.title,
+      description: fresh.description,
+      acceptanceCriteria: fresh.acceptanceCriteria,
+      labels: fresh.labels,
+      component: fresh.component,
+      version: fresh.version,
+      priority: fresh.priority,
+      confidence: fresh.confidence,
+    });
+    return c.json({ task: applyMutation(r) });
+  });
+
+  // Phase 9: self-contained JSON/CSV export of accepted tasks. Idempotent —
+  // accepted -> exported with a stable externalId; re-running never duplicates
+  // and re-includes already-exported tasks (full snapshot). Jira/GitHub live
+  // push still needs PO creds (later Phase 9).
+  po.post("/tasks/export", async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    const format = c.req.query("format") === "csv" ? "csv" : "json";
+    const all = await repo.listTasks(project.id);
+    const exportable = all.filter(
+      (t) => t.status === "accepted" || t.status === "exported",
+    );
+    if (exportable.length === 0) {
+      throw new ApiException("bad_request", "No accepted tasks to export");
+    }
+
+    let newlyExported = 0;
+    const final: Task[] = [];
+    for (const t of exportable) {
+      if (t.status === "accepted" && canTransitionTask(t.status, "exported")) {
+        const r = await repo.updateTask(t.id, t.rev, {
+          status: "exported",
+          externalId: t.externalId ?? `speqify:${t.id}`,
+          exportError: null,
+        });
+        if (r.ok) {
+          newlyExported++;
+          final.push(r.task);
+          continue;
+        }
+      }
+      final.push(t);
+    }
+
+    const dto = (t: Task) => ({
+      id: t.id,
+      externalId: t.externalId ?? `speqify:${t.id}`,
+      parentTaskId: t.parentTaskId,
+      status: t.status,
+      title: t.title,
+      description: t.description,
+      acceptanceCriteria: t.acceptanceCriteria,
+      labels: t.labels,
+      component: t.component,
+      version: t.version,
+      priority: t.priority,
+      subtaskType: t.subtaskType,
+      confidence: t.confidence,
+      annotationIds: t.annotationIds,
+    });
+
+    let content: string;
+    if (format === "csv") {
+      const cols = [
+        "externalId",
+        "parentTaskId",
+        "status",
+        "title",
+        "description",
+        "acceptanceCriteria",
+        "labels",
+        "component",
+        "version",
+        "priority",
+        "subtaskType",
+        "confidence",
+      ] as const;
+      const esc = (v: unknown): string => {
+        const s = Array.isArray(v) ? v.join(" | ") : v == null ? "" : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const rows = final.map((t) => {
+        const d = dto(t) as Record<string, unknown>;
+        return cols.map((k) => esc(d[k])).join(",");
+      });
+      content = [cols.join(","), ...rows].join("\r\n");
+    } else {
+      content = JSON.stringify(
+        { schema: "speqify.tasks/v1", project: project.id, tasks: final.map(dto) },
+        null,
+        2,
+      );
+    }
+
+    await repo.appendAudit({
+      kind: "export.completed",
+      actor: c.get("session").sub,
+      summary: `Eksport ${format.toUpperCase()}: ${final.length} zadań (${newlyExported} nowo wyeksportowanych)`,
+      severity: "ok",
+      projectId: project.id,
+    });
+
+    return c.json({
+      format,
+      total: final.length,
+      newlyExported,
+      filename: `speqify-${project.id}-tasks.${format}`,
+      content,
+    });
+  });
+
   app.route("/po", po);
 
   // --- Panel (capability-token) ---
@@ -342,13 +698,15 @@ export function createApp(deps: {
   panel.use("/:token", withPanel(repo));
   panel.use("/:token/*", withPanel(repo));
 
-  panel.get("/:token", (c) => {
+  panel.get("/:token", async (c) => {
     const p = c.get("panel");
+    const project = await repo.getProject(p.projectId);
     return c.json({
       panelId: p.id,
       audience: p.audience,
       status: p.status,
       environmentUrl: p.environmentUrl,
+      projectName: project?.name ?? null,
     });
   });
 
@@ -382,6 +740,22 @@ export function createApp(deps: {
       submissionId: input.submissionId,
     });
     if (!ok) throw new ApiException("not_found", "Submission not found");
+    // Near-real-time transcription: poke the queue. `runOnce` is an idempotent
+    // sweep backstop, so a missing queue (tests/local) or send failure is
+    // non-fatal — never block the reviewer's submit on it.
+    const queue = c.env?.TRANSCRIPTION_QUEUE;
+    if (queue) {
+      const msg: TranscriptionMessage = {
+        kind: "transcribe",
+        panelId: p.id,
+        submissionId: input.submissionId,
+      };
+      try {
+        c.executionCtx.waitUntil(queue.send(msg).catch(() => {}));
+      } catch {
+        /* no execution context (unit tests) — sweep/consumer still covers it */
+      }
+    }
     return c.json({ complete: true });
   });
 

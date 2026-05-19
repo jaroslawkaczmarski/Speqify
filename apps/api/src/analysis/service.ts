@@ -77,6 +77,8 @@ export async function runAnalysis(deps: AnalysisDeps, project: Project): Promise
         component: d.component,
         version: d.version,
         priority: d.priority,
+        confidence: d.confidence,
+        subtaskType: d.subtaskType,
         annotationIds: aIds,
         screenshotKeys: shotKeys(aIds),
       };

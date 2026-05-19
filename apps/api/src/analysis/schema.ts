@@ -9,6 +9,10 @@ const baseTask = z.object({
   component: z.string().max(120).nullable().default(null),
   version: z.string().max(64).nullable().default(null),
   priority: z.enum(["low", "medium", "high"]).nullable().default(null),
+  /** Model self-assessed confidence 0–1 (PO review surfaces this). */
+  confidence: z.number().min(0).max(1).nullable().default(null),
+  /** Sub-task discipline; meaningful on `subtasks`, null on parents. */
+  subtaskType: z.enum(["backend", "frontend", "integration", "other"]).nullable().default(null),
   annotationIds: z.array(z.string().max(64)).max(200).default([]),
 });
 

@@ -8,34 +8,51 @@ import type { MediaStore } from "./media/types.js";
 import { D1Repository } from "./repo/d1.js";
 import { InMemoryRepository } from "./repo/memory.js";
 import type { Repository } from "./repo/types.js";
+import { runOnce as runTranscription } from "./transcribe/service.js";
 import { HttpTranscriber, NoopTranscriber, WorkersAiTranscriber } from "./transcribe/providers.js";
-import type { Transcriber } from "./transcribe/types.js";
+import type { Transcriber, TranscriptionMessage } from "./transcribe/types.js";
+
+interface Runtime {
+  repo: Repository;
+  mediaStore: MediaStore;
+  transcriber: Transcriber;
+  llm: LlmProvider;
+}
+
+/**
+ * Builds the injected ports from the Worker bindings. Shared by the `fetch`
+ * entry and the transcription `queue` consumer so both behave identically.
+ * Without a D1 binding it falls back to in-memory adapters (local dev only).
+ */
+function buildRuntime(env: Env): Runtime {
+  const repo: Repository = env.DB ? new D1Repository(env.DB) : new InMemoryRepository();
+  const mediaStore: MediaStore = env.MEDIA
+    ? new R2MediaStore(env.MEDIA)
+    : new InMemoryMediaStore();
+  let transcriber: Transcriber;
+  if (env.AI) transcriber = new WorkersAiTranscriber(env.AI);
+  else if (env.TRANSCRIBE_ENDPOINT && env.TRANSCRIBE_API_KEY)
+    transcriber = new HttpTranscriber(
+      env.TRANSCRIBE_ENDPOINT,
+      env.TRANSCRIBE_API_KEY,
+      env.TRANSCRIBE_MODEL ?? "whisper-1",
+    );
+  else transcriber = new NoopTranscriber();
+  const llm: LlmProvider =
+    env.LLM_ENDPOINT && env.LLM_API_KEY
+      ? new HttpLlmProvider(env.LLM_ENDPOINT, env.LLM_API_KEY, env.LLM_MODEL ?? "gpt-4o-mini")
+      : new NoopLlmProvider();
+  return { repo, mediaStore, transcriber, llm };
+}
 
 /**
  * Speqify API — Cloudflare Worker entry (IMPLEMENTATION_PLAN.md §6 Phase 1).
- * Without a D1 binding it falls back to an in-memory repo (local dev only).
  */
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
       const config = resolveConfig(env);
-      const repo: Repository = env.DB ? new D1Repository(env.DB) : new InMemoryRepository();
-      const mediaStore: MediaStore = env.MEDIA
-        ? new R2MediaStore(env.MEDIA)
-        : new InMemoryMediaStore();
-      let transcriber: Transcriber;
-      if (env.AI) transcriber = new WorkersAiTranscriber(env.AI);
-      else if (env.TRANSCRIBE_ENDPOINT && env.TRANSCRIBE_API_KEY)
-        transcriber = new HttpTranscriber(
-          env.TRANSCRIBE_ENDPOINT,
-          env.TRANSCRIBE_API_KEY,
-          env.TRANSCRIBE_MODEL ?? "whisper-1",
-        );
-      else transcriber = new NoopTranscriber();
-      const llm: LlmProvider =
-        env.LLM_ENDPOINT && env.LLM_API_KEY
-          ? new HttpLlmProvider(env.LLM_ENDPOINT, env.LLM_API_KEY, env.LLM_MODEL ?? "gpt-4o-mini")
-          : new NoopLlmProvider();
+      const { repo, mediaStore, transcriber, llm } = buildRuntime(env);
       return createApp({ repo, config, mediaStore, transcriber, llm }).fetch(request, env, ctx);
     } catch (err) {
       const correlationId = request.headers.get("x-correlation-id") ?? crypto.randomUUID();
@@ -49,6 +66,33 @@ export default {
         },
         { status: 500 },
       );
+    }
+  },
+
+  /**
+   * Transcription queue consumer (Phase 6). The message is only a poke —
+   * `runOnce` is an idempotent sweep over `listTranscribable`, so a whole
+   * batch collapses into a single sweep. Per-annotation failures are handled
+   * inside `runOnce` (marked `failed`, retried next run); we only retry the
+   * batch if the sweep itself throws (e.g. D1 unavailable).
+   */
+  async queue(batch: MessageBatch<TranscriptionMessage>, env: Env): Promise<void> {
+    const { repo, mediaStore, transcriber } = buildRuntime(env);
+    try {
+      const r = await runTranscription({ repo, mediaStore, transcriber });
+      console.log(
+        JSON.stringify({ level: "info", msg: "transcription_queue_run", messages: batch.messages.length, ...r }),
+      );
+      batch.ackAll();
+    } catch (err) {
+      console.log(
+        JSON.stringify({
+          level: "error",
+          msg: "transcription_queue_failed",
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      batch.retryAll();
     }
   },
 };

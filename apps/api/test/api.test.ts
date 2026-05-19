@@ -1,4 +1,4 @@
-import type { Panel, Project } from "@speqify/shared";
+import type { Annotation, Panel, Project, Task } from "@speqify/shared";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import type { AppConfig } from "../src/env.js";
@@ -62,6 +62,7 @@ const poProject: Project = {
   name: "PO Project",
   productOwnerId: "usr_po",
   environmentUrls: ["https://staging.test"],
+  status: "live",
   template: {
     language: "en",
     userStory: true,
@@ -689,5 +690,365 @@ describe("AI analysis (Phase 7)", () => {
       headers: { authorization: `Bearer ${po}` },
     });
     expect(res.status).toBe(409);
+  });
+});
+
+describe("PO review (Phase 8)", () => {
+  const ts = new Date().toISOString();
+  const ann = (id: string, over: Partial<Annotation> = {}): Annotation => ({
+    id,
+    panelId: poPanel.id,
+    submissionId: "sub-rev",
+    type: "element",
+    status: "processed",
+    audience: "client",
+    pageUrl: `${ENV_URL}/orders`,
+    breadcrumb: [],
+    element: { selector: "button.export", xpath: "/html/body/button", html: "<button/>" },
+    screenshot: null,
+    voice: null,
+    recordingVideo: null,
+    recordingAudio: null,
+    transcript: "should also email the report",
+    transcriptionStatus: "done",
+    textNote: null,
+    tags: ["export"],
+    structured: { kind: "change", severity: "medium" },
+    technical: null,
+    hostApp: null,
+    clientCreatedAt: ts,
+    serverCreatedAt: ts,
+    correlationId: `cor-${id}`,
+    ...over,
+  });
+  const task = (id: string, over: Partial<Task> = {}): Task => ({
+    id,
+    projectId: "prj_po",
+    status: "generated",
+    parentTaskId: null,
+    title: `Task ${id}`,
+    description: "desc",
+    acceptanceCriteria: ["Given x", "When y", "Then z"],
+    labels: ["export"],
+    component: null,
+    version: null,
+    priority: "medium",
+    confidence: 0.9,
+    subtaskType: null,
+    annotationIds: ["ann-1", "ann-2"],
+    screenshotKeys: [],
+    externalId: null,
+    exportError: null,
+    reviewedAt: null,
+    rev: 1,
+    createdAt: ts,
+    ...over,
+  });
+
+  function reviewApp() {
+    const repo = new InMemoryRepository({
+      panels: [poPanel],
+      users: [
+        {
+          id: "usr_po",
+          role: "product_owner",
+          email: "po@speqify.app",
+          displayName: "Demo PO",
+          passwordHash: poHash,
+          createdAt: ts,
+        },
+      ],
+      projects: [poProject],
+      annotations: [ann("ann-1"), ann("ann-2", { type: "global", element: null })],
+      tasks: [task("tsk-1"), task("tsk-2"), task("tsk-empty", { annotationIds: [] })],
+    });
+    return {
+      app: createApp({
+        repo,
+        config,
+        mediaStore: new InMemoryMediaStore(),
+        transcriber: okTranscriber(),
+        llm: okLlm('{"tasks":[{"title":"Regenerated title","confidence":0.7}]}'),
+      }),
+      repo,
+    };
+  }
+  const auth = (tok: string) => ({ authorization: `Bearer ${tok}` });
+  const post = (
+    app: ReturnType<typeof createApp>,
+    path: string,
+    tok: string,
+    bodyObj: unknown,
+    method = "POST",
+  ) =>
+    app.request(path, {
+      method,
+      headers: { ...auth(tok), "content-type": "application/json" },
+      body: JSON.stringify(bodyObj),
+    });
+
+  it("fetches a task and its resolved source annotations", async () => {
+    const { app } = reviewApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    const t = await app.request("/po/tasks/tsk-1", { headers: auth(tok) });
+    expect(t.status).toBe(200);
+    expect(((await t.json()) as { task: Task }).task.title).toBe("Task tsk-1");
+
+    const a = await app.request("/po/tasks/tsk-1/annotations", { headers: auth(tok) });
+    expect(a.status).toBe(200);
+    const { annotations } = (await a.json()) as { annotations: { selector: string | null }[] };
+    expect(annotations).toHaveLength(2);
+    expect(annotations[0]?.selector).toBe("button.export");
+  });
+
+  it("404s an unknown / non-owned task", async () => {
+    const { app } = reviewApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    expect((await app.request("/po/tasks/nope", { headers: auth(tok) })).status).toBe(404);
+  });
+
+  it("accept transitions generated -> accepted, stamps review, bumps rev", async () => {
+    const { app, repo } = reviewApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    const res = await post(app, "/po/tasks/tsk-1/accept", tok, { expectedRev: 1 });
+    expect(res.status).toBe(200);
+    const t = await repo.getTask("tsk-1");
+    expect(t?.status).toBe("accepted");
+    expect(t?.reviewedAt).toBeTruthy();
+    expect(t?.rev).toBe(2);
+  });
+
+  it("rejects a stale expectedRev with 409 conflict", async () => {
+    const { app } = reviewApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    const res = await post(app, "/po/tasks/tsk-1/accept", tok, { expectedRev: 99 });
+    expect(res.status).toBe(409);
+  });
+
+  it("cannot accept a task that is not generated", async () => {
+    const { app } = reviewApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    await post(app, "/po/tasks/tsk-1/accept", tok, { expectedRev: 1 });
+    const again = await post(app, "/po/tasks/tsk-1/accept", tok, { expectedRev: 2 });
+    expect(again.status).toBe(400);
+  });
+
+  it("reject transitions generated -> rejected", async () => {
+    const { app, repo } = reviewApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    const res = await post(app, "/po/tasks/tsk-2/reject", tok, { expectedRev: 1 });
+    expect(res.status).toBe(200);
+    expect((await repo.getTask("tsk-2"))?.status).toBe("rejected");
+  });
+
+  it("edits a generated task; refuses to edit an accepted one", async () => {
+    const { app, repo } = reviewApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    const edit = {
+      title: "Edited title",
+      description: "new",
+      acceptanceCriteria: ["Given a", "Then b"],
+      labels: ["export", "notifications"],
+      component: "orders",
+      version: "1.1",
+      priority: "high",
+      subtaskType: null,
+      expectedRev: 1,
+    };
+    const ok = await post(app, "/po/tasks/tsk-1", tok, edit, "PUT");
+    expect(ok.status).toBe(200);
+    expect((await repo.getTask("tsk-1"))?.title).toBe("Edited title");
+
+    await post(app, "/po/tasks/tsk-2/accept", tok, { expectedRev: 1 });
+    const blocked = await post(
+      app,
+      "/po/tasks/tsk-2",
+      tok,
+      { ...edit, expectedRev: 2 },
+      "PUT",
+    );
+    expect(blocked.status).toBe(400);
+  });
+
+  it("regenerate replaces task content from its annotations", async () => {
+    const { app, repo } = reviewApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    const res = await post(app, "/po/tasks/tsk-1/regenerate", tok, { expectedRev: 1 });
+    expect(res.status).toBe(200);
+    const t = await repo.getTask("tsk-1");
+    expect(t?.title).toBe("Regenerated title");
+    expect(t?.confidence).toBe(0.7);
+    expect(t?.rev).toBe(2);
+  });
+
+  it("regenerate 400s a task with no source annotations", async () => {
+    const { app } = reviewApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    const res = await post(app, "/po/tasks/tsk-empty/regenerate", tok, { expectedRev: 1 });
+    expect(res.status).toBe(400);
+  });
+
+  it("exports accepted tasks (JSON) idempotently and marks them exported", async () => {
+    const { app, repo } = reviewApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    await post(app, "/po/tasks/tsk-1/accept", tok, { expectedRev: 1 });
+
+    const r1 = await post(app, "/po/tasks/export?format=json", tok, {});
+    expect(r1.status).toBe(200);
+    const e1 = (await r1.json()) as { total: number; newlyExported: number; content: string };
+    expect(e1.newlyExported).toBe(1);
+    expect(e1.total).toBe(1);
+    expect((await repo.getTask("tsk-1"))?.status).toBe("exported");
+    expect((await repo.getTask("tsk-1"))?.externalId).toBe("speqify:tsk-1");
+    expect(JSON.parse(e1.content).tasks[0].externalId).toBe("speqify:tsk-1");
+
+    // Idempotent re-run: no new transitions, still a full snapshot.
+    const r2 = await post(app, "/po/tasks/export?format=json", tok, {});
+    const e2 = (await r2.json()) as { total: number; newlyExported: number };
+    expect(e2.newlyExported).toBe(0);
+    expect(e2.total).toBe(1);
+  });
+
+  it("exports CSV with a header row", async () => {
+    const { app } = reviewApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    await post(app, "/po/tasks/tsk-2/accept", tok, { expectedRev: 1 });
+    const r = await post(app, "/po/tasks/export?format=csv", tok, {});
+    expect(r.status).toBe(200);
+    const e = (await r.json()) as { format: string; content: string };
+    expect(e.format).toBe("csv");
+    expect(e.content.split("\r\n")[0]).toContain("externalId");
+  });
+
+  it("export 400s when nothing is accepted", async () => {
+    const { app } = reviewApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    const r = await post(app, "/po/tasks/export?format=json", tok, {});
+    expect(r.status).toBe(400);
+  });
+});
+
+describe("SA dashboard data (Tranche B)", () => {
+  const sa = (app: ReturnType<typeof createApp>) =>
+    login(app, "admin@speqify.app", "s3cret-pass");
+
+  it("returns live admin stats", async () => {
+    const { app } = makeApp();
+    const tok = await sa(app);
+    const res = await app.request("/admin/stats", { headers: { authorization: `Bearer ${tok}` } });
+    expect(res.status).toBe(200);
+    const s = (await res.json()) as { projects: number; productOwners: number };
+    expect(s.projects).toBe(1);
+    expect(s.productOwners).toBe(1);
+  });
+
+  it("records audit entries on project create and lists them newest-first", async () => {
+    const { app } = makeApp();
+    const tok = await sa(app);
+    await app.request("/admin/users", {
+      method: "POST",
+      headers: { authorization: `Bearer ${tok}`, "content-type": "application/json" },
+      body: JSON.stringify({ email: "po2@x.test", displayName: "PO Two" }),
+    });
+    const res = await app.request("/admin/audit", {
+      headers: { authorization: `Bearer ${tok}` },
+    });
+    expect(res.status).toBe(200);
+    const { entries } = (await res.json()) as { entries: { kind: string }[] };
+    expect(entries[0]?.kind).toBe("user.created");
+  });
+
+  it("sets project status (SA only) and audits it", async () => {
+    const { app, repo } = makeApp();
+    const tok = await sa(app);
+    const res = await app.request("/admin/projects/prj_po/status", {
+      method: "POST",
+      headers: { authorization: `Bearer ${tok}`, "content-type": "application/json" },
+      body: JSON.stringify({ status: "archived" }),
+    });
+    expect(res.status).toBe(200);
+    expect((await repo.getProject("prj_po"))?.status).toBe("archived");
+    const audit = await repo.listAudit(5);
+    expect(audit.some((a) => a.kind === "project.status")).toBe(true);
+  });
+
+  it("stores provider config and echoes only a masked key hint", async () => {
+    const { app } = makeApp();
+    const tok = await sa(app);
+    const put = await app.request("/admin/providers", {
+      method: "PUT",
+      headers: { authorization: `Bearer ${tok}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        aiProvider: "claude",
+        aiModel: "claude-sonnet-4-6",
+        aiKey: "sk-secret-abcd",
+        transcriptionProvider: "workers-ai",
+      }),
+    });
+    expect(put.status).toBe(200);
+    const get = await app.request("/admin/providers", {
+      headers: { authorization: `Bearer ${tok}` },
+    });
+    const { config } = (await get.json()) as {
+      config: { aiKeyConfigured: boolean; aiKeyHint: string; aiModel: string } | null;
+    };
+    expect(config?.aiKeyConfigured).toBe(true);
+    expect(config?.aiKeyHint).toBe("abcd");
+    expect(JSON.stringify(config)).not.toContain("sk-secret-abcd");
+  });
+
+  it("blocks a PO from admin stats (role guard)", async () => {
+    const { app } = makeApp();
+    const tok = await login(app, "po@speqify.app", "po-pass");
+    const res = await app.request("/admin/stats", {
+      headers: { authorization: `Bearer ${tok}` },
+    });
+    // requireRole treats a wrong-role session as unauthorized (existing contract).
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("ingest tags, panel project name, leads (Tranche D)", () => {
+  it("persists annotation tags through ingest", async () => {
+    const { app, repo } = makeApp();
+    const res = await app.request("/panels/po-tok/annotations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(annotationBody({ tags: ["billing", "urgent"] })),
+    });
+    expect(res.status).toBe(201);
+    const id = ((await res.json()) as { id: string }).id;
+    expect((await repo.getAnnotationById(id))?.tags).toEqual(["billing", "urgent"]);
+  });
+
+  it("panel token validation exposes the project display name", async () => {
+    const { app } = makeApp();
+    const res = await app.request("/panels/po-tok");
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { projectName: string }).toMatchObject({
+      projectName: "PO Project",
+    });
+  });
+
+  it("accepts a closed-beta lead from any origin and audits it", async () => {
+    const { app, repo } = makeApp();
+    const res = await app.request("/leads", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://speqify.app" },
+      body: JSON.stringify({ email: "team@acme.test", locale: "pl" }),
+    });
+    expect(res.status).toBe(201);
+    const leads = await repo.listLeads(5);
+    expect(leads[0]?.email).toBe("team@acme.test");
+  });
+
+  it("rejects a malformed lead email", async () => {
+    const { app } = makeApp();
+    const res = await app.request("/leads", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "not-an-email" }),
+    });
+    expect(res.status).toBe(400);
   });
 });

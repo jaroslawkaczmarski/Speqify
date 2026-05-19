@@ -1,12 +1,18 @@
 import type {
+  AdminStats,
   AnalysisRun,
   Annotation,
+  AuditEntry,
   ExportConfig,
   ExportTarget,
+  Lead,
   Panel,
   PanelAudience,
   PanelStatus,
+  PlatformProviderConfig,
+  PlatformProviderConfigView,
   Project,
+  ProjectStatus,
   ProjectTemplate,
   Submission,
   Task,
@@ -15,7 +21,14 @@ import type {
   UserRole,
 } from "@speqify/shared";
 import { newId } from "../lib/ids.js";
-import type { AnnotationCreate, Repository, TaskDraftInput, UserWithSecret } from "./types.js";
+import type {
+  AnnotationCreate,
+  Repository,
+  TaskDraftInput,
+  TaskMutation,
+  TaskPatch,
+  UserWithSecret,
+} from "./types.js";
 
 /**
  * In-memory Repository — used by unit tests and local dev without D1.
@@ -30,15 +43,28 @@ export class InMemoryRepository implements Repository {
   private exportConfigs = new Map<string, ExportConfig>();
   private runs = new Map<string, AnalysisRun>();
   private tasks = new Map<string, Task>();
+  private audit: AuditEntry[] = [];
+  private platform: PlatformProviderConfigView | null = null;
+  private leads: Lead[] = [];
 
   private panelById(panelId: string): Panel | undefined {
     return [...this.panels.values()].find((p) => p.id === panelId);
   }
 
-  constructor(seed?: { panels?: Panel[]; users?: UserWithSecret[]; projects?: Project[] }) {
+  constructor(seed?: {
+    panels?: Panel[];
+    users?: UserWithSecret[];
+    projects?: Project[];
+    annotations?: Annotation[];
+    tasks?: Task[];
+  }) {
     for (const p of seed?.panels ?? []) this.panels.set(p.secretToken, p);
     for (const u of seed?.users ?? []) this.users.set(u.email.toLowerCase(), u);
     for (const p of seed?.projects ?? []) this.projects.set(p.id, p);
+    // Seeded review data uses the annotation/task id as the map key (no
+    // idempotency key needed — these never arrive via the ingest path).
+    for (const a of seed?.annotations ?? []) this.annotations.set(a.id, a);
+    for (const t of seed?.tasks ?? []) this.tasks.set(t.id, t);
   }
 
   async getPanelByToken(token: string): Promise<Panel | null> {
@@ -89,6 +115,7 @@ export class InMemoryRepository implements Repository {
       transcript: null,
       transcriptionStatus: null,
       textNote: input.textNote,
+      tags: input.tags ?? [],
       structured: input.structured,
       technical: input.technical,
       hostApp: input.hostApp,
@@ -189,12 +216,84 @@ export class InMemoryRepository implements Repository {
       name: args.name,
       productOwnerId: args.productOwnerId,
       environmentUrls: args.environmentUrls,
+      status: "live",
       template: args.template,
       exportConfigId: null,
       createdAt: new Date().toISOString(),
     };
     this.projects.set(project.id, project);
     return project;
+  }
+
+  async setProjectStatus(projectId: string, status: ProjectStatus): Promise<Project | null> {
+    const project = this.projects.get(projectId);
+    if (!project) return null;
+    project.status = status;
+    return project;
+  }
+
+  async appendAudit(entry: {
+    kind: string;
+    actor: string;
+    summary: string;
+    severity: "ok" | "warn" | "danger";
+    projectId: string | null;
+  }): Promise<void> {
+    this.audit.push({ id: newId(), at: new Date().toISOString(), ...entry });
+  }
+
+  async listAudit(limit: number): Promise<AuditEntry[]> {
+    return [...this.audit].reverse().slice(0, limit);
+  }
+
+  async getAdminStats(): Promise<AdminStats> {
+    const tasks = [...this.tasks.values()];
+    const accepted = tasks.filter((t) => t.status === "accepted").length;
+    const rejected = tasks.filter((t) => t.status === "rejected").length;
+    const exported = tasks.filter((t) => t.status === "exported").length;
+    const reviewed = accepted + rejected;
+    const anns = [...this.annotations.values()];
+    return {
+      projects: this.projects.size,
+      productOwners: [...this.users.values()].filter((u) => u.role === "product_owner").length,
+      annotations: anns.length,
+      submitted: anns.filter((a) => a.status === "submitted").length,
+      tasks: tasks.length,
+      accepted,
+      rejected,
+      exported,
+      acceptRate: reviewed === 0 ? null : accepted / reviewed,
+    };
+  }
+
+  async addLead(email: string, locale: "pl" | "en" | null): Promise<Lead> {
+    const lead: Lead = { id: newId(), email, locale, at: new Date().toISOString() };
+    this.leads.push(lead);
+    return lead;
+  }
+
+  async listLeads(limit: number): Promise<Lead[]> {
+    return [...this.leads].reverse().slice(0, limit);
+  }
+
+  async getPlatformConfig(): Promise<PlatformProviderConfigView | null> {
+    return this.platform;
+  }
+
+  async setPlatformConfig(args: {
+    config: PlatformProviderConfig;
+    aiKeyRef: string | null;
+    aiKeyHint: string | null;
+  }): Promise<PlatformProviderConfigView> {
+    // Keep an existing key if the caller did not supply a new one.
+    const keepRef = args.aiKeyRef === null && this.platform?.aiKeyConfigured;
+    const view: PlatformProviderConfigView = {
+      ...args.config,
+      aiKeyConfigured: keepRef ? true : args.aiKeyRef !== null,
+      aiKeyHint: args.aiKeyRef === null ? (this.platform?.aiKeyHint ?? null) : args.aiKeyHint,
+    };
+    this.platform = view;
+    return view;
   }
 
   async createPanel(args: {
@@ -334,10 +433,14 @@ export class InMemoryRepository implements Repository {
         component: d.component,
         version: d.version,
         priority: d.priority,
+        confidence: d.confidence,
+        subtaskType: d.subtaskType,
         annotationIds: d.annotationIds,
         screenshotKeys: d.screenshotKeys,
         externalId: null,
         exportError: null,
+        reviewedAt: null,
+        rev: 1,
         createdAt: new Date().toISOString(),
       };
       this.tasks.set(task.id, task);
@@ -357,5 +460,23 @@ export class InMemoryRepository implements Repository {
 
   async listTasks(projectId: string): Promise<Task[]> {
     return [...this.tasks.values()].filter((t) => t.projectId === projectId);
+  }
+
+  async getTask(id: string): Promise<Task | null> {
+    return this.tasks.get(id) ?? null;
+  }
+
+  async getAnnotationsByIds(ids: string[]): Promise<Annotation[]> {
+    const want = new Set(ids);
+    return [...this.annotations.values()].filter((a) => want.has(a.id));
+  }
+
+  async updateTask(id: string, expectedRev: number, patch: TaskPatch): Promise<TaskMutation> {
+    const task = this.tasks.get(id);
+    if (!task) return { ok: false, reason: "not_found" };
+    if (task.rev !== expectedRev) return { ok: false, reason: "conflict" };
+    const next: Task = { ...task, ...patch, rev: task.rev + 1 };
+    this.tasks.set(id, next);
+    return { ok: true, task: next };
   }
 }

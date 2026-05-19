@@ -1,15 +1,22 @@
 import type {
+  AdminStats,
   Annotation,
   AnalysisRun,
+  AuditEntry,
   CreateAnnotationInput,
   ExportConfig,
   ExportTarget,
+  Lead,
   PanelAudience,
   Panel,
   PanelStatus,
+  PlatformProviderConfig,
+  PlatformProviderConfigView,
   Project,
+  ProjectStatus,
   ProjectTemplate,
   Submission,
+  SubtaskType,
   Task,
   TranscriptionStatus,
   User,
@@ -26,9 +33,35 @@ export interface TaskDraftInput {
   component: string | null;
   version: string | null;
   priority: "low" | "medium" | "high" | null;
+  confidence: number | null;
+  subtaskType: SubtaskType | null;
   annotationIds: string[];
   screenshotKeys: string[];
 }
+
+/** Fields a rev-guarded task mutation may set (edit / accept / reject / regen). */
+export type TaskPatch = Partial<
+  Pick<
+    Task,
+    | "title"
+    | "description"
+    | "acceptanceCriteria"
+    | "labels"
+    | "component"
+    | "version"
+    | "priority"
+    | "subtaskType"
+    | "confidence"
+    | "status"
+    | "reviewedAt"
+    | "externalId"
+    | "exportError"
+  >
+>;
+
+export type TaskMutation =
+  | { ok: true; task: Task }
+  | { ok: false; reason: "not_found" | "conflict" };
 
 export type UserWithSecret = User & { passwordHash: string | null };
 
@@ -96,6 +129,20 @@ export interface Repository {
 
   listTasks(projectId: string): Promise<Task[]>;
 
+  // --- PO review (Phase 8) ---
+
+  getTask(id: string): Promise<Task | null>;
+
+  /** Resolve a task's source annotations (PO review "Adnotacje źródłowe"). */
+  getAnnotationsByIds(ids: string[]): Promise<Annotation[]>;
+
+  /**
+   * Optimistic-locked task mutation: applies `patch` only if `expectedRev`
+   * matches the current `Task.rev`, then bumps `rev`. Transition/ownership
+   * validity is enforced by the caller; this is the atomic write primitive.
+   */
+  updateTask(id: string, expectedRev: number, patch: TaskPatch): Promise<TaskMutation>;
+
   // --- SuperAdmin (Phase 2) ---
 
   listUsers(): Promise<User[]>;
@@ -134,6 +181,37 @@ export interface Repository {
 
   /** Revoke a panel (deletes the capability token) (§9, §14). */
   deletePanel(panelId: string): Promise<boolean>;
+
+  // --- SA dashboard real data (Tranche B / Phase 11) ---
+
+  setProjectStatus(projectId: string, status: ProjectStatus): Promise<Project | null>;
+
+  appendAudit(entry: {
+    kind: string;
+    actor: string;
+    summary: string;
+    severity: "ok" | "warn" | "danger";
+    projectId: string | null;
+  }): Promise<void>;
+
+  listAudit(limit: number): Promise<AuditEntry[]>;
+
+  /** Live aggregates for the SA stat cards. */
+  getAdminStats(): Promise<AdminStats>;
+
+  /** Closed-beta lead from the landing page (no self-serve signup, §11). */
+  addLead(email: string, locale: "pl" | "en" | null): Promise<Lead>;
+
+  listLeads(limit: number): Promise<Lead[]>;
+
+  getPlatformConfig(): Promise<PlatformProviderConfigView | null>;
+
+  /** `aiKeyRef`/`aiKeyHint` are pre-computed by the caller (envelope-encrypted). */
+  setPlatformConfig(args: {
+    config: PlatformProviderConfig;
+    aiKeyRef: string | null;
+    aiKeyHint: string | null;
+  }): Promise<PlatformProviderConfigView>;
 
   // --- Product Owner config (Phase 3) ---
 
