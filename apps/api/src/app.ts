@@ -245,176 +245,6 @@ export function createApp(deps: {
     return c.json(project, 201);
   });
 
-  // --- Review sessions (RS-4) ---
-
-  admin.get("/projects/:id/sessions", async (c) => {
-    const project = await repo.getProject(c.req.param("id"));
-    if (!project) throw new ApiException("not_found", "Project not found");
-    return c.json({ sessions: await repo.listReviewSessionsByProject(project.id) });
-  });
-
-  admin.post(
-    "/projects/:id/sessions",
-    validateJson(createReviewSessionSchema),
-    async (c) => {
-      const project = await repo.getProject(c.req.param("id"));
-      if (!project) throw new ApiException("not_found", "Project not found");
-      const b = body<z.infer<typeof createReviewSessionSchema>>(c);
-      const session = await repo.createReviewSession({
-        projectId: project.id,
-        name: b.name,
-        description: b.description,
-        instructions: b.instructions,
-        envUrl: b.envUrl,
-        startsAt: b.startsAt,
-        endsAt: b.endsAt,
-        createdBy: c.get("session").sub,
-        token: newSecretToken(),
-      });
-      await repo.appendAudit({
-        kind: "session.created",
-        actor: c.get("session").sub,
-        summary: `Utworzono sesję review „${session.name}” w „${project.name}”`,
-        severity: "ok",
-        projectId: project.id,
-      });
-      return c.json(session, 201);
-    },
-  );
-
-  admin.get("/sessions/:id", async (c) => {
-    const session = await repo.getReviewSession(c.req.param("id"));
-    if (!session) throw new ApiException("not_found", "Session not found");
-    const reviewers = await repo.listReviewersBySession(session.id);
-    return c.json({ session, reviewers: reviewers.map(toReviewerView) });
-  });
-
-  admin.patch("/sessions/:id", validateJson(updateReviewSessionSchema), async (c) => {
-    const session = await repo.getReviewSession(c.req.param("id"));
-    if (!session) throw new ApiException("not_found", "Session not found");
-    const b = body<z.infer<typeof updateReviewSessionSchema>>(c);
-    const updated = await repo.updateReviewSession(session.id, b);
-    if (!updated) throw new ApiException("not_found", "Session not found");
-    return c.json(updated);
-  });
-
-  admin.post("/sessions/:id/status", validateJson(reviewSessionStatusSchema), async (c) => {
-    const session = await repo.getReviewSession(c.req.param("id"));
-    if (!session) throw new ApiException("not_found", "Session not found");
-    const { status } = body<z.infer<typeof reviewSessionStatusSchema>>(c);
-    if (status !== session.status && !canTransitionReviewSession(session.status, status)) {
-      throw new ApiException(
-        "bad_request",
-        `Cannot transition session from "${session.status}" to "${status}"`,
-      );
-    }
-    const updated = await repo.setReviewSessionStatus(session.id, status);
-    if (!updated) throw new ApiException("not_found", "Session not found");
-    const kind = status === "live" ? "session.published" : `session.${status}`;
-    await repo.appendAudit({
-      kind,
-      actor: c.get("session").sub,
-      summary: `Sesja „${updated.name}” → ${status}`,
-      severity: status === "closed" ? "warn" : "ok",
-      projectId: updated.projectId,
-    });
-    return c.json({ id: updated.id, status: updated.status });
-  });
-
-  admin.post(
-    "/sessions/:id/reviewers",
-    validateJson(inviteReviewerSchema),
-    async (c) => {
-      const session = await repo.getReviewSession(c.req.param("id"));
-      if (!session) throw new ApiException("not_found", "Session not found");
-      const b = body<z.infer<typeof inviteReviewerSchema>>(c);
-      const reviewer = await repo.addReviewer({
-        sessionId: session.id,
-        name: b.name,
-        email: b.email,
-        token: newSecretToken(),
-      });
-      const inviteUrl = buildInviteUrl(session.envUrl, session.token, reviewer.token);
-      const project = await repo.getProject(session.projectId);
-      const sendResult = await emailSender.send(
-        buildInvitationEmail({
-          reviewerName: reviewer.name,
-          reviewerEmail: reviewer.email,
-          projectName: project?.name ?? "",
-          sessionName: session.name,
-          description: session.description,
-          inviteUrl,
-        }),
-      );
-      await repo.appendAudit({
-        kind: "reviewer.invited",
-        actor: c.get("session").sub,
-        summary: sendResult.sent
-          ? `Zaproszono ${reviewer.email} do sesji „${session.name}” (email wysłany)`
-          : `Zaproszono ${reviewer.email} do sesji „${session.name}” (link gotowy do skopiowania)`,
-        severity: "ok",
-        projectId: session.projectId,
-      });
-      return c.json(
-        {
-          reviewer: toReviewerView(reviewer),
-          inviteUrl,
-          emailSent: sendResult.sent,
-          ...(sendResult.reason ? { emailError: sendResult.reason } : {}),
-        },
-        201,
-      );
-    },
-  );
-
-  admin.delete("/sessions/:id/reviewers/:rid", async (c) => {
-    const session = await repo.getReviewSession(c.req.param("id"));
-    if (!session) throw new ApiException("not_found", "Session not found");
-    const reviewer = await repo.getReviewer(c.req.param("rid"));
-    if (!reviewer || reviewer.sessionId !== session.id) {
-      throw new ApiException("not_found", "Reviewer not found");
-    }
-    const updated = await repo.revokeReviewer(reviewer.id);
-    if (!updated) throw new ApiException("not_found", "Reviewer not found");
-    await repo.appendAudit({
-      kind: "reviewer.revoked",
-      actor: c.get("session").sub,
-      summary: `Odebrano dostęp ${updated.email} (sesja „${session.name}”)`,
-      severity: "warn",
-      projectId: session.projectId,
-    });
-    return c.json({ id: updated.id, status: updated.status });
-  });
-
-  admin.post("/sessions/:id/reviewers/:rid/resend", async (c) => {
-    const session = await repo.getReviewSession(c.req.param("id"));
-    if (!session) throw new ApiException("not_found", "Session not found");
-    const reviewer = await repo.getReviewer(c.req.param("rid"));
-    if (!reviewer || reviewer.sessionId !== session.id) {
-      throw new ApiException("not_found", "Reviewer not found");
-    }
-    if (reviewer.status === "declined") {
-      throw new ApiException("bad_request", "Reviewer access was revoked");
-    }
-    const inviteUrl = buildInviteUrl(session.envUrl, session.token, reviewer.token);
-    const project = await repo.getProject(session.projectId);
-    const sendResult = await emailSender.send(
-      buildInvitationEmail({
-        reviewerName: reviewer.name,
-        reviewerEmail: reviewer.email,
-        projectName: project?.name ?? "",
-        sessionName: session.name,
-        description: session.description,
-        inviteUrl,
-      }),
-    );
-    return c.json({
-      inviteUrl,
-      emailSent: sendResult.sent,
-      ...(sendResult.reason ? { emailError: sendResult.reason } : {}),
-    });
-  });
-
   // --- SA dashboard real data (Tranche B) ---
 
   admin.get("/stats", async (c) => c.json(await repo.getAdminStats()));
@@ -502,6 +332,175 @@ export function createApp(deps: {
       export: ec
         ? { target: ec.target, fieldMapping: ec.fieldMapping, defaults: ec.defaults }
         : null,
+    });
+  });
+
+  // --- Review sessions (RS-4 + RS-7) ---
+  //
+  // Sessions are PO-driven. SA can manage them too via the same routes by
+  // passing ?projectId=<id> -- resolvePoProject handles both. Ownership is
+  // enforced inside the session-scope helper so a PO can never touch a
+  // session that does not belong to their project.
+
+  const ownedSession = async (c: Context<AppEnv>) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    const session = await repo.getReviewSession(c.req.param("id") ?? "");
+    if (!session || session.projectId !== project.id) {
+      throw new ApiException("not_found", "Session not found");
+    }
+    return { project, session };
+  };
+
+  po.get("/sessions", async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    return c.json({ sessions: await repo.listReviewSessionsByProject(project.id) });
+  });
+
+  po.post("/sessions", validateJson(createReviewSessionSchema), async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    const b = body<z.infer<typeof createReviewSessionSchema>>(c);
+    const session = await repo.createReviewSession({
+      projectId: project.id,
+      name: b.name,
+      description: b.description,
+      instructions: b.instructions,
+      envUrl: b.envUrl,
+      startsAt: b.startsAt,
+      endsAt: b.endsAt,
+      createdBy: c.get("session").sub,
+      token: newSecretToken(),
+    });
+    await repo.appendAudit({
+      kind: "session.created",
+      actor: c.get("session").sub,
+      summary: `Utworzono sesję review „${session.name}” w „${project.name}”`,
+      severity: "ok",
+      projectId: project.id,
+    });
+    return c.json(session, 201);
+  });
+
+  po.get("/sessions/:id", async (c) => {
+    const { session } = await ownedSession(c);
+    const reviewers = await repo.listReviewersBySession(session.id);
+    return c.json({ session, reviewers: reviewers.map(toReviewerView) });
+  });
+
+  po.patch("/sessions/:id", validateJson(updateReviewSessionSchema), async (c) => {
+    const { session } = await ownedSession(c);
+    const b = body<z.infer<typeof updateReviewSessionSchema>>(c);
+    const updated = await repo.updateReviewSession(session.id, b);
+    if (!updated) throw new ApiException("not_found", "Session not found");
+    return c.json(updated);
+  });
+
+  po.post("/sessions/:id/status", validateJson(reviewSessionStatusSchema), async (c) => {
+    const { session } = await ownedSession(c);
+    const { status } = body<z.infer<typeof reviewSessionStatusSchema>>(c);
+    if (status !== session.status && !canTransitionReviewSession(session.status, status)) {
+      throw new ApiException(
+        "bad_request",
+        `Cannot transition session from "${session.status}" to "${status}"`,
+      );
+    }
+    const updated = await repo.setReviewSessionStatus(session.id, status);
+    if (!updated) throw new ApiException("not_found", "Session not found");
+    const kind = status === "live" ? "session.published" : `session.${status}`;
+    await repo.appendAudit({
+      kind,
+      actor: c.get("session").sub,
+      summary: `Sesja „${updated.name}” → ${status}`,
+      severity: status === "closed" ? "warn" : "ok",
+      projectId: updated.projectId,
+    });
+    return c.json({ id: updated.id, status: updated.status });
+  });
+
+  po.post("/sessions/:id/reviewers", validateJson(inviteReviewerSchema), async (c) => {
+    const { project, session } = await ownedSession(c);
+    const b = body<z.infer<typeof inviteReviewerSchema>>(c);
+    const reviewer = await repo.addReviewer({
+      sessionId: session.id,
+      name: b.name,
+      email: b.email,
+      token: newSecretToken(),
+    });
+    const inviteUrl = buildInviteUrl(session.envUrl, session.token, reviewer.token);
+    const sendResult = await emailSender.send(
+      buildInvitationEmail({
+        reviewerName: reviewer.name,
+        reviewerEmail: reviewer.email,
+        projectName: project.name,
+        sessionName: session.name,
+        description: session.description,
+        inviteUrl,
+      }),
+    );
+    await repo.appendAudit({
+      kind: "reviewer.invited",
+      actor: c.get("session").sub,
+      summary: sendResult.sent
+        ? `Zaproszono ${reviewer.email} do sesji „${session.name}” (email wysłany)`
+        : `Zaproszono ${reviewer.email} do sesji „${session.name}” (link gotowy do skopiowania)`,
+      severity: "ok",
+      projectId: session.projectId,
+    });
+    return c.json(
+      {
+        reviewer: toReviewerView(reviewer),
+        inviteUrl,
+        emailSent: sendResult.sent,
+        ...(sendResult.reason ? { emailError: sendResult.reason } : {}),
+      },
+      201,
+    );
+  });
+
+  po.delete("/sessions/:id/reviewers/:rid", async (c) => {
+    const { session } = await ownedSession(c);
+    const reviewer = await repo.getReviewer(c.req.param("rid"));
+    if (!reviewer || reviewer.sessionId !== session.id) {
+      throw new ApiException("not_found", "Reviewer not found");
+    }
+    const updated = await repo.revokeReviewer(reviewer.id);
+    if (!updated) throw new ApiException("not_found", "Reviewer not found");
+    await repo.appendAudit({
+      kind: "reviewer.revoked",
+      actor: c.get("session").sub,
+      summary: `Odebrano dostęp ${updated.email} (sesja „${session.name}”)`,
+      severity: "warn",
+      projectId: session.projectId,
+    });
+    return c.json({ id: updated.id, status: updated.status });
+  });
+
+  po.post("/sessions/:id/reviewers/:rid/resend", async (c) => {
+    const { project, session } = await ownedSession(c);
+    const reviewer = await repo.getReviewer(c.req.param("rid"));
+    if (!reviewer || reviewer.sessionId !== session.id) {
+      throw new ApiException("not_found", "Reviewer not found");
+    }
+    if (reviewer.status === "declined") {
+      throw new ApiException("bad_request", "Reviewer access was revoked");
+    }
+    const inviteUrl = buildInviteUrl(session.envUrl, session.token, reviewer.token);
+    const sendResult = await emailSender.send(
+      buildInvitationEmail({
+        reviewerName: reviewer.name,
+        reviewerEmail: reviewer.email,
+        projectName: project.name,
+        sessionName: session.name,
+        description: session.description,
+        inviteUrl,
+      }),
+    );
+    return c.json({
+      inviteUrl,
+      emailSent: sendResult.sent,
+      ...(sendResult.reason ? { emailError: sendResult.reason } : {}),
     });
   });
 

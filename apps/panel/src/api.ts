@@ -113,12 +113,11 @@ export const api = {
       }),
     }),
 
-  // Review sessions (SA-scoped admin endpoints; the same endpoints back the
-  // PO panel's "Sesje review" UI -- both audiences are admin-authenticated).
-  listSessions: (projectId: string) =>
-    call<{ sessions: ReviewSession[] }>(`/admin/projects/${projectId}/sessions`),
-  createSession: (projectId: string, body: CreateReviewSessionBody) =>
-    call<ReviewSession>(`/admin/projects/${projectId}/sessions`, {
+  // Review sessions (PO-scoped; SA can target by ?projectId= -- enforced on
+  // the API side via resolvePoProject + ownership check).
+  listSessions: (_projectId: string) => call<{ sessions: ReviewSession[] }>(`/po/sessions`),
+  createSession: (_projectId: string, body: CreateReviewSessionBody) =>
+    call<ReviewSession>(`/po/sessions`, {
       method: "POST",
       body: JSON.stringify({
         ...body,
@@ -129,30 +128,30 @@ export const api = {
       }),
     }),
   getSession: (sessionId: string) =>
-    call<{ session: ReviewSession; reviewers: ReviewerView[] }>(`/admin/sessions/${sessionId}`),
+    call<{ session: ReviewSession; reviewers: ReviewerView[] }>(`/po/sessions/${sessionId}`),
   updateSession: (sessionId: string, body: Partial<CreateReviewSessionBody>) =>
-    call<ReviewSession>(`/admin/sessions/${sessionId}`, {
+    call<ReviewSession>(`/po/sessions/${sessionId}`, {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
   setSessionStatus: (sessionId: string, status: ReviewSessionStatus) =>
-    call<{ id: string; status: string }>(`/admin/sessions/${sessionId}/status`, {
+    call<{ id: string; status: string }>(`/po/sessions/${sessionId}/status`, {
       method: "POST",
       body: JSON.stringify({ status }),
     }),
   inviteReviewer: (sessionId: string, name: string, email: string) =>
-    call<InviteReviewerResponse>(`/admin/sessions/${sessionId}/reviewers`, {
+    call<InviteReviewerResponse>(`/po/sessions/${sessionId}/reviewers`, {
       method: "POST",
       body: JSON.stringify({ name, email }),
     }),
   revokeReviewer: (sessionId: string, reviewerId: string) =>
     call<{ id: string; status: string }>(
-      `/admin/sessions/${sessionId}/reviewers/${reviewerId}`,
+      `/po/sessions/${sessionId}/reviewers/${reviewerId}`,
       { method: "DELETE" },
     ),
   resendInvite: (sessionId: string, reviewerId: string) =>
     call<{ inviteUrl: string; emailSent: boolean; emailError?: string }>(
-      `/admin/sessions/${sessionId}/reviewers/${reviewerId}/resend`,
+      `/po/sessions/${sessionId}/reviewers/${reviewerId}/resend`,
       { method: "POST" },
     ),
 

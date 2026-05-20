@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { NoopLlmProvider } from "./src/analysis/providers.js";
 import { createApp } from "./src/app.js";
+import { NoopEmailSender } from "./src/email/resend.js";
 import { resolveConfig, type Env } from "./src/env.js";
 import { InMemoryMediaStore } from "./src/media/memory.js";
 import { InMemoryRepository } from "./src/repo/memory.js";
@@ -287,6 +288,7 @@ const app = createApp({
   mediaStore: new InMemoryMediaStore(),
   transcriber: new NoopTranscriber(),
   llm: new NoopLlmProvider(),
+  emailSender: new NoopEmailSender(),
 });
 
 const port = 8787;
