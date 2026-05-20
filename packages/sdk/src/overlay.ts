@@ -87,6 +87,17 @@ button{font-family:inherit;cursor:pointer}
   font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:999px;
   display:grid;place-items:center;padding:0 5px;box-shadow:0 0 0 2px var(--primary)}
 .sp-toolbar .sep{width:1px;height:24px;background:rgba(255,255,255,.12);margin:0 4px}
+.sp-tool.primary{background:#fff;color:var(--primary);font-weight:600;width:auto;
+  padding:0 16px;gap:8px;display:inline-flex;align-items:center;font-size:12.5px;
+  letter-spacing:.01em}
+.sp-tool.primary:hover{background:#f1f5f9;color:var(--primary)}
+.sp-tool.primary:disabled{opacity:.5;cursor:not-allowed}
+.sp-tool.primary .badge{position:static;background:var(--accent);color:#fff;
+  box-shadow:0 0 0 2px var(--primary);min-width:18px;height:18px;font-size:11px}
+.sp-tool.outline{background:transparent;border:1px solid rgba(255,255,255,.22);
+  width:auto;padding:0 12px;gap:6px;display:inline-flex;align-items:center;
+  font-size:12px;font-weight:500;color:rgba(255,255,255,.85)}
+.sp-tool.outline:hover{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.35)}
 .sp-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
   background:#0B1220;color:#fff;font-size:11px;font-weight:500;padding:5px 8px;
   border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s}
@@ -473,7 +484,15 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   // Idle by default (SDK Idle design): only the FAB + session pill show until
   // the reviewer engages; the host app stays fully usable.
   let minimized = true;
+  // Right panel is hidden by default after consent (RS-6b dock-primary UX);
+  // opened on demand via the "Szczegóły" dock button.
   let panelOpen = false;
+  // Mic-driven flow: when set, completing element-pick auto-starts recording
+  // and on stop auto-saves the annotation as a draft. Resets after one cycle.
+  let pendingVoiceCapture = false;
+  // Visual hint on the toolbar "pick" button while the page-click handler is
+  // armed — distinguishes "in pick mode" from idle.
+  let pickArmed = false;
   let lastSync: { ok: boolean; msg: string } | null = null;
 
   const consented = (): boolean => localStorage.getItem(CONSENT_KEY) === "1";
@@ -618,8 +637,10 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       <span class="txt">Sesja review · <strong>${esc(sessionLabel)}</strong> · <span class="ct">${n} ${annWord(n)}</span></span>`;
   };
   fab.addEventListener("click", () => {
+    // RS-6b: re-engaging from idle drops the reviewer into the dock-primary
+    // state, not the full annotation panel.
     minimized = false;
-    panelOpen = true;
+    panelOpen = false;
     render();
   });
 
@@ -628,21 +649,53 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       id: string,
       label: string,
       icon: string,
-      opts: { active?: boolean; accent?: boolean; badge?: number; kbd?: string } = {},
-    ): string =>
-      `<button class="sp-tool${opts.active ? " active" : ""}${opts.accent ? " accent" : ""}" data-t="${id}" aria-label="${esc(label)}">
+      opts: {
+        active?: boolean;
+        accent?: boolean;
+        primary?: boolean;
+        outline?: boolean;
+        badge?: number;
+        kbd?: string;
+        text?: string;
+      } = {},
+    ): string => {
+      const cls = [
+        "sp-tool",
+        opts.active ? "active" : "",
+        opts.accent ? "accent" : "",
+        opts.primary ? "primary" : "",
+        opts.outline ? "outline" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return `<button class="${cls}" data-t="${id}" aria-label="${esc(label)}">
         ${svg(icon, "2")}
+        ${opts.text ? `<span class="label">${esc(opts.text)}</span>` : ""}
         ${opts.badge ? `<span class="badge">${opts.badge}</span>` : ""}
         <span class="sp-tip">${esc(label)}${opts.kbd ? `<span class="kbd">${opts.kbd}</span>` : ""}</span>
       </button>`;
+    };
+    const draftCount = session.filter((s) => s.state !== "submitted").length;
+    // Primary dock layout (RS-6b): capture buttons → session counter →
+    // Szczegóły (open right panel on demand) → Wyślij (primary CTA).
     toolbar.innerHTML =
-      tool("pick", "Wskaż element", ICON.pick, { active: panelOpen && tab === "new", kbd: "E" }) +
-      tool("voice", "Notatka głosowa", ICON.voice, { accent: true, kbd: "V" }) +
+      tool("pick", "Wskaż element", ICON.pick, { active: pickArmed, kbd: "E" }) +
+      tool("voice", "Mic + element pick", ICON.voice, { accent: true, kbd: "V" }) +
       tool("text", "Notatka tekstowa", ICON.text, { kbd: "T" }) +
       tool("shot", "Zrzut + adnotacja", ICON.shot, { kbd: "S" }) +
       tool("screen", "Nagraj ekran", ICON.screen) +
       `<span class="sep"></span>` +
       tool("session", "Adnotacje w sesji", ICON.list, { badge: session.length || undefined }) +
+      tool("details", "Szczegóły adnotacji", ICON.list, {
+        outline: true,
+        text: "Szczegóły",
+        active: panelOpen,
+      }) +
+      tool("send", "Wyślij wszystko", ICON.arrow, {
+        primary: true,
+        text: "Wyślij",
+        ...(draftCount ? { badge: draftCount } : {}),
+      }) +
       tool("end", "Zakończ sesję", ICON.end);
     toolbar.querySelectorAll<HTMLButtonElement>(".sp-tool").forEach((b) => {
       b.addEventListener("click", () => onTool(b.dataset.t as string));
@@ -951,6 +1004,9 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         if (!reqCb?.checked) return;
         localStorage.setItem(CONSENT_KEY, "1");
         localStorage.setItem(CONSENT_CAM_KEY, camCb?.checked ? "1" : "0");
+        // RS-6b: after accept, dock is the primary surface. The right
+        // panel stays closed until the reviewer hits the "Szczegóły" button.
+        panelOpen = false;
         render();
       });
       panel.querySelector("[data-decline]")?.addEventListener("click", () => {
@@ -1071,12 +1127,23 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     target.setAttribute("data-speqify-pin", String(annIndex));
     picked = captureElement(target);
     document.removeEventListener("click", onPick, true);
-    panelOpen = true;
+    pickArmed = false;
     tab = "new";
+    if (pendingVoiceCapture) {
+      // Mic flow: pick → record without ever opening the right panel.
+      pendingVoiceCapture = false;
+      render();
+      toggleVoice();
+      return;
+    }
+    // Manual pick keeps the dock primary (RS-6b). The reviewer opens the
+    // right panel explicitly via the "Szczegóły" dock button if they want
+    // to refine the draft.
     render();
   };
   const startPick = (): void => {
     panelOpen = false;
+    pickArmed = true;
     render();
     document.addEventListener("click", onPick, true);
   };
@@ -1097,6 +1164,13 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         voiceBlob = await r.stop();
         voiceSec = recElapsed;
         render();
+        // RS-6b: voice-driven flow auto-drafts as soon as the reviewer
+        // taps Stop. Only triggers when there is no text note yet (i.e. the
+        // panel-driven manual flow has not been used) and at least one
+        // capture signal is present.
+        if (voiceBlob && !noteText.trim() && (picked || voiceBlob)) {
+          await addAnnotation();
+        }
       } else {
         try {
           recorder = await startVoiceRecording();
@@ -1234,32 +1308,43 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   };
 
   // ---- tool dispatch -----------------------------------------------------
-  const open = (): void => {
+  const openDock = (): void => {
     minimized = false;
-    panelOpen = true;
     render();
   };
+  // Public open(): exposed via OverlayInstance.open(). Keeps the dock
+  // primary (right panel stays closed unless the reviewer hits "Szczegóły").
+  const open = openDock;
   const onTool = (id: string): void => {
     switch (id) {
       case "pick":
-        open();
+        openDock();
         tab = "new";
         startPick();
         break;
       case "voice":
-        open();
+        // RS-6b mic-driven flow. If no element is picked yet, arm pick first
+        // and have onPick chain into toggleVoice. Otherwise toggle directly.
+        openDock();
         tab = "new";
-        render();
-        toggleVoice();
+        if (!picked && !recorder) {
+          pendingVoiceCapture = true;
+          startPick();
+        } else {
+          toggleVoice();
+        }
         break;
       case "text":
-        open();
+        // The text-note tool is the one case that needs the right panel
+        // (textarea) — opening it on demand is intentional.
+        openDock();
+        panelOpen = true;
         tab = "new";
         render();
         panel.querySelector<HTMLTextAreaElement>("[data-note]")?.focus();
         break;
       case "shot":
-        open();
+        openDock();
         void (async () => {
           try {
             const base = await captureScreenshot(pickedEl, deps.screenshotUrl);
@@ -1271,13 +1356,25 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         })();
         break;
       case "screen":
-        open();
+        openDock();
         toggleScreen();
         break;
       case "session":
-        open();
+        openDock();
+        panelOpen = true;
         tab = "session";
         render();
+        break;
+      case "details":
+        // Toggle the right panel. Always lands on the current annotation tab
+        // so the reviewer can review/edit the active draft.
+        openDock();
+        panelOpen = !panelOpen;
+        if (panelOpen) tab = "new";
+        render();
+        break;
+      case "send":
+        void sendSession();
         break;
       case "end":
         if (session.some((s) => s.state !== "submitted")) void sendSession();
