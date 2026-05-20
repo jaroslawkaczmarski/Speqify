@@ -2,6 +2,9 @@
 export interface VoiceRecorder {
   stop(): Promise<Blob>;
   cancel(): void;
+  /** Live mic stream — overlay taps this with an AnalyserNode for the
+   *  reactive waveform shown while recording. */
+  stream: MediaStream;
 }
 
 export interface ScreenRecording {
@@ -96,6 +99,7 @@ export async function startVoiceRecording(): Promise<VoiceRecorder> {
   const stopTracks = (): void => stream.getTracks().forEach((t) => t.stop());
 
   return {
+    stream,
     stop: () =>
       new Promise<Blob>((resolve) => {
         rec.onstop = () => {

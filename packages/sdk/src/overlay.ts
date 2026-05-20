@@ -90,7 +90,7 @@ button{font-family:inherit;cursor:pointer}
 
 /* Annotation panel */
 .sp-panel[hidden]{display:none}
-.sp-panel{position:fixed;top:0;right:0;bottom:0;width:440px;max-width:100vw;
+.sp-panel{position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);max-width:100vw;
   background:var(--surface);color:var(--primary);box-shadow:-20px 0 60px rgba(15,23,42,.18);
   border-left:1px solid var(--border);display:flex;flex-direction:column;
   z-index:2147483000;animation:sp-slide .4s cubic-bezier(.2,.7,.2,1);font-size:14px;line-height:1.6}
@@ -419,6 +419,18 @@ button{font-family:inherit;cursor:pointer}
   text-decoration:none}
 .sp-consent-modal .consent-foot a:hover{text-decoration:underline}
 
+/* Mini confirm dialogs (X close, end session, RODO settings) — sit above
+   everything else inside the shadow root. */
+.sp-confirm-wrap{position:fixed;inset:0;z-index:2147483700;display:flex;
+  align-items:center;justify-content:center;padding:24px;
+  background:rgba(15,23,42,.4)}
+.sp-confirm{background:var(--surface);border-radius:14px;width:min(420px,100%);
+  padding:22px 24px;box-shadow:0 24px 48px rgba(15,23,42,.3);
+  display:flex;flex-direction:column;gap:12px;
+  animation:sp-pop .2s cubic-bezier(.2,.7,.2,1)}
+.sp-confirm p{margin:0;font-size:14px;line-height:1.55;color:var(--primary)}
+.sp-confirm .row{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+
 /* Redactor modal */
 .layer{position:fixed;inset:0;z-index:2147483001;background:rgba(15,23,42,.6);
   display:flex;align-items:center;justify-content:center}
@@ -435,13 +447,17 @@ button{font-family:inherit;cursor:pointer}
 /** Document-level style so the picked element (light DOM) gets the accent pin. */
 const HOST_STYLE = `
 [data-speqify-annotated]{position:relative !important;outline:2px solid #DC2626 !important;
-  outline-offset:2px !important;border-radius:6px;box-shadow:0 0 0 6px rgba(220,38,38,.12) !important}
+  outline-offset:2px !important;border-radius:6px;box-shadow:0 0 0 6px rgba(220,38,38,.12) !important;
+  /* Force a high stacking context so the outline + pin clear any host
+     overlays (modals, dropdowns, sticky headers) that might paint over it. */
+  z-index:2147482998 !important;isolation:isolate !important}
 [data-speqify-annotated]::after{content:attr(data-speqify-pin);position:absolute;top:-12px;
   left:-14px;width:24px;height:24px;border-radius:50%;background:#DC2626;color:#fff;
   font:700 12px/1 "Inter",system-ui,sans-serif;display:grid;place-items:center;
   box-shadow:0 4px 12px rgba(220,38,38,.45);z-index:2147482999}
 [data-speqify-annotated]::before{content:"";position:absolute;inset:-6px;border-radius:8px;
-  border:2px solid #DC2626;opacity:.3;animation:speqify-host-pulse 1.8s ease-out infinite}
+  border:2px solid #DC2626;opacity:.3;animation:speqify-host-pulse 1.8s ease-out infinite;
+  z-index:2147482999}
 @keyframes speqify-host-pulse{0%{transform:scale(.98);opacity:.4}100%{transform:scale(1.08);opacity:0}}
 /* Reduced-motion fallback for the host-side annotation pulse. The body
    margin-right used to push the host content left while the panel is open
@@ -466,6 +482,7 @@ const ICON = {
   mic: '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/>',
   arrow: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
   logo: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
 };
 const svg = (paths: string, sw = "2"): string =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
@@ -522,25 +539,29 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   hostStyle.textContent = HOST_STYLE;
   document.head.appendChild(hostStyle);
 
-  // RS-6d: shifting host content left while the right panel is open is done
-  // by writing inline `margin-right` on `<body>` via setProperty(..., important).
-  // CSS rules + a `body.speqify-panel-open` class were silently swallowed in
-  // some React + shadow-DOM combinations on Chromium even with `!important`;
+  // RS-6d/RS-6e: shifting host content left while the right panel is open is
+  // done by writing inline margin-right on <html> via setProperty(...,
+  // important). CSS rules + a class on body/html were silently swallowed in
+  // some React + shadow-DOM combinations on Chromium even with !important;
   // the inline route is reliable and easier to clean up on destroy.
+  //
+  // Below SHIFT_THRESHOLD viewport width, side-by-side is unusable (the host
+  // is squeezed below ~440px). We fall back to overlay mode there: the panel
+  // covers the host instead of pushing it.
   const PANEL_W = 440;
+  const SHIFT_THRESHOLD = 880;
   const setHostShift = (on: boolean): void => {
     const h = document.documentElement;
-    // We intentionally don't transition the margin: setting both `transition`
-    // and `margin-right` together in one tick blocks Chromium from applying
-    // the new margin at all (the transition source/target seem to get
-    // tangled in a way `!important` can't unwind). The panel itself slides
-    // in with its own animation, which is enough motion.
-    if (on) {
+    if (on && window.innerWidth >= SHIFT_THRESHOLD) {
       h.style.setProperty("margin-right", `${PANEL_W}px`, "important");
     } else {
       h.style.removeProperty("margin-right");
     }
   };
+  const onResize = (): void => {
+    if (panelOpen) setHostShift(true);
+  };
+  window.addEventListener("resize", onResize);
 
   // ---- state -------------------------------------------------------------
   let tab: Tab = "new";
@@ -558,6 +579,9 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   let recorder: VoiceRecorder | null = null;
   let recElapsed = 0;
   let recTimer: number | null = null;
+  let waveCtx: AudioContext | null = null;
+  let waveAnalyser: AnalyserNode | null = null;
+  let waveRaf: number | null = null;
 
   let screenRec: ScreenRecorder | null = null;
   let screenOut: ScreenRecording | null = null;
@@ -730,6 +754,8 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         badge?: number;
         kbd?: string;
         text?: string;
+        disabled?: boolean;
+        tip?: string;
       } = {},
     ): string => {
       const cls = [
@@ -741,14 +767,17 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       ]
         .filter(Boolean)
         .join(" ");
-      return `<button class="${cls}" data-t="${id}" aria-label="${esc(label)}">
+      const tip = opts.tip ?? label;
+      return `<button class="${cls}" data-t="${id}" aria-label="${esc(label)}"${opts.disabled ? " disabled" : ""}>
         ${svg(icon, "2")}
         ${opts.text ? `<span class="label">${esc(opts.text)}</span>` : ""}
         ${opts.badge ? `<span class="badge">${opts.badge}</span>` : ""}
-        <span class="sp-tip">${esc(label)}${opts.kbd ? `<span class="kbd">${opts.kbd}</span>` : ""}</span>
+        <span class="sp-tip">${esc(tip)}${opts.kbd ? `<span class="kbd">${opts.kbd}</span>` : ""}</span>
       </button>`;
     };
     const draftCount = session.filter((s) => s.state !== "submitted").length;
+    const canSendCurrent = !!(noteText.trim() || voiceBlob);
+    const screenOk = canScreenRec();
     // Primary dock layout (RS-6b): capture buttons → session counter →
     // Szczegóły (open right panel on demand) → Wyślij (primary CTA).
     toolbar.innerHTML =
@@ -756,17 +785,26 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       tool("voice", "Mic + element pick", ICON.voice, { accent: true, kbd: "V" }) +
       tool("text", "Notatka tekstowa", ICON.text, { kbd: "T" }) +
       tool("shot", "Zrzut + adnotacja", ICON.shot, { kbd: "S" }) +
-      tool("screen", "Nagraj ekran", ICON.screen) +
+      tool("screen", screenOk ? "Nagraj ekran" : "Nagrywanie ekranu wyłączone w RODO", ICON.screen, {
+        disabled: !screenOk,
+        tip: screenOk ? "Nagraj ekran" : "Włącz w „Ustawienia RODO”",
+      }) +
       `<span class="sep"></span>` +
       tool("session", "Adnotacje w sesji", ICON.list, { badge: session.length || undefined }) +
+      tool("rodo", "Ustawienia RODO", ICON.shield ?? ICON.list, {
+        outline: true,
+        tip: "Ustawienia RODO",
+      }) +
       tool("details", "Szczegóły adnotacji", ICON.list, {
         outline: true,
         text: "Szczegóły",
         active: panelOpen,
       }) +
-      tool("send", "Wyślij wszystko", ICON.arrow, {
+      tool("send", "Wyślij adnotację", ICON.arrow, {
         primary: true,
-        text: "Wyślij",
+        text: "Wyślij adnotację",
+        disabled: !canSendCurrent && session.length === 0,
+        tip: canSendCurrent ? "Wyślij adnotację" : "Dodaj notatkę głosową lub tekstową",
         ...(draftCount ? { badge: draftCount } : {}),
       }) +
       tool("end", "Zakończ sesję", ICON.end);
@@ -862,8 +900,11 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     const bars = Array.from(
       { length: 24 },
       (_, i) =>
-        `<span style="height:${6 + ((i * 7) % 26)}px;animation-delay:${(i % 8) * 0.08}s"></span>`,
+        `<span data-rec-bar style="height:${6 + ((i * 7) % 26)}px;animation-delay:${(i % 8) * 0.08}s"></span>`,
     ).join("");
+    const playBlock = voiceBlob
+      ? `<audio data-rec-audio controls preload="metadata" style="width:100%;margin-top:8px"></audio>`
+      : "";
     const recBlock = `<div class="${recCls}">
         <div class="rec-row">
           <button class="rec-btn" data-rec aria-label="${recorder ? "Zatrzymaj nagrywanie" : "Nagraj notatkę głosową"}">
@@ -888,6 +929,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
             }
           </span>
         </div>
+        ${playBlock}
       </div>`;
 
     const seg = (
@@ -939,7 +981,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         ${recBlock}
       </div>
       <div class="sec">
-        <span class="sec-label">Notatka tekstowa <span class="req">· opcjonalna</span></span>
+        <span class="sec-label">Notatka tekstowa</span>
         <textarea class="ta" data-note placeholder="Opisz, co ma się zmienić. Markdown wspierany.">${esc(noteText)}</textarea>
       </div>
       <div class="row-2">
@@ -978,11 +1020,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         <span class="sec-label">Załączony kontekst</span>
         ${ctxBlock}
       </div>
-      ${
-        others
-          ? `<div class="sec"><span class="sec-label">Inne adnotacje w sesji</span>${others}</div>`
-          : ""
-      }`;
+      `;
   };
 
   const fmt = (s: number): string => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -1033,10 +1071,9 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       </div>
       <div class="consent-checks">
         <label><input type="checkbox" data-consent-req checked> <span>Wyrażam zgodę na
-        nagrywanie głosu i zbieranie kontekstu technicznego podczas sesji review w projekcie
-        <strong>${esc(sessionDisplay)}</strong>.</span></label>
-        <label><input type="checkbox" data-consent-cam> <span>Zgadzam się na włączenie
-        kamery do nagrań screen-cast z narracją (opcjonalne).</span></label>
+        nagrywanie głosu i zbieranie kontekstu technicznego podczas sesji review.</span></label>
+        <label><input type="checkbox" data-consent-cam> <span>Zgadzam się na nagrywanie
+        ekranu z narracją (opcjonalne — można włączyć później).</span></label>
       </div>
       <div class="consent-foot">
         <a href="https://speqify.app/privacy.html" target="_blank" rel="noopener noreferrer">
@@ -1136,10 +1173,10 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       <div class="sp-body">${renderBody()}</div>
       <div class="sp-foot">
         <button class="sp-capbtn" data-cap-shot title="Zrzut + adnotacja">${svg(ICON.shot, "2")}</button>
-        <button class="sp-capbtn" data-cap-screen title="Nagraj ekran">${svg(ICON.screen, "2")}</button>
+        <button class="sp-capbtn" data-cap-screen title="${canScreenRec() ? "Nagraj ekran" : "Włącz w „Ustawienia RODO”"}"${canScreenRec() ? "" : " disabled"}>${svg(ICON.screen, "2")}</button>
         <button class="sp-save" data-save>Zapisz draft</button>
         ${sync}
-        <button class="sp-submit" data-send>Wyślij ${svg(ICON.arrow, "2.4")}</button>
+        <button class="sp-submit" data-send${(noteText.trim() || voiceBlob || session.length) ? "" : " disabled"} title="${(noteText.trim() || voiceBlob || session.length) ? "Wyślij adnotację" : "Dodaj notatkę głosową lub tekstową"}">Wyślij adnotację ${svg(ICON.arrow, "2.4")}</button>
       </div>`;
 
     wireBody();
@@ -1154,9 +1191,9 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       render();
     });
     panel.querySelector("[data-close]")?.addEventListener("click", () => {
-      panelOpen = false;
-      minimized = true;
-      render();
+      // Close = retreat to idle FAB. If the reviewer has a draft in progress
+      // they get a confirm modal first so a stray click doesn't drop work.
+      confirmEnd();
     });
     panel.querySelector("[data-cap-shot]")?.addEventListener("click", () => onTool("shot"));
     panel.querySelector("[data-cap-screen]")?.addEventListener("click", () => onTool("screen"));
@@ -1203,6 +1240,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       recorder?.cancel();
       recorder = null;
       stopTimer();
+      stopWaveform();
       render();
     });
     panel.querySelector("[data-rec-clear]")?.addEventListener("click", () => {
@@ -1210,6 +1248,15 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       voiceSec = 0;
       render();
     });
+    // Bind the playback <audio> to the in-memory blob via a transient
+    // object URL. The URL is revoked when the same audio element unmounts
+    // (next render or panel close) — we attach it via `dataset.objectUrl`.
+    const audioEl = panel.querySelector<HTMLAudioElement>("[data-rec-audio]");
+    if (audioEl && voiceBlob) {
+      const url = URL.createObjectURL(voiceBlob);
+      audioEl.src = url;
+      audioEl.dataset["objectUrl"] = url;
+    }
 
     panel.querySelector("[data-save]")?.addEventListener("click", () => void addAnnotation());
     panel.querySelector("[data-send]")?.addEventListener("click", () => void sendSession());
@@ -1264,20 +1311,69 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       recTimer = null;
     }
   };
+  const startWaveform = (): void => {
+    if (!recorder || waveCtx) return;
+    type AC = typeof AudioContext;
+    const Ctor: AC | undefined =
+      (window as unknown as { AudioContext?: AC; webkitAudioContext?: AC }).AudioContext ??
+      (window as unknown as { webkitAudioContext?: AC }).webkitAudioContext;
+    if (!Ctor) return;
+    try {
+      waveCtx = new Ctor();
+      const source = waveCtx.createMediaStreamSource(recorder.stream);
+      waveAnalyser = waveCtx.createAnalyser();
+      waveAnalyser.fftSize = 256;
+      source.connect(waveAnalyser);
+      const buf = new Uint8Array(waveAnalyser.frequencyBinCount);
+      const tick = (): void => {
+        if (!waveAnalyser) return;
+        waveAnalyser.getByteFrequencyData(buf);
+        // Downsample 128 freq bins to 24 visual bars.
+        const bars = panel.querySelectorAll<HTMLElement>("[data-rec-bar]");
+        if (bars.length) {
+          const step = Math.floor(buf.length / bars.length);
+          for (let i = 0; i < bars.length; i++) {
+            let sum = 0;
+            for (let j = 0; j < step; j++) sum += buf[i * step + j] ?? 0;
+            const avg = sum / step / 255; // 0..1
+            const h = 4 + Math.round(avg * 32);
+            bars[i]!.style.height = `${h}px`;
+          }
+        }
+        waveRaf = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch {
+      // AudioContext not available — fall back to CSS-only animation.
+      waveCtx = null;
+      waveAnalyser = null;
+    }
+  };
+  const stopWaveform = (): void => {
+    if (waveRaf !== null) {
+      cancelAnimationFrame(waveRaf);
+      waveRaf = null;
+    }
+    waveAnalyser?.disconnect();
+    waveAnalyser = null;
+    waveCtx?.close().catch(() => {});
+    waveCtx = null;
+  };
   const toggleVoice = (): void => {
     void (async () => {
       if (recorder) {
         const r = recorder;
         recorder = null;
         stopTimer();
+        stopWaveform();
         voiceBlob = await r.stop();
         voiceSec = recElapsed;
         render();
-        // RS-6b: voice-driven flow auto-drafts as soon as the reviewer
-        // taps Stop. Only triggers when there is no text note yet (i.e. the
-        // panel-driven manual flow has not been used) and at least one
-        // capture signal is present.
-        if (voiceBlob && !noteText.trim() && (picked || voiceBlob)) {
+        // RS-6e: only auto-save when the dock-driven 4-tap flow is in play
+        // (panel closed). With the panel open the reviewer wants to review
+        // / preview / edit the take before sending it, so we leave the
+        // voiceBlob queued instead of immediately uploading.
+        if (!panelOpen && voiceBlob && !noteText.trim() && picked) {
           await addAnnotation();
         }
       } else {
@@ -1285,6 +1381,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
           recorder = await startVoiceRecording();
           recElapsed = 0;
           render();
+          startWaveform();
           recTimer = window.setInterval(() => {
             recElapsed++;
             const el = panel.querySelector("[data-rec-time]");
@@ -1299,7 +1396,9 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   };
 
   // ---- screen recording --------------------------------------------------
+  const canScreenRec = (): boolean => localStorage.getItem(CONSENT_CAM_KEY) === "1";
   const toggleScreen = (): void => {
+    if (!canScreenRec()) return;
     void (async () => {
       if (screenRec) {
         const r = screenRec;
@@ -1313,8 +1412,10 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
           lastSync = { ok: true, msg: "Nagrywanie ekranu…" };
           render();
         } catch {
-          lastSync = { ok: false, msg: "Przechwytywanie ekranu zablokowane" };
-          render();
+          // RS-6e: no toast — the button is the affordance. If the browser
+          // also blocks the picker on top of consent, the disabled state +
+          // tooltip already communicate it; a transient error message just
+          // adds noise.
         }
       }
     })();
@@ -1483,15 +1584,99 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         render();
         break;
       case "send":
+        if (!noteText.trim() && !voiceBlob && session.length === 0) {
+          lastSync = { ok: false, msg: "Dodaj notatkę głosową lub tekstową" };
+          render();
+          break;
+        }
         void sendSession();
         break;
+      case "rodo":
+        openRodoSettings();
+        break;
       case "end":
-        if (session.some((s) => s.state !== "submitted")) void sendSession();
-        panelOpen = false;
-        minimized = true;
-        render();
+        confirmEnd();
         break;
     }
+  };
+
+  // ---- RODO settings + confirm end --------------------------------------
+  const hasUnsaved = (): boolean =>
+    !!(noteText.trim() || voiceBlob || picked || screenOut || tags.length || redactedShot);
+  const showConfirm = (
+    msg: string,
+    confirmLabel: string,
+    onConfirm: () => void,
+  ): void => {
+    const layer = document.createElement("div");
+    layer.className = "sp-confirm-wrap";
+    layer.innerHTML = `<div class="sp-confirm">
+      <p>${esc(msg)}</p>
+      <div class="row">
+        <button class="consent-btn consent-btn-secondary" data-cancel>Anuluj</button>
+        <button class="consent-btn consent-btn-primary" data-ok>${esc(confirmLabel)}</button>
+      </div>
+    </div>`;
+    root.appendChild(layer);
+    layer.querySelector("[data-cancel]")?.addEventListener("click", () => layer.remove());
+    layer.querySelector("[data-ok]")?.addEventListener("click", () => {
+      layer.remove();
+      onConfirm();
+    });
+  };
+  const confirmEnd = (): void => {
+    const finish = (): void => {
+      panelOpen = false;
+      minimized = true;
+      // Discard the in-progress draft so re-engaging is a clean slate.
+      voiceBlob = null;
+      voiceSec = 0;
+      noteText = "";
+      tags = [];
+      screenOut = null;
+      redactedShot = null;
+      clearPin();
+      picked = null;
+      pickedEl = null;
+      render();
+    };
+    if (hasUnsaved()) {
+      showConfirm(
+        "Masz niezapisaną adnotację. Zakończ sesję i odrzucić niewysłany draft?",
+        "Tak, zakończ",
+        finish,
+      );
+      return;
+    }
+    finish();
+  };
+  const openRodoSettings = (): void => {
+    const camOn = canScreenRec();
+    const layer = document.createElement("div");
+    layer.className = "sp-confirm-wrap";
+    layer.innerHTML = `<div class="sp-confirm" style="max-width:480px">
+      <h3 style="margin:0 0 6px;font-size:16px;font-weight:700">Ustawienia RODO</h3>
+      <p style="margin:0 0 14px;font-size:13px;color:var(--secondary)">
+        Zgoda na nagrywanie głosu i kontekst techniczny obowiązuje przez całą sesję
+        review. Dodatkowo możesz włączyć nagrywanie ekranu z narracją.
+      </p>
+      <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--secondary);cursor:pointer;margin-bottom:14px">
+        <input type="checkbox" data-cam ${camOn ? "checked" : ""} style="margin-top:2px;width:18px;height:18px;accent-color:var(--primary);flex:none">
+        <span><strong style="color:var(--primary)">Nagrywanie ekranu</strong> — pozwala SDK nagrać ekran z narracją mikrofonową w obrębie tej sesji.</span>
+      </label>
+      <div class="row">
+        <button class="consent-btn consent-btn-secondary" data-cancel>Anuluj</button>
+        <button class="consent-btn consent-btn-primary" data-ok>Zapisz</button>
+      </div>
+    </div>`;
+    root.appendChild(layer);
+    const camInput = layer.querySelector<HTMLInputElement>("[data-cam]");
+    layer.querySelector("[data-cancel]")?.addEventListener("click", () => layer.remove());
+    layer.querySelector("[data-ok]")?.addEventListener("click", () => {
+      localStorage.setItem(CONSENT_CAM_KEY, camInput?.checked ? "1" : "0");
+      layer.remove();
+      render();
+    });
   };
 
   // Keyboard shortcuts (E/V/T/S) when not typing.
@@ -1518,9 +1703,12 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     },
     destroy: () => {
       stopTimer();
+      stopWaveform();
       recorder?.cancel();
       screenRec?.cancel();
       clearPin();
+      setHostShift(false);
+      window.removeEventListener("resize", onResize);
       document.removeEventListener("click", onPick, true);
       document.removeEventListener("keydown", onKey);
       hostStyle.remove();
