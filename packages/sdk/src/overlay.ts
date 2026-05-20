@@ -929,6 +929,12 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     statusPill.style.display = "";
     toolbar.style.display = "";
     renderToolbar();
+    // The consent gate is unconditional — before localStorage CONSENT_KEY is
+    // set the right panel is forced open so the reviewer cannot bypass RODO
+    // by interacting with the dock alone.
+    if (!consented()) {
+      panelOpen = true;
+    }
     if (!panelOpen) {
       panel.hidden = true;
       return;
