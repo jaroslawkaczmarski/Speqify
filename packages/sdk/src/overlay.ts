@@ -347,19 +347,71 @@ button{font-family:inherit;cursor:pointer}
 .sp-fab-cta{width:28px;height:28px;border-radius:50%;background:var(--accent);
   display:grid;place-items:center;flex:none}
 .sp-fab-cta svg{width:14px;height:14px;color:#fff}
-.sp-session-pill{position:fixed;bottom:24px;right:232px;z-index:2147483000;
-  background:var(--surface);color:var(--primary);border:1px solid var(--border);
-  border-radius:999px;padding:8px 14px;display:flex;align-items:center;gap:10px;
-  font-size:12px;font-weight:500;box-shadow:var(--el-2);max-width:48vw}
-.sp-session-pill .av{width:20px;height:20px;border-radius:50%;
-  background:linear-gradient(135deg,#22D3EE,#3B82F6);color:#fff;font-size:9px;
-  font-weight:700;display:grid;place-items:center;flex:none}
-.sp-session-pill .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sp-session-pill strong{color:var(--primary);font-weight:600}
-.sp-session-pill .ct{color:var(--accent);font-weight:700;font-family:var(--font-mono)}
 @media (prefers-reduced-motion:reduce){
   .sp-fab-mark::after{animation:none}.sp-fab{transition:none}
 }
+
+/* Welcome / RODO consent modal — centered dialog, NOT in the right panel.
+   Matches the SDK Consent.html mock: pop-in animation, dimmed backdrop,
+   modal sits above the dock + side panel so the reviewer can't bypass it. */
+.sp-consent-wrap{position:fixed;inset:0;z-index:2147483600;display:none;
+  align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.4)}
+.sp-consent-wrap.open{display:flex}
+.sp-consent-modal{background:var(--surface);border-radius:20px;width:min(520px,100%);
+  box-shadow:0 24px 48px rgba(15,23,42,.3);overflow:hidden;
+  animation:sp-pop .35s cubic-bezier(.2,.7,.2,1);max-height:calc(100vh - 48px);
+  display:flex;flex-direction:column}
+@keyframes sp-pop{from{opacity:0;transform:translateY(8px) scale(.98)}
+  to{opacity:1;transform:translateY(0) scale(1)}}
+@media (prefers-reduced-motion:reduce){.sp-consent-modal{animation:none}}
+.sp-consent-modal .consent-head{padding:28px 32px 0}
+.sp-consent-modal .consent-head .logo{width:44px;height:44px;border-radius:11px;
+  background:var(--primary);color:#fff;display:grid;place-items:center;margin-bottom:18px;
+  position:relative}
+.sp-consent-modal .consent-head .logo::after{content:"";position:absolute;width:10px;
+  height:10px;border-radius:50%;background:var(--accent);top:-2px;right:-2px;
+  box-shadow:0 0 0 2px var(--surface)}
+.sp-consent-modal .consent-head .logo svg{width:20px;height:20px}
+.sp-consent-modal .consent-head h2{margin:0;font-size:22px;font-weight:700;
+  letter-spacing:-.015em;line-height:1.3;color:var(--primary)}
+.sp-consent-modal .consent-head p{margin:8px 0 0;color:var(--secondary);font-size:15px;
+  line-height:1.6}
+.sp-consent-modal .consent-head p strong{color:var(--primary);font-weight:600}
+.sp-consent-modal .consent-about{padding:14px 32px 0;display:flex;flex-direction:column;
+  gap:10px}
+.sp-consent-modal .consent-about .about-block{margin:0;padding:12px 14px;
+  background:var(--surface-muted);border-radius:10px;font-size:13px;line-height:1.55;
+  color:var(--secondary);white-space:pre-wrap}
+.sp-consent-modal .consent-about .about-block strong{display:block;font-size:11.5px;
+  letter-spacing:.04em;text-transform:uppercase;color:var(--primary);font-weight:600;
+  margin-bottom:3px}
+.sp-consent-modal .consent-body{padding:18px 32px 0;overflow-y:auto}
+.sp-consent-modal .consent-list{list-style:none;padding:0;margin:0;display:flex;
+  flex-direction:column;gap:10px}
+.sp-consent-modal .consent-list li{display:flex;align-items:flex-start;gap:12px;
+  padding:12px 14px;background:var(--surface-muted);border-radius:10px;font-size:13px;
+  line-height:1.5;color:var(--secondary)}
+.sp-consent-modal .consent-list li .ic{width:28px;height:28px;border-radius:8px;
+  background:var(--surface);color:var(--info);display:grid;place-items:center;flex:none}
+.sp-consent-modal .consent-list li .ic svg{width:14px;height:14px}
+.sp-consent-modal .consent-list li strong{color:var(--primary);font-weight:600}
+.sp-consent-modal .consent-checks{padding:18px 32px;display:flex;flex-direction:column;gap:10px}
+.sp-consent-modal .consent-checks label{display:flex;align-items:flex-start;gap:10px;
+  font-size:13px;line-height:1.5;color:var(--secondary);cursor:pointer}
+.sp-consent-modal .consent-checks label input{margin-top:2px;width:18px;height:18px;
+  accent-color:var(--primary);flex:none}
+.sp-consent-modal .consent-checks label strong{color:var(--primary);font-weight:600}
+.sp-consent-modal .consent-foot{padding:16px 32px;border-top:1px solid var(--border);
+  background:var(--surface-muted);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sp-consent-modal .consent-foot .btn-row{margin-left:auto;display:flex;gap:8px}
+.sp-consent-modal .consent-btn{height:40px;padding:0 18px;border-radius:8px;border:0;
+  font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;display:inline-flex;
+  align-items:center;gap:6px}
+.sp-consent-modal .consent-btn-primary{background:var(--primary);color:#fff}
+.sp-consent-modal .consent-btn-primary:hover{background:var(--primary-hover)}
+.sp-consent-modal .consent-btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.sp-consent-modal .consent-btn-secondary{background:transparent;color:var(--secondary)}
+.sp-consent-modal .consent-btn-secondary:hover{color:var(--primary);background:rgba(15,23,42,.04)}
 
 /* Redactor modal */
 .layer{position:fixed;inset:0;z-index:2147483001;background:rgba(15,23,42,.6);
@@ -619,22 +671,20 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     <span class="sp-fab-cta" aria-hidden="true">${svg('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>', "2.4")}</span>`;
   root.appendChild(fab);
 
-  const sessionPill = document.createElement("div");
-  sessionPill.className = "sp-session-pill";
-  sessionPill.setAttribute("aria-live", "polite");
-  root.appendChild(sessionPill);
+  // Welcome / RODO consent modal — separate centered dialog (RS-6c). The
+  // consent gate lives here, not in the right `.sp-panel`, so the modal can
+  // overlay on top of the dock/panel and cannot be bypassed by closing them.
+  const consentWrap = document.createElement("div");
+  consentWrap.className = "sp-consent-wrap";
+  consentWrap.setAttribute("role", "dialog");
+  consentWrap.setAttribute("aria-modal", "true");
+  consentWrap.setAttribute("aria-label", "Speqify — zgoda RODO");
+  root.appendChild(consentWrap);
 
-  const annWord = (n: number): string =>
-    n === 1
-      ? "adnotacja"
-      : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)
-        ? "adnotacje"
-        : "adnotacji";
   const renderIdle = (): void => {
-    const n = session.length;
-    sessionPill.innerHTML = `
-      <span class="av" aria-hidden="true">TY</span>
-      <span class="txt">Sesja review · <strong>${esc(sessionLabel)}</strong> · <span class="ct">${n} ${annWord(n)}</span></span>`;
+    // Idle state is FAB-only (RS-6c). The session pill from the design mock
+    // was confusing for first-time reviewers — they assumed an empty count
+    // meant the SDK was broken — so it's intentionally dropped.
   };
   fab.addEventListener("click", () => {
     // RS-6b: re-engaging from idle drops the reviewer into the dock-primary
@@ -914,57 +964,30 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
 
   const fmt = (s: number): string => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-  const render = (): void => {
-    if (minimized) {
-      fab.style.display = "";
-      sessionPill.style.display = "";
-      statusPill.style.display = "none";
-      toolbar.style.display = "none";
-      panel.hidden = true;
-      renderIdle();
-      return;
-    }
-    fab.style.display = "none";
-    sessionPill.style.display = "none";
-    statusPill.style.display = "";
-    toolbar.style.display = "";
-    renderToolbar();
-    // The consent gate is unconditional — before localStorage CONSENT_KEY is
-    // set the right panel is forced open so the reviewer cannot bypass RODO
-    // by interacting with the dock alone.
-    if (!consented()) {
-      panelOpen = true;
-    }
-    if (!panelOpen) {
-      panel.hidden = true;
-      return;
-    }
-    panel.hidden = false;
-    if (!consented()) {
-      const codeIcon = '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>';
-      const intro = deps.intro;
-      const reviewerName = intro?.reviewerName?.trim() ?? "";
-      const greeting = reviewerName ? `Witaj ${esc(reviewerName)}!` : "Witaj!";
-      const heading = intro?.sessionName
-        ? `${greeting} <span class="muted">·</span> ${esc(intro.sessionName)}`
-        : `${greeting} <span class="muted">·</span> ${esc(sessionLabel)}`;
-      const descBlock = intro?.description?.trim()
-        ? `<p class="about-block"><strong>O sesji</strong><br />${esc(intro.description)}</p>`
-        : "";
-      const instrBlock = intro?.instructions?.trim()
-        ? `<p class="about-block"><strong>Na co zwrócić uwagę</strong><br />${esc(intro.instructions)}</p>`
-        : "";
-      const aboutWrap = descBlock || instrBlock
-        ? `<div class="consent-about">${descBlock}${instrBlock}</div>`
-        : "";
-      panel.innerHTML = `<div class="consent">
-        <div class="consent-head">
-          <span class="logo" aria-hidden="true">${svg(ICON.logo, "2.5")}</span>
-          <h3>${heading}</h3>
-          <p>Zostałeś zaproszony do dodawania adnotacji wprost na działającej aplikacji.
-          Zanim zaczniesz, potrzebujemy Twojej zgody.</p>
-        </div>
-        ${aboutWrap}
+  const renderConsentModal = (): void => {
+    const codeIcon = '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>';
+    const intro = deps.intro;
+    const reviewerName = intro?.reviewerName?.trim() ?? "";
+    const greeting = reviewerName ? `Witaj ${esc(reviewerName)}!` : "Witaj!";
+    const sessionDisplay = intro?.sessionName ?? sessionLabel;
+    const descBlock = intro?.description?.trim()
+      ? `<p class="about-block"><strong>O sesji</strong>${esc(intro.description)}</p>`
+      : "";
+    const instrBlock = intro?.instructions?.trim()
+      ? `<p class="about-block"><strong>Na co zwrócić uwagę</strong>${esc(intro.instructions)}</p>`
+      : "";
+    const aboutWrap = descBlock || instrBlock
+      ? `<div class="consent-about">${descBlock}${instrBlock}</div>`
+      : "";
+    consentWrap.innerHTML = `<div class="sp-consent-modal">
+      <div class="consent-head">
+        <span class="logo" aria-hidden="true">${svg(ICON.logo, "2.5")}</span>
+        <h2>${greeting} <span style="color:var(--muted);font-weight:500">·</span> ${esc(sessionDisplay)}</h2>
+        <p>Zostałeś zaproszony do dodawania adnotacji wprost na działającej aplikacji.
+        Zanim zaczniesz, potrzebujemy Twojej zgody.</p>
+      </div>
+      ${aboutWrap}
+      <div class="consent-body">
         <ul class="consent-list">
           <li>
             <span class="ic">${svg(ICON.mic)}</span>
@@ -982,45 +1005,76 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
             konsola, sieć i build. Bez danych biznesowych.</span>
           </li>
         </ul>
-        <div class="consent-checks">
-          <label><input type="checkbox" data-consent-req checked> <span>Wyrażam zgodę na
-          nagrywanie głosu i zbieranie kontekstu technicznego podczas sesji review w projekcie
-          <strong>${esc(sessionLabel)}</strong>.</span></label>
-          <label><input type="checkbox" data-consent-cam> <span>Zgadzam się na włączenie
-          kamery do nagrań screen-cast z narracją (opcjonalne).</span></label>
+      </div>
+      <div class="consent-checks">
+        <label><input type="checkbox" data-consent-req checked> <span>Wyrażam zgodę na
+        nagrywanie głosu i zbieranie kontekstu technicznego podczas sesji review w projekcie
+        <strong>${esc(sessionDisplay)}</strong>.</span></label>
+        <label><input type="checkbox" data-consent-cam> <span>Zgadzam się na włączenie
+        kamery do nagrań screen-cast z narracją (opcjonalne).</span></label>
+      </div>
+      <div class="consent-foot">
+        <span style="font-size:11.5px;color:var(--muted)">Polityka prywatności · sekrety
+        usuwane przed wysłaniem</span>
+        <div class="btn-row">
+          <button class="consent-btn consent-btn-secondary" data-decline>Nie teraz</button>
+          <button class="consent-btn consent-btn-primary" data-agree>Akceptuj i zacznij ${svg(ICON.arrow, "2.4")}</button>
         </div>
-        <div class="consent-foot">
-          <span style="font-size:11.5px;color:var(--muted)">Polityka prywatności · sekrety
-          usuwane przed wysłaniem</span>
-          <div class="btn-row">
-            <button class="decline" data-decline>Nie teraz</button>
-            <button class="agree" data-agree>Akceptuj i zacznij ${svg(ICON.arrow, "2.4")}</button>
-          </div>
-        </div>
-      </div>`;
-      const reqCb = panel.querySelector<HTMLInputElement>("[data-consent-req]");
-      const camCb = panel.querySelector<HTMLInputElement>("[data-consent-cam]");
-      const agreeBtn = panel.querySelector<HTMLButtonElement>("[data-agree]");
-      const syncAgree = (): void => {
-        if (agreeBtn) agreeBtn.disabled = !reqCb?.checked;
-      };
-      reqCb?.addEventListener("change", syncAgree);
-      syncAgree();
-      agreeBtn?.addEventListener("click", () => {
-        if (!reqCb?.checked) return;
-        localStorage.setItem(CONSENT_KEY, "1");
-        localStorage.setItem(CONSENT_CAM_KEY, camCb?.checked ? "1" : "0");
-        // RS-6b: after accept, dock is the primary surface. The right
-        // panel stays closed until the reviewer hits the "Szczegóły" button.
-        panelOpen = false;
-        render();
-      });
-      panel.querySelector("[data-decline]")?.addEventListener("click", () => {
-        panelOpen = false;
-        render();
-      });
+      </div>
+    </div>`;
+    const reqCb = consentWrap.querySelector<HTMLInputElement>("[data-consent-req]");
+    const camCb = consentWrap.querySelector<HTMLInputElement>("[data-consent-cam]");
+    const agreeBtn = consentWrap.querySelector<HTMLButtonElement>("[data-agree]");
+    const syncAgree = (): void => {
+      if (agreeBtn) agreeBtn.disabled = !reqCb?.checked;
+    };
+    reqCb?.addEventListener("change", syncAgree);
+    syncAgree();
+    agreeBtn?.addEventListener("click", () => {
+      if (!reqCb?.checked) return;
+      localStorage.setItem(CONSENT_KEY, "1");
+      localStorage.setItem(CONSENT_CAM_KEY, camCb?.checked ? "1" : "0");
+      consentWrap.classList.remove("open");
+      render();
+    });
+    consentWrap.querySelector("[data-decline]")?.addEventListener("click", () => {
+      // Decline: keep the modal closed but also retreat to idle so the
+      // reviewer isn't stuck with the dock open without consent.
+      consentWrap.classList.remove("open");
+      minimized = true;
+      panelOpen = false;
+      render();
+    });
+  };
+
+  const render = (): void => {
+    // Consent gate is independent of the dock/panel: render the modal once
+    // (idempotent) on first activation, leave it open until accepted.
+    if (!consented()) {
+      if (!minimized && !consentWrap.classList.contains("open")) {
+        renderConsentModal();
+        consentWrap.classList.add("open");
+      }
+    } else {
+      consentWrap.classList.remove("open");
+    }
+    if (minimized) {
+      fab.style.display = "";
+      statusPill.style.display = "none";
+      toolbar.style.display = "none";
+      panel.hidden = true;
+      renderIdle();
       return;
     }
+    fab.style.display = "none";
+    statusPill.style.display = "";
+    toolbar.style.display = "";
+    renderToolbar();
+    if (!panelOpen) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
 
     const sync = lastSync
       ? `<span class="sync ${lastSync.ok ? "ok" : "err"}">${svg(ICON.check, "2.5")}<span>${esc(lastSync.msg)}</span></span>`
