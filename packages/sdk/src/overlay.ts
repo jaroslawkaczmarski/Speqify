@@ -355,10 +355,11 @@ button{font-family:inherit;cursor:pointer}
 /* Welcome / RODO consent modal — centered dialog, NOT in the right panel.
    Matches the SDK Consent.html mock: pop-in animation, dimmed backdrop,
    modal sits above the dock + side panel so the reviewer can't bypass it. */
-.sp-consent-wrap{position:fixed;inset:0;z-index:2147483600;display:none;
+.sp-consent-wrap{position:fixed;top:0;right:0;bottom:0;left:0;width:100vw;height:100vh;
+  z-index:2147483600;display:none;
   align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.4)}
 .sp-consent-wrap.open{display:flex}
-.sp-consent-modal{background:var(--surface);border-radius:20px;width:min(520px,100%);
+.sp-consent-modal{background:var(--surface);border-radius:20px;width:min(640px,100%);
   box-shadow:0 24px 48px rgba(15,23,42,.3);overflow:hidden;
   animation:sp-pop .35s cubic-bezier(.2,.7,.2,1);max-height:calc(100vh - 48px);
   display:flex;flex-direction:column}
@@ -407,12 +408,16 @@ button{font-family:inherit;cursor:pointer}
 .sp-consent-modal .consent-foot .btn-row{margin-left:auto;display:flex;gap:8px}
 .sp-consent-modal .consent-btn{height:40px;padding:0 18px;border-radius:8px;border:0;
   font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;display:inline-flex;
-  align-items:center;gap:6px}
+  align-items:center;gap:8px;white-space:nowrap;line-height:1}
+.sp-consent-modal .consent-btn svg{width:14px;height:14px;flex:none}
 .sp-consent-modal .consent-btn-primary{background:var(--primary);color:#fff}
 .sp-consent-modal .consent-btn-primary:hover{background:var(--primary-hover)}
 .sp-consent-modal .consent-btn-primary:disabled{opacity:.5;cursor:not-allowed}
 .sp-consent-modal .consent-btn-secondary{background:transparent;color:var(--secondary)}
 .sp-consent-modal .consent-btn-secondary:hover{color:var(--primary);background:rgba(15,23,42,.04)}
+.sp-consent-modal .consent-foot a{color:var(--info);font-size:11.5px;font-weight:500;
+  text-decoration:none}
+.sp-consent-modal .consent-foot a:hover{text-decoration:underline}
 
 /* Redactor modal */
 .layer{position:fixed;inset:0;z-index:2147483001;background:rgba(15,23,42,.6);
@@ -1015,11 +1020,17 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         kamery do nagrań screen-cast z narracją (opcjonalne).</span></label>
       </div>
       <div class="consent-foot">
-        <span style="font-size:11.5px;color:var(--muted)">Polityka prywatności · sekrety
-        usuwane przed wysłaniem</span>
+        <a href="https://speqify.app/privacy.html" target="_blank" rel="noopener noreferrer">
+          Polityka prywatności →
+        </a>
+        <span style="color:var(--muted);font-size:11.5px">·</span>
+        <span style="font-size:11.5px;color:var(--muted)">sekrety usuwane przed wysłaniem</span>
         <div class="btn-row">
           <button class="consent-btn consent-btn-secondary" data-decline>Nie teraz</button>
-          <button class="consent-btn consent-btn-primary" data-agree>Akceptuj i zacznij ${svg(ICON.arrow, "2.4")}</button>
+          <button class="consent-btn consent-btn-primary" data-agree>
+            <span>Akceptuj i zacznij</span>
+            ${svg(ICON.arrow, "2.4")}
+          </button>
         </div>
       </div>
     </div>`;

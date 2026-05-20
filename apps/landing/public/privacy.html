@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Polityka prywatności · Speqify</title>
+    <meta
+      name="description"
+      content="Jakie dane zbiera Speqify SDK w czasie sesji review, jak są przetwarzane i jakie masz prawa (RODO)."
+    />
+    <meta name="robots" content="noindex" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+    <style>
+      :root {
+        --primary: #0f172a;
+        --secondary: #475569;
+        --muted: #64748b;
+        --border: #e2e8f0;
+        --surface: #ffffff;
+        --surface-muted: #f1f5f9;
+        --link: #1d4ed8;
+        --accent: #dc2626;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+      }
+      body {
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 16px;
+        line-height: 1.65;
+        color: var(--primary);
+        background: var(--surface);
+      }
+      .wrap {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 56px 24px 80px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--primary);
+        text-decoration: none;
+        margin-bottom: 32px;
+      }
+      header .mark {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: var(--primary);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        position: relative;
+      }
+      header .mark::after {
+        content: "";
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        top: -2px;
+        right: -2px;
+        box-shadow: 0 0 0 2px var(--surface);
+      }
+      header .mark svg {
+        width: 14px;
+        height: 14px;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .lead {
+        color: var(--muted);
+        font-size: 1rem;
+        margin: 0 0 32px;
+      }
+      h2 {
+        margin: 36px 0 10px;
+        font-size: 1.125rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: var(--primary);
+      }
+      p,
+      li {
+        color: var(--secondary);
+      }
+      ul {
+        padding-left: 22px;
+      }
+      ul li {
+        margin: 4px 0;
+      }
+      a {
+        color: var(--link);
+        font-weight: 500;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 8px 16px;
+        background: var(--surface-muted);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 16px 18px;
+        font-size: 0.875rem;
+      }
+      .kv dt {
+        color: var(--muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-size: 0.75rem;
+        padding-top: 2px;
+      }
+      .kv dd {
+        margin: 0;
+        color: var(--primary);
+        font-weight: 500;
+      }
+      footer {
+        margin-top: 48px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 0.8125rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <a href="/" header>
+        <header>
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+          </span>
+          Speqify
+        </header>
+      </a>
+
+      <h1>Polityka prywatności</h1>
+      <p class="lead">
+        Skrócona polityka prywatności dotycząca danych zbieranych przez Speqify SDK podczas sesji
+        review aplikacji klienta. Działa w trybie beta — pełna wersja prawna dla wdrożeń
+        produkcyjnych będzie dostarczana razem z umową.
+      </p>
+
+      <dl class="kv">
+        <dt>Administrator</dt>
+        <dd>Speqify · operator usługi review-as-a-service</dd>
+        <dt>Kontakt RODO</dt>
+        <dd><a href="mailto:rodo@speqify.app">rodo@speqify.app</a></dd>
+        <dt>Lokalizacja danych</dt>
+        <dd>UE — Cloudflare D1 + R2, regiony europejskie</dd>
+        <dt>Status dokumentu</dt>
+        <dd>Beta · ostatnia aktualizacja: maj 2026</dd>
+      </dl>
+
+      <h2>1. Kiedy SDK zbiera dane</h2>
+      <p>
+        Speqify SDK jest „dark by default” — kod loadera może być zainstalowany na dowolnym
+        środowisku (również produkcyjnym), ale nic nie robi dopóki adres URL nie zawiera pary
+        tokenów <code>?speqify_session</code> + <code>?speqify_reviewer</code>. Dopiero wtedy
+        SDK otwiera nakładkę i zaczyna zbierać informacje powiązane z konkretną sesją review.
+      </p>
+
+      <h2>2. Co dokładnie zbieramy</h2>
+      <ul>
+        <li>
+          <strong>Mikrofon</strong> — głos jest nagrywany wyłącznie w momencie, gdy reviewer
+          świadomie kliknie ikonę mikrofonu. Po zatrzymaniu nagrywania plik trafia do bazy w
+          ramach sesji.
+        </li>
+        <li>
+          <strong>Zrzuty viewportu</strong> — robione tylko gdy reviewer dodaje adnotację. Sekrety
+          (tokeny w nagłówkach <code>Authorization</code>, dane osobowe w polach formularzy) są
+          maskowane lokalnie w przeglądarce zanim trafią do backendu.
+        </li>
+        <li>
+          <strong>Kontekst techniczny</strong> — selektor elementu, XPath, fragment HTML
+          docelowego elementu, ostatnie wpisy z konsoli przeglądarki, ostatnie żądania sieciowe,
+          wersja przeglądarki, system operacyjny, rozdzielczość. Bez treści ciasteczek i bez
+          danych biznesowych z aplikacji klienta.
+        </li>
+        <li>
+          <strong>Notatka tekstowa</strong> — to co reviewer sam wpisze.
+        </li>
+      </ul>
+
+      <h2>3. Kogo dotyczą dane</h2>
+      <p>
+        Wyłącznie osoby zaproszonej do sesji review (reviewera). Tożsamość = jego imię/nazwisko +
+        adres e-mail + per-sesyjny token. Nie zbieramy danych innych użytkowników aplikacji
+        klienta.
+      </p>
+
+      <h2>4. Cel przetwarzania</h2>
+      <ul>
+        <li>Wygenerowanie ticketu/zadania (Jira/GitHub) na bazie zebranych adnotacji.</li>
+        <li>
+          Transkrypcja notatek głosowych (provider AI, zgodnie z umową powierzenia — Whisper na
+          infrastrukturze UE, OpenAI z klauzulą Data Processing Addendum, lub samohost wybrany
+          przez właściciela projektu).
+        </li>
+        <li>Analiza pakietu adnotacji przez LLM (Claude / OpenAI / OpenRouter — konfiguracja platformy).</li>
+      </ul>
+
+      <h2>5. Twoje prawa</h2>
+      <ul>
+        <li>Wycofanie zgody w dowolnym momencie — Product Owner sesji odwołuje Twój token jednym kliknięciem.</li>
+        <li>Wgląd, sprostowanie, usunięcie danych — wniosek na <a href="mailto:rodo@speqify.app">rodo@speqify.app</a>.</li>
+        <li>
+          Przeniesienie danych — eksport ZIP z surowych adnotacji + transkrypcji + zrzutów dla
+          danej sesji review na wniosek.
+        </li>
+        <li>Skarga do organu nadzorczego (UODO).</li>
+      </ul>
+
+      <h2>6. Retencja</h2>
+      <p>
+        Adnotacje i wyprodukowane na ich bazie zadania są przechowywane przez okres trwania
+        projektu klienta + 12 miesięcy archiwum. Surowe nagrania głosowe i zrzuty są usuwane po 90
+        dniach od wygenerowania zadania, chyba że klient skonfiguruje krótszą politykę retencji.
+      </p>
+
+      <h2>7. Podwykonawcy</h2>
+      <ul>
+        <li><strong>Cloudflare</strong> — hosting (Workers, D1, R2, Queues) — region UE.</li>
+        <li><strong>Resend</strong> — wysyłka transakcyjnych e-maili zaproszeniowych.</li>
+        <li>
+          <strong>Provider AI</strong> wybrany przez właściciela projektu w panelu (Claude / OpenAI
+          / OpenRouter / własny endpoint) — używany do transkrypcji + generowania zadań.
+        </li>
+      </ul>
+
+      <footer>
+        Masz pytania albo zastrzeżenia? Napisz na
+        <a href="mailto:rodo@speqify.app">rodo@speqify.app</a>. Wersja umowna polityki dla
+        wdrożeń produkcyjnych jest częścią umowy SaaS.
+      </footer>
+    </main>
+  </body>
+</html>
