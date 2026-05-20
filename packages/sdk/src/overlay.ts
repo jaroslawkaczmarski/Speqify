@@ -41,7 +41,7 @@ const STYLE = `
 *,*::before,*::after{box-sizing:border-box}
 :host{
   --primary:#0F172A;--on-primary:#fff;--primary-hover:#1E293B;
-  --secondary:#475569;--accent:#DC2626;--accent-hover:#B91C1C;
+  --secondary:#334155;--accent:#DC2626;--accent-hover:#B91C1C;
   --success:#15803D;--warning:#B45309;--danger:#B91C1C;--info:#1D4ED8;
   --neutral:#F8FAFC;--surface:#fff;--surface-muted:#F1F5F9;--surface-sunken:#E2E8F0;
   --border:#E2E8F0;--border-strong:#CBD5E1;--border-focus:#1D4ED8;--muted:#64748B;
@@ -53,23 +53,6 @@ const STYLE = `
 }
 button{font-family:inherit;cursor:pointer}
 :where(button,textarea):focus-visible{outline:2px solid var(--border-focus);outline-offset:2px}
-
-/* Status pill */
-.sp-status{
-  position:fixed;top:14px;left:50%;transform:translateX(-50%);
-  background:var(--surface);border:1px solid var(--border);
-  box-shadow:var(--el-2);border-radius:999px;
-  padding:6px 6px 6px 14px;display:flex;align-items:center;gap:10px;
-  font-size:13px;color:var(--secondary);z-index:2147483000;max-width:92vw}
-.sp-status .live-dot{width:8px;height:8px;border-radius:50%;background:#22C55E;
-  box-shadow:0 0 0 3px rgba(34,197,94,.2);flex:none}
-.sp-status .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sp-status strong{color:var(--primary);font-weight:600}
-.sp-status .v{font-family:var(--font-mono);font-size:11px;color:var(--muted);
-  background:var(--surface-muted);padding:3px 8px;border-radius:999px;flex:none}
-.sp-status .close{border:0;background:transparent;color:var(--muted);
-  width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:none}
-.sp-status .close:hover{background:var(--surface-muted);color:var(--primary)}
 
 /* Bottom toolbar */
 .sp-toolbar{
@@ -260,8 +243,14 @@ button{font-family:inherit;cursor:pointer}
 
 .sp-foot{border-top:1px solid var(--border);padding:14px 20px;display:flex;
   align-items:center;gap:10px;background:var(--surface);flex:none}
+.sp-capbtn{background:transparent;border:1px solid var(--border-strong);
+  color:var(--secondary);width:36px;height:36px;border-radius:8px;
+  display:grid;place-items:center;cursor:pointer;transition:background .12s,color .12s}
+.sp-capbtn:hover{background:var(--surface-muted);color:var(--primary);
+  border-color:var(--primary)}
+.sp-capbtn svg{width:16px;height:16px}
 .sp-save{background:transparent;border:0;color:var(--secondary);font-size:14px;
-  font-weight:500;padding:10px 12px;border-radius:8px}
+  font-weight:500;padding:10px 12px;border-radius:8px;margin-left:6px}
 .sp-save:hover{color:var(--primary);background:var(--surface-muted)}
 .sp-save:disabled{opacity:.5;cursor:not-allowed}
 .sp-foot .sync{margin-left:auto;font-size:12px;color:var(--muted);
@@ -328,25 +317,34 @@ button{font-family:inherit;cursor:pointer}
   .rec-btn::before,.rec.live .rec-wave span{animation:none}
 }
 
-/* Idle FAB + session pill (SDK Idle state) */
+/* Idle FAB — collapsed by default (just a `+` circle), expands on hover into
+   the full "Speqify · Dodaj adnotację" pill. The previous logo-mark on the
+   left was dropped in RS-6d. */
 .sp-fab{position:fixed;bottom:24px;right:24px;z-index:2147483000;background:var(--primary);
-  color:#fff;border:0;cursor:pointer;border-radius:999px;padding:10px 18px 10px 12px;
-  display:flex;align-items:center;gap:12px;
+  color:#fff;border:0;cursor:pointer;border-radius:999px;padding:0;
+  display:flex;align-items:center;overflow:hidden;width:56px;height:56px;
   box-shadow:0 12px 32px rgba(15,23,42,.25),0 0 0 4px rgba(15,23,42,.05);
-  transition:transform .15s,box-shadow .15s;font-family:var(--font-sans)}
-.sp-fab:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(15,23,42,.3),0 0 0 6px rgba(15,23,42,.06)}
-.sp-fab-mark{width:32px;height:32px;border-radius:8px;background:#fff;color:var(--primary);
-  display:grid;place-items:center;position:relative;flex:none}
-.sp-fab-mark::after{content:"";position:absolute;width:10px;height:10px;border-radius:50%;
-  background:#22C55E;top:-2px;right:-2px;box-shadow:0 0 0 2px var(--primary);
-  animation:sp-livedot 1.6s ease-in-out infinite}
-@keyframes sp-livedot{50%{opacity:.4}}
-.sp-fab-mark svg{width:16px;height:16px}
-.sp-fab-body{display:flex;flex-direction:column;gap:1px;text-align:left}
+  transition:width .25s cubic-bezier(.2,.7,.2,1),transform .15s,box-shadow .15s;
+  font-family:var(--font-sans)}
+.sp-fab:hover,.sp-fab:focus-visible{width:224px;transform:translateY(-2px);
+  box-shadow:0 16px 40px rgba(15,23,42,.3),0 0 0 6px rgba(15,23,42,.06)}
+.sp-fab-cta{width:56px;height:56px;border-radius:50%;background:var(--accent);
+  display:grid;place-items:center;flex:none;color:#fff;position:relative}
+.sp-fab-cta::after{content:"";position:absolute;inset:-4px;border-radius:50%;
+  border:2px solid var(--accent);opacity:.35;animation:sp-livedot 1.8s ease-out infinite}
+@keyframes sp-livedot{0%{transform:scale(.95);opacity:.45}100%{transform:scale(1.12);opacity:0}}
+.sp-fab-cta svg{width:18px;height:18px}
+.sp-fab-body{flex:1;display:flex;flex-direction:column;gap:1px;text-align:left;
+  padding:0 16px 0 14px;white-space:nowrap;opacity:0;transition:opacity .12s ease-in;
+  pointer-events:none;min-width:0}
+.sp-fab:hover .sp-fab-body,.sp-fab:focus-visible .sp-fab-body{opacity:1;transition-delay:.1s}
 .sp-fab-label{font-weight:700;font-size:14px;letter-spacing:-.01em}
 .sp-fab-sub{font-size:11px;color:rgba(255,255,255,.65);font-family:var(--font-mono)}
-.sp-fab-cta{width:28px;height:28px;border-radius:50%;background:var(--accent);
-  display:grid;place-items:center;flex:none}
+@media (prefers-reduced-motion:reduce){
+  .sp-fab,.sp-fab:hover{transition:none;transform:none}
+  .sp-fab-body{transition:none}
+  .sp-fab-cta::after{animation:none}
+}
 .sp-fab-cta svg{width:14px;height:14px;color:#fff}
 @media (prefers-reduced-motion:reduce){
   .sp-fab-mark::after{animation:none}.sp-fab{transition:none}
@@ -366,18 +364,20 @@ button{font-family:inherit;cursor:pointer}
 @keyframes sp-pop{from{opacity:0;transform:translateY(8px) scale(.98)}
   to{opacity:1;transform:translateY(0) scale(1)}}
 @media (prefers-reduced-motion:reduce){.sp-consent-modal{animation:none}}
-.sp-consent-modal .consent-head{padding:28px 32px 0}
-.sp-consent-modal .consent-head .logo{width:44px;height:44px;border-radius:11px;
-  background:var(--primary);color:#fff;display:grid;place-items:center;margin-bottom:18px;
-  position:relative}
+.sp-consent-modal .consent-head{padding:28px 32px 0;display:flex;align-items:center;gap:18px}
+.sp-consent-modal .consent-head .logo{width:48px;height:48px;border-radius:12px;
+  background:var(--primary);color:#fff;display:grid;place-items:center;
+  position:relative;flex:none;align-self:center}
 .sp-consent-modal .consent-head .logo::after{content:"";position:absolute;width:10px;
   height:10px;border-radius:50%;background:var(--accent);top:-2px;right:-2px;
   box-shadow:0 0 0 2px var(--surface)}
-.sp-consent-modal .consent-head .logo svg{width:20px;height:20px}
-.sp-consent-modal .consent-head h2{margin:0;font-size:22px;font-weight:700;
-  letter-spacing:-.015em;line-height:1.3;color:var(--primary)}
-.sp-consent-modal .consent-head p{margin:8px 0 0;color:var(--secondary);font-size:15px;
-  line-height:1.6}
+.sp-consent-modal .consent-head .logo svg{width:22px;height:22px}
+.sp-consent-modal .consent-head .head-text{flex:1;min-width:0;display:flex;
+  flex-direction:column;justify-content:center;gap:6px}
+.sp-consent-modal .consent-head h2{margin:0;font-size:20px;font-weight:700;
+  letter-spacing:-.015em;line-height:1.25;color:var(--primary)}
+.sp-consent-modal .consent-head p{margin:0;color:var(--secondary);font-size:14px;
+  line-height:1.55}
 .sp-consent-modal .consent-head p strong{color:var(--primary);font-weight:600}
 .sp-consent-modal .consent-about{padding:14px 32px 0;display:flex;flex-direction:column;
   gap:10px}
@@ -443,7 +443,12 @@ const HOST_STYLE = `
 [data-speqify-annotated]::before{content:"";position:absolute;inset:-6px;border-radius:8px;
   border:2px solid #DC2626;opacity:.3;animation:speqify-host-pulse 1.8s ease-out infinite}
 @keyframes speqify-host-pulse{0%{transform:scale(.98);opacity:.4}100%{transform:scale(1.08);opacity:0}}
-@media (prefers-reduced-motion:reduce){[data-speqify-annotated]::before{animation:none}}
+/* Reduced-motion fallback for the host-side annotation pulse. The body
+   margin-right used to push the host content left while the panel is open
+   is set inline from JS instead of via a CSS rule — see setHostShift(). */
+@media (prefers-reduced-motion:reduce){
+  [data-speqify-annotated]::before{animation:none}
+}
 `;
 
 const ICON = {
@@ -516,6 +521,26 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   hostStyle.setAttribute("data-speqify-host-style", "");
   hostStyle.textContent = HOST_STYLE;
   document.head.appendChild(hostStyle);
+
+  // RS-6d: shifting host content left while the right panel is open is done
+  // by writing inline `margin-right` on `<body>` via setProperty(..., important).
+  // CSS rules + a `body.speqify-panel-open` class were silently swallowed in
+  // some React + shadow-DOM combinations on Chromium even with `!important`;
+  // the inline route is reliable and easier to clean up on destroy.
+  const PANEL_W = 440;
+  const setHostShift = (on: boolean): void => {
+    const h = document.documentElement;
+    // We intentionally don't transition the margin: setting both `transition`
+    // and `margin-right` together in one tick blocks Chromium from applying
+    // the new margin at all (the transition source/target seem to get
+    // tangled in a way `!important` can't unwind). The panel itself slides
+    // in with its own animation, which is enough motion.
+    if (on) {
+      h.style.setProperty("margin-right", `${PANEL_W}px`, "important");
+    } else {
+      h.style.removeProperty("margin-right");
+    }
+  };
 
   // ---- state -------------------------------------------------------------
   let tab: Tab = "new";
@@ -639,16 +664,9 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   };
 
   // ---- chrome ------------------------------------------------------------
-  const statusPill = document.createElement("div");
-  statusPill.className = "sp-status";
-  statusPill.setAttribute("role", "status");
-  statusPill.setAttribute("aria-live", "polite");
-  statusPill.innerHTML = `
-    <span class="live-dot" aria-hidden="true"></span>
-    <span class="txt"><strong>Speqify SDK aktywny</strong> · sesja review · ${esc(sessionLabel)}</span>
-    <span class="v">v0.5.0</span>
-    <button class="close" aria-label="Zwiń overlay">${svg('<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>', "2.5")}</button>`;
-  root.appendChild(statusPill);
+  // RS-6d: the top status pill ("Speqify SDK aktywny · …") was dropped — the
+  // FAB + dock + side panel already convey activity status; the pill added
+  // visual noise without conveying anything not already on screen.
 
   const toolbar = document.createElement("div");
   toolbar.className = "sp-toolbar";
@@ -667,14 +685,13 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   const fab = document.createElement("button");
   fab.className = "sp-fab";
   fab.type = "button";
-  fab.setAttribute("aria-label", "Otwórz Speqify SDK");
+  fab.setAttribute("aria-label", "Otwórz Speqify · dodaj adnotację");
   fab.innerHTML = `
-    <span class="sp-fab-mark" aria-hidden="true">${svg(ICON.logo, "2.5")}</span>
+    <span class="sp-fab-cta" aria-hidden="true">${svg('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>', "2.4")}</span>
     <span class="sp-fab-body">
       <span class="sp-fab-label">Speqify</span>
       <span class="sp-fab-sub">Dodaj adnotację</span>
-    </span>
-    <span class="sp-fab-cta" aria-hidden="true">${svg('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>', "2.4")}</span>`;
+    </span>`;
   root.appendChild(fab);
 
   // Welcome / RODO consent modal — separate centered dialog (RS-6c). The
@@ -988,9 +1005,11 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     consentWrap.innerHTML = `<div class="sp-consent-modal">
       <div class="consent-head">
         <span class="logo" aria-hidden="true">${svg(ICON.logo, "2.5")}</span>
-        <h2>${greeting} <span style="color:var(--muted);font-weight:500">·</span> ${esc(sessionDisplay)}</h2>
-        <p>Zostałeś zaproszony do dodawania adnotacji wprost na działającej aplikacji.
-        Zanim zaczniesz, potrzebujemy Twojej zgody.</p>
+        <div class="head-text">
+          <h2>${greeting} <span style="color:var(--muted);font-weight:500">·</span> ${esc(sessionDisplay)}</h2>
+          <p>Zostałeś zaproszony do dodawania adnotacji wprost na działającej aplikacji.
+          Zanim zaczniesz, potrzebujemy Twojej zgody.</p>
+        </div>
       </div>
       ${aboutWrap}
       <div class="consent-body">
@@ -1072,20 +1091,26 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     }
     if (minimized) {
       fab.style.display = "";
-      statusPill.style.display = "none";
       toolbar.style.display = "none";
       panel.hidden = true;
+      setHostShift(false);
       renderIdle();
       return;
     }
     fab.style.display = "none";
-    statusPill.style.display = "";
-    toolbar.style.display = "";
-    renderToolbar();
+    // RS-6d: when the right panel is open, hide the bottom dock — both
+    // surfaces expose the same actions, so showing them together is just
+    // duplication. Dock is the quick/minimal surface, panel is the full one.
+    toolbar.style.display = panelOpen ? "none" : "";
     if (!panelOpen) {
+      renderToolbar();
       panel.hidden = true;
+      setHostShift(false);
       return;
     }
+    // Panel is open: push the host content left so the panel doesn't cover
+    // anything the reviewer wants to annotate.
+    setHostShift(true);
     panel.hidden = false;
 
     const sync = lastSync
@@ -1110,6 +1135,8 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       </div>
       <div class="sp-body">${renderBody()}</div>
       <div class="sp-foot">
+        <button class="sp-capbtn" data-cap-shot title="Zrzut + adnotacja">${svg(ICON.shot, "2")}</button>
+        <button class="sp-capbtn" data-cap-screen title="Nagraj ekran">${svg(ICON.screen, "2")}</button>
         <button class="sp-save" data-save>Zapisz draft</button>
         ${sync}
         <button class="sp-submit" data-send>Wyślij ${svg(ICON.arrow, "2.4")}</button>
@@ -1119,14 +1146,20 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   };
 
   const wireBody = (): void => {
+    // RS-6d: minimize ≠ close.
+    //   data-min  → drop panel, keep the dock visible (dock-primary state).
+    //   data-close → retreat all the way back to the idle FAB.
     panel.querySelector("[data-min]")?.addEventListener("click", () => {
       panelOpen = false;
       render();
     });
     panel.querySelector("[data-close]")?.addEventListener("click", () => {
       panelOpen = false;
+      minimized = true;
       render();
     });
+    panel.querySelector("[data-cap-shot]")?.addEventListener("click", () => onTool("shot"));
+    panel.querySelector("[data-cap-screen]")?.addEventListener("click", () => onTool("screen"));
     panel.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((b) =>
       b.addEventListener("click", () => {
         tab = b.dataset.tab as Tab;
@@ -1202,19 +1235,23 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     pickArmed = false;
     tab = "new";
     if (pendingVoiceCapture) {
-      // Mic flow: pick → record without ever opening the right panel.
+      // Mic-driven flow (RS-6b): pick → auto-record. Whether the right
+      // panel was open or not is preserved by render().
       pendingVoiceCapture = false;
       render();
       toggleVoice();
       return;
     }
-    // Manual pick keeps the dock primary (RS-6b). The reviewer opens the
-    // right panel explicitly via the "Szczegóły" dock button if they want
-    // to refine the draft.
+    // Manual pick. The dock and the panel state are both preserved — the
+    // reviewer chose how they want to keep working.
     render();
   };
   const startPick = (): void => {
-    panelOpen = false;
+    // RS-6d: don't force-close the panel — when the reviewer is using the
+    // panel surface the panel must stay open so they can switch right back
+    // into editing the just-picked annotation. The host page is shifted
+    // 440px to the left while the panel is open, so the click target is
+    // still visible on screen.
     pickArmed = true;
     render();
     document.addEventListener("click", onPick, true);
@@ -1469,11 +1506,6 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   };
   document.addEventListener("keydown", onKey);
 
-  statusPill.querySelector(".close")?.addEventListener("click", () => {
-    panelOpen = false;
-    minimized = true;
-    render();
-  });
 
   render();
 
