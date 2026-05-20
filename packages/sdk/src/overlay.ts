@@ -106,6 +106,7 @@ button{font-family:inherit;cursor:pointer}
   padding:1px 4px;border-radius:3px;margin-left:6px}
 
 /* Annotation panel */
+.sp-panel[hidden]{display:none}
 .sp-panel{position:fixed;top:0;right:0;bottom:0;width:440px;max-width:100vw;
   background:var(--surface);color:var(--primary);box-shadow:-20px 0 60px rgba(15,23,42,.18);
   border-left:1px solid var(--border);display:flex;flex-direction:column;
