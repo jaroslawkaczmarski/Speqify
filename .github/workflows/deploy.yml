@@ -63,6 +63,14 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Bundle SDK loader + drop into landing public
+        # Landing serves https://speqify.app/sdk/v1/loader.js. The bundle is a
+        # generated artifact (gitignored) so it must be produced + copied into
+        # landing/public BEFORE the landing build folds public/ into dist/.
+        run: |
+          pnpm --filter @speqify/sdk bundle
+          mkdir -p apps/landing/public/sdk/v1
+          cp packages/sdk/dist/loader.js apps/landing/public/sdk/v1/loader.js
       - name: Build landing + panel
         run: |
           pnpm --filter @speqify/landing build
