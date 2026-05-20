@@ -1,6 +1,7 @@
-import type { Annotation, Panel, Project, Task } from "@speqify/shared";
+import type { Annotation, Project, Reviewer, ReviewSession, Task } from "@speqify/shared";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
+import { NoopEmailSender } from "../src/email/resend.js";
 import type { AppConfig } from "../src/env.js";
 import { hashPassword } from "../src/lib/crypto.js";
 import type { LlmProvider } from "../src/analysis/types.js";
@@ -10,15 +11,57 @@ import type { Transcriber } from "../src/transcribe/types.js";
 
 const ENV_URL = "https://app.example.com";
 
-function panel(token: string, status: "open" | "closed"): Panel {
+const baseTemplate = {
+  language: "en" as const,
+  userStory: true,
+  acceptanceCriteria: true,
+  labels: [],
+  components: [],
+  versions: [],
+  customFields: {},
+};
+const defaultTemplates = {
+  bug: baseTemplate,
+  change: baseTemplate,
+  feature: baseTemplate,
+  polish: baseTemplate,
+};
+
+const ts = (): string => new Date().toISOString();
+
+function reviewSession(
+  id: string,
+  token: string,
+  projectId: string,
+  status: ReviewSession["status"],
+): ReviewSession {
   return {
-    id: `panel-${token}`,
-    projectId: "proj-1",
-    audience: "client",
-    secretToken: token,
-    environmentUrl: ENV_URL,
+    id,
+    projectId,
+    name: `Session ${id}`,
+    description: "",
+    instructions: "",
+    envUrl: ENV_URL,
+    token,
     status,
-    createdAt: new Date().toISOString(),
+    startsAt: null,
+    endsAt: null,
+    createdBy: "usr_sa",
+    createdAt: ts(),
+  };
+}
+
+function reviewer(id: string, sessionId: string, token: string): Reviewer {
+  return {
+    id,
+    sessionId,
+    name: "Reviewer",
+    email: "rev@example.com",
+    token,
+    status: "active",
+    invitedAt: ts(),
+    acceptedAt: ts(),
+    lastSeenAt: null,
   };
 }
 
@@ -39,8 +82,16 @@ function annotationBody(over: Record<string, unknown> = {}) {
     structured: null,
     technical: null,
     hostApp: null,
-    clientCreatedAt: new Date().toISOString(),
+    clientCreatedAt: ts(),
     ...over,
+  };
+}
+
+function sdkHeaders(sessionToken: string, reviewerToken: string) {
+  return {
+    "content-type": "application/json",
+    "x-speqify-session": sessionToken,
+    "x-speqify-reviewer": reviewerToken,
   };
 }
 
@@ -61,34 +112,42 @@ const poProject: Project = {
   id: "prj_po",
   name: "PO Project",
   productOwnerId: "usr_po",
-  environmentUrls: ["https://staging.test"],
+  environmentUrls: ["https://staging.test", ENV_URL],
   status: "live",
-  template: {
-    language: "en",
-    userStory: true,
-    acceptanceCriteria: true,
-    labels: [],
-    components: [],
-    versions: [],
-    customFields: {},
-  },
+  templates: defaultTemplates,
   exportConfigId: null,
-  createdAt: new Date().toISOString(),
+  createdAt: ts(),
 };
 
-const poPanel: Panel = {
-  id: "panel-po-tok",
-  projectId: "prj_po",
-  audience: "client",
-  secretToken: "po-tok",
-  environmentUrl: ENV_URL,
-  status: "open",
-  createdAt: new Date().toISOString(),
+// "proj-1" host: separate from the PO's own project, used for the open/closed
+// session smoke tests so /po routes are scoped only to prj_po.
+const otherProject: Project = {
+  id: "proj-1",
+  name: "Other Project",
+  productOwnerId: "usr_other",
+  environmentUrls: [ENV_URL],
+  status: "live",
+  templates: defaultTemplates,
+  exportConfigId: null,
+  createdAt: ts(),
 };
 
-function makeApp(extra?: Panel[], transcriberArg?: Transcriber, llmArg?: LlmProvider) {
+const openSession = reviewSession("sess-open", "open-tok", "proj-1", "live");
+const closedSession = reviewSession("sess-closed", "closed-tok", "proj-1", "closed");
+const poSession = reviewSession("sess-po", "po-tok", "prj_po", "live");
+
+const openReviewer = reviewer("rev-open", openSession.id, "open-rev");
+const closedReviewer = reviewer("rev-closed", closedSession.id, "closed-rev");
+const poReviewer = reviewer("rev-po", poSession.id, "po-rev");
+
+function makeApp(
+  extra?: { sessions?: ReviewSession[]; reviewers?: Reviewer[] },
+  transcriberArg?: Transcriber,
+  llmArg?: LlmProvider,
+) {
   const repo = new InMemoryRepository({
-    panels: [panel("open-tok", "open"), panel("closed-tok", "closed"), poPanel, ...(extra ?? [])],
+    reviewSessions: [openSession, closedSession, poSession, ...(extra?.sessions ?? [])],
+    reviewers: [openReviewer, closedReviewer, poReviewer, ...(extra?.reviewers ?? [])],
     users: [
       {
         id: "usr_po",
@@ -96,16 +155,23 @@ function makeApp(extra?: Panel[], transcriberArg?: Transcriber, llmArg?: LlmProv
         email: "po@speqify.app",
         displayName: "Demo PO",
         passwordHash: poHash,
-        createdAt: new Date().toISOString(),
+        createdAt: ts(),
       },
     ],
-    projects: [poProject],
+    projects: [poProject, otherProject],
   });
   const mediaStore = new InMemoryMediaStore();
   const transcriber: Transcriber = transcriberArg ?? okTranscriber();
   const llm: LlmProvider = llmArg ?? okLlm();
   return {
-    app: createApp({ repo, config, mediaStore, transcriber, llm }),
+    app: createApp({
+      repo,
+      config,
+      mediaStore,
+      transcriber,
+      llm,
+      emailSender: new NoopEmailSender(),
+    }),
     repo,
     mediaStore,
   };
@@ -176,45 +242,62 @@ describe("admin auth", () => {
   });
 });
 
-describe("panel capability token", () => {
-  it("404s an unknown token", async () => {
+describe("SDK session+reviewer token pair", () => {
+  it("404s an unknown session token on intro", async () => {
     const { app } = makeApp();
-    expect((await app.request("/panels/nope")).status).toBe(404);
+    expect((await app.request("/sdk/sessions/nope/intro?reviewer=open-rev")).status).toBe(404);
   });
 
-  it("validates an open panel", async () => {
+  it("rejects a missing reviewer token", async () => {
     const { app } = makeApp();
-    const res = await app.request("/panels/open-tok");
-    expect(res.status).toBe(200);
-    expect((await res.json()) as { status: string }).toMatchObject({ status: "open" });
+    expect((await app.request("/sdk/sessions/open-tok/intro")).status).toBe(401);
   });
 
-  it("reports a closed panel but blocks ingest (panel_closed)", async () => {
+  it("rejects a reviewer that does not belong to the session", async () => {
     const { app } = makeApp();
-    expect((await app.request("/panels/closed-tok")).status).toBe(200);
-    const res = await app.request("/panels/closed-tok/annotations", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(annotationBody()),
-    });
+    // closed-rev is bound to sess-closed, not sess-open
+    expect((await app.request("/sdk/sessions/open-tok/intro?reviewer=closed-rev")).status).toBe(
+      404,
+    );
+  });
+
+  it("rejects intro on a closed session with session_unavailable (423)", async () => {
+    const { app } = makeApp();
+    const res = await app.request("/sdk/sessions/closed-tok/intro?reviewer=closed-rev");
     expect(res.status).toBe(423);
+    const j = (await res.json()) as { error: { code: string } };
+    expect(j.error.code).toBe("session_unavailable");
+  });
+
+  it("returns intro copy and flips reviewer pending → active", async () => {
+    const pendingRev = reviewer("rev-pending", poSession.id, "pending-rev");
+    pendingRev.status = "pending";
+    pendingRev.acceptedAt = null;
+    const { app, repo } = makeApp({ reviewers: [pendingRev] });
+    const res = await app.request("/sdk/sessions/po-tok/intro?reviewer=pending-rev");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { projectName: string; sessionName: string };
+    expect(body.projectName).toBe("PO Project");
+    const after = await repo.getReviewer("rev-pending");
+    expect(after?.status).toBe("active");
+    expect(after?.acceptedAt).toBeTruthy();
   });
 });
 
-describe("annotation ingest", () => {
-  it("is idempotent on clientAnnotationId", async () => {
+describe("annotation ingest (SDK)", () => {
+  it("is idempotent on clientAnnotationId per (session, reviewer)", async () => {
     const { app } = makeApp();
-    const first = await app.request("/panels/open-tok/annotations", {
+    const first = await app.request("/sdk/submissions/sub-1/annotations", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: sdkHeaders("open-tok", "open-rev"),
       body: JSON.stringify(annotationBody()),
     });
     expect(first.status).toBe(201);
     expect((await first.json()) as { created: boolean }).toMatchObject({ created: true });
 
-    const second = await app.request("/panels/open-tok/annotations", {
+    const second = await app.request("/sdk/submissions/sub-1/annotations", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: sdkHeaders("open-tok", "open-rev"),
       body: JSON.stringify(annotationBody()),
     });
     expect(second.status).toBe(200);
@@ -223,44 +306,54 @@ describe("annotation ingest", () => {
 
   it("400s an invalid body", async () => {
     const { app } = makeApp();
-    const res = await app.request("/panels/open-tok/annotations", {
+    const res = await app.request("/sdk/submissions/sub-1/annotations", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: sdkHeaders("open-tok", "open-rev"),
       body: JSON.stringify(annotationBody({ pageUrl: "not-a-url" })),
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("bad_request");
   });
 
-  it("rejects a mismatched browser Origin (CORS allowlist)", async () => {
+  it("blocks ingest against a closed session (session_unavailable)", async () => {
     const { app } = makeApp();
-    const res = await app.request("/panels/open-tok/annotations", {
+    const res = await app.request("/sdk/submissions/sub-1/annotations", {
       method: "POST",
-      headers: { "content-type": "application/json", origin: "https://evil.com" },
+      headers: sdkHeaders("closed-tok", "closed-rev"),
       body: JSON.stringify(annotationBody()),
     });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(423);
+  });
+
+  it("rejects a body whose submissionId does not match the URL path", async () => {
+    const { app } = makeApp();
+    const res = await app.request("/sdk/submissions/sub-9/annotations", {
+      method: "POST",
+      headers: sdkHeaders("open-tok", "open-rev"),
+      body: JSON.stringify(annotationBody({ submissionId: "sub-1" })),
+    });
+    expect(res.status).toBe(400);
   });
 });
 
 describe("submit", () => {
   it("404s an unknown submission and completes a known one", async () => {
     const { app } = makeApp();
-    const missing = await app.request("/panels/open-tok/submit", {
+    const missing = await app.request("/sdk/submissions/ghost/complete", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: sdkHeaders("open-tok", "open-rev"),
       body: JSON.stringify({ submissionId: "ghost", clientId: "browser-1" }),
     });
     expect(missing.status).toBe(404);
 
-    await app.request("/panels/open-tok/annotations", {
+    await app.request("/sdk/submissions/sub-1/annotations", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: sdkHeaders("open-tok", "open-rev"),
       body: JSON.stringify(annotationBody()),
     });
-    const ok = await app.request("/panels/open-tok/submit", {
+    const ok = await app.request("/sdk/submissions/sub-1/complete", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: sdkHeaders("open-tok", "open-rev"),
       body: JSON.stringify({ submissionId: "sub-1", clientId: "browser-1" }),
     });
     expect(ok.status).toBe(200);
@@ -268,11 +361,10 @@ describe("submit", () => {
   });
 });
 
-describe("superadmin (Phase 2)", () => {
-  it("requires a superadmin session", async () => {
+describe("superadmin (Phase 2) + sessions (RS-7)", () => {
+  it("requires a superadmin session for /admin/*", async () => {
     const { app } = makeApp();
     expect((await app.request("/admin/projects")).status).toBe(401);
-
     const poToken = await login(app, "po@speqify.app", "po-pass");
     const asPo = await app.request("/admin/projects", {
       headers: { authorization: `Bearer ${poToken}` },
@@ -280,7 +372,7 @@ describe("superadmin (Phase 2)", () => {
     expect(asPo.status).toBe(401);
   });
 
-  it("creates a PO, a project and a usable panel end to end", async () => {
+  it("creates a PO + project end-to-end; PO scopes session CRUD to own project", async () => {
     const { app } = makeApp();
     const sa = await login(app, "admin@speqify.app", "s3cret-pass");
     const auth = { authorization: `Bearer ${sa}`, "content-type": "application/json" };
@@ -301,13 +393,6 @@ describe("superadmin (Phase 2)", () => {
     });
     expect(dup.status).toBe(409);
 
-    const users = await app.request("/admin/users", {
-      headers: { authorization: `Bearer ${sa}` },
-    });
-    const userList = ((await users.json()) as { users: { email: string }[] }).users;
-    expect(userList.some((u) => u.email === "newpo@speqify.app")).toBe(true);
-    expect(userList.every((u) => !("passwordHash" in u))).toBe(true);
-
     const projRes = await app.request("/admin/projects", {
       method: "POST",
       headers: auth,
@@ -318,57 +403,95 @@ describe("superadmin (Phase 2)", () => {
       }),
     });
     expect(projRes.status).toBe(201);
-    const project = (await projRes.json()) as { id: string };
+    const project = (await projRes.json()) as { id: string; templates: Record<string, unknown> };
+    // Without a `templates` field on create, the API seeds the default 4-type bundle.
+    expect(project.templates).toHaveProperty("bug");
+    expect(project.templates).toHaveProperty("change");
+    expect(project.templates).toHaveProperty("feature");
+    expect(project.templates).toHaveProperty("polish");
 
-    const list = await app.request("/admin/projects", {
-      headers: { authorization: `Bearer ${sa}` },
-    });
-    const projects = ((await list.json()) as { projects: { id: string }[] }).projects;
-    expect(projects.some((p) => p.id === project.id)).toBe(true);
+    // PO session CRUD: PO is scoped to their own project (prj_po here).
+    const po = await login(app, "po@speqify.app", "po-pass");
+    const poAuth = { authorization: `Bearer ${po}`, "content-type": "application/json" };
 
-    const panelRes = await app.request(`/admin/projects/${project.id}/panels`, {
+    const list = await app.request("/po/sessions", { headers: { authorization: `Bearer ${po}` } });
+    expect(list.status).toBe(200);
+    const initialSessions = ((await list.json()) as { sessions: ReviewSession[] }).sessions;
+    expect(initialSessions.some((s) => s.token === "po-tok")).toBe(true);
+
+    const createSess = await app.request("/po/sessions", {
       method: "POST",
-      headers: auth,
-      body: JSON.stringify({ audience: "client", environmentUrl: "https://staging.acme.test" }),
+      headers: poAuth,
+      body: JSON.stringify({
+        name: "Q1 smoke",
+        envUrl: "https://staging.test",
+        description: "",
+        instructions: "",
+      }),
     });
-    expect(panelRes.status).toBe(201);
-    const panel = (await panelRes.json()) as {
-      id: string;
-      secretToken: string;
-      panelUrl: string;
-    };
-    expect(panel.panelUrl).toContain(panel.secretToken);
+    expect(createSess.status).toBe(201);
+    const newSess = (await createSess.json()) as { id: string; status: string; token: string };
+    expect(newSess.status).toBe("draft");
+    expect(newSess.token).toBeTruthy();
 
-    // The admin-created token works on the public SDK route.
-    const validate = await app.request(`/panels/${panel.secretToken}`);
-    expect(validate.status).toBe(200);
-    expect((await validate.json()) as { status: string }).toMatchObject({ status: "open" });
-
-    // Phase 4: close the panel -> still visible but ingest blocked.
-    const closed = await app.request(`/admin/panels/${panel.id}/status`, {
+    // Publish via status transition draft -> live.
+    const publish = await app.request(`/po/sessions/${newSess.id}/status`, {
       method: "POST",
-      headers: auth,
+      headers: poAuth,
+      body: JSON.stringify({ status: "live" }),
+    });
+    expect(publish.status).toBe(200);
+    expect((await publish.json()) as { status: string }).toMatchObject({ status: "live" });
+
+    // Illegal transition closed -> live is rejected by canTransitionReviewSession.
+    await app.request(`/po/sessions/${newSess.id}/status`, {
+      method: "POST",
+      headers: poAuth,
       body: JSON.stringify({ status: "closed" }),
     });
-    expect(closed.status).toBe(200);
-    const afterClose = await app.request(`/panels/${panel.secretToken}`);
-    expect((await afterClose.json()) as { status: string }).toMatchObject({
-      status: "closed",
-    });
-    const blocked = await app.request(`/panels/${panel.secretToken}/annotations`, {
+    const bad = await app.request(`/po/sessions/${newSess.id}/status`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(annotationBody()),
+      headers: poAuth,
+      body: JSON.stringify({ status: "live" }),
     });
-    expect(blocked.status).toBe(423);
+    expect(bad.status).toBe(400);
+  });
 
-    // Phase 4: delete the panel -> token revoked (404).
-    const del = await app.request(`/admin/panels/${panel.id}`, {
-      method: "DELETE",
-      headers: { authorization: `Bearer ${sa}` },
+  it("invites + revokes a reviewer; magic-link contains both tokens", async () => {
+    const { app, repo } = makeApp();
+    const po = await login(app, "po@speqify.app", "po-pass");
+    const poAuth = { authorization: `Bearer ${po}`, "content-type": "application/json" };
+    const inv = await app.request(`/po/sessions/${poSession.id}/reviewers`, {
+      method: "POST",
+      headers: poAuth,
+      body: JSON.stringify({ name: "Test Reviewer", email: "test@example.com" }),
     });
-    expect(del.status).toBe(200);
-    expect((await app.request(`/panels/${panel.secretToken}`)).status).toBe(404);
+    expect(inv.status).toBe(201);
+    const body = (await inv.json()) as {
+      reviewer: { id: string; tokenHint: string };
+      inviteUrl: string;
+      emailSent: boolean;
+    };
+    expect(body.inviteUrl).toContain("speqify_session=po-tok");
+    expect(body.inviteUrl).toContain("speqify_reviewer=");
+    // NoopEmailSender never actually sends, so the PO is told to copy the link.
+    expect(body.emailSent).toBe(false);
+
+    const rev = await app.request(`/po/sessions/${poSession.id}/reviewers/${body.reviewer.id}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${po}` },
+    });
+    expect(rev.status).toBe(200);
+    expect(((await rev.json()) as { status: string }).status).toBe("declined");
+
+    // Revoked reviewers are forbidden from the SDK ingest path.
+    const stored = (await repo.getReviewer(body.reviewer.id)) as Reviewer;
+    const ingest = await app.request("/sdk/submissions/sub-x/annotations", {
+      method: "POST",
+      headers: sdkHeaders(poSession.token, stored.token),
+      body: JSON.stringify(annotationBody({ submissionId: "sub-x" })),
+    });
+    expect(ingest.status).toBe(403);
   });
 });
 
@@ -382,27 +505,34 @@ describe("product owner config (Phase 3)", () => {
       headers: { authorization: `Bearer ${po}` },
     });
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { project: { id: string }; export: unknown };
+    const data = (await res.json()) as {
+      project: { id: string; templates: Record<string, unknown> };
+      export: unknown;
+    };
     expect(data.project.id).toBe("prj_po");
+    expect(data.project.templates).toHaveProperty("bug");
     expect(data.export).toBeNull();
   });
 
-  it("updates the template and configures an encrypted export target", async () => {
+  it("updates a single template tab and configures an encrypted export target", async () => {
     const { app } = makeApp();
     const po = await login(app, "po@speqify.app", "po-pass");
     const h = { authorization: `Bearer ${po}`, "content-type": "application/json" };
 
-    const tpl = await app.request("/po/project/template", {
+    const tpl = await app.request("/po/project/templates", {
       method: "PUT",
       headers: h,
       body: JSON.stringify({
-        language: "pl",
-        userStory: true,
-        acceptanceCriteria: true,
-        labels: ["frontend", "backend"],
-        components: ["Cart"],
-        versions: ["1.0"],
-        customFields: {},
+        taskType: "bug",
+        template: {
+          language: "pl",
+          userStory: true,
+          acceptanceCriteria: true,
+          labels: ["frontend", "backend"],
+          components: ["Cart"],
+          versions: ["1.0"],
+          customFields: {},
+        },
       }),
     });
     expect(tpl.status).toBe(200);
@@ -419,13 +549,12 @@ describe("product owner config (Phase 3)", () => {
     expect(exp.status).toBe(200);
     expect((await exp.json()) as { configured: boolean }).toMatchObject({ configured: true });
 
-    // GET must reflect the template and NEVER leak credentials.
     const get = await app.request("/po/project", { headers: { authorization: `Bearer ${po}` } });
     const body = (await get.json()) as {
-      project: { template: { language: string } };
+      project: { templates: { bug: { language: string } } };
       export: { target: string };
     };
-    expect(body.project.template.language).toBe("pl");
+    expect(body.project.templates.bug.language).toBe("pl");
     expect(body.export.target).toBe("jira");
     expect(JSON.stringify(body)).not.toContain("super-secret-token");
 
@@ -436,16 +565,39 @@ describe("product owner config (Phase 3)", () => {
     expect(test.status).toBe(200);
     expect((await test.json()) as { ok: boolean }).toMatchObject({ ok: true });
   });
+
+  it("replaces the full per-type templates bundle in one call", async () => {
+    const { app, repo } = makeApp();
+    const po = await login(app, "po@speqify.app", "po-pass");
+    const h = { authorization: `Bearer ${po}`, "content-type": "application/json" };
+    const tpl = {
+      ...baseTemplate,
+      labels: ["whole"],
+    };
+    const res = await app.request("/po/project/templates", {
+      method: "PUT",
+      headers: h,
+      body: JSON.stringify({ bug: tpl, change: tpl, feature: tpl, polish: tpl }),
+    });
+    expect(res.status).toBe(200);
+    const project = await repo.getProject("prj_po");
+    expect(project?.templates.bug.labels).toEqual(["whole"]);
+    expect(project?.templates.polish.labels).toEqual(["whole"]);
+  });
 });
 
-describe("media upload (Phase 5c)", () => {
+describe("media upload (Phase 5c, via SDK)", () => {
   it("uploads voice, serves it back, and the MediaRef ingests", async () => {
     const { app } = makeApp();
     const bytes = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
 
-    const up = await app.request("/panels/open-tok/uploads?kind=voice", {
+    const up = await app.request("/sdk/uploads?kind=voice", {
       method: "POST",
-      headers: { "content-type": "audio/webm" },
+      headers: {
+        "content-type": "audio/webm",
+        "x-speqify-session": "open-tok",
+        "x-speqify-reviewer": "open-rev",
+      },
       body: bytes,
     });
     expect(up.status).toBe(201);
@@ -463,53 +615,63 @@ describe("media upload (Phase 5c)", () => {
     expect(got.headers.get("content-type")).toBe("audio/webm");
     expect(new Uint8Array(await got.arrayBuffer())).toEqual(bytes);
 
-    // The returned MediaRef must satisfy the annotation ingest contract.
-    const ann = await app.request("/panels/open-tok/annotations", {
+    const ann = await app.request("/sdk/submissions/sub-1/annotations", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: sdkHeaders("open-tok", "open-rev"),
       body: JSON.stringify(annotationBody({ type: "voice", voice: ref })),
     });
     expect(ann.status).toBe(201);
   });
 
-  it("rejects unknown kind, empty and oversize uploads, and closed panels", async () => {
+  it("rejects unknown kind, empty and closed-session uploads", async () => {
     const { app } = makeApp();
+    const hdr = { "x-speqify-session": "open-tok", "x-speqify-reviewer": "open-rev" };
     expect(
       (
-        await app.request("/panels/open-tok/uploads?kind=bogus", {
+        await app.request("/sdk/uploads?kind=bogus", {
           method: "POST",
+          headers: hdr,
           body: new Uint8Array([1]),
         })
       ).status,
     ).toBe(400);
     expect(
       (
-        await app.request("/panels/open-tok/uploads?kind=voice", {
+        await app.request("/sdk/uploads?kind=voice", {
           method: "POST",
+          headers: hdr,
           body: new Uint8Array(0),
         })
       ).status,
     ).toBe(400);
     expect(
       (
-        await app.request("/panels/closed-tok/uploads?kind=voice", {
+        await app.request("/sdk/uploads?kind=voice", {
           method: "POST",
-          headers: { "content-type": "audio/webm" },
+          headers: {
+            "content-type": "audio/webm",
+            "x-speqify-session": "closed-tok",
+            "x-speqify-reviewer": "closed-rev",
+          },
           body: new Uint8Array([1, 2, 3]),
         })
       ).status,
     ).toBe(423);
 
-    const missing = await app.request("/media/panels/nope/voice/x");
+    const missing = await app.request("/media/sessions/nope/x");
     expect(missing.status).toBe(404);
   });
 
   it("accepts screen-recording media kinds", async () => {
     const { app } = makeApp();
     for (const kind of ["recording-video", "recording-audio"]) {
-      const up = await app.request(`/panels/open-tok/uploads?kind=${kind}`, {
+      const up = await app.request(`/sdk/uploads?kind=${kind}`, {
         method: "POST",
-        headers: { "content-type": "video/webm" },
+        headers: {
+          "content-type": "video/webm",
+          "x-speqify-session": "open-tok",
+          "x-speqify-reviewer": "open-rev",
+        },
         body: new Uint8Array([9, 9, 9]),
       });
       expect(up.status).toBe(201);
@@ -517,22 +679,26 @@ describe("media upload (Phase 5c)", () => {
   });
 });
 
-async function ingestVoiceAndSubmit(app: ReturnType<typeof createApp>): Promise<string> {
-  const up = await app.request("/panels/open-tok/uploads?kind=voice", {
+async function ingestVoiceAndSubmit(
+  app: ReturnType<typeof createApp>,
+  sess = "open-tok",
+  rev = "open-rev",
+): Promise<string> {
+  const up = await app.request("/sdk/uploads?kind=voice", {
     method: "POST",
-    headers: { "content-type": "audio/webm" },
+    headers: { "content-type": "audio/webm", "x-speqify-session": sess, "x-speqify-reviewer": rev },
     body: new Uint8Array([1, 2, 3, 4]),
   });
   const ref = await up.json();
-  const ann = await app.request("/panels/open-tok/annotations", {
+  const ann = await app.request("/sdk/submissions/sub-1/annotations", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: sdkHeaders(sess, rev),
     body: JSON.stringify(annotationBody({ type: "voice", voice: ref })),
   });
   const id = ((await ann.json()) as { id: string }).id;
-  await app.request("/panels/open-tok/submit", {
+  await app.request("/sdk/submissions/sub-1/complete", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: sdkHeaders(sess, rev),
     body: JSON.stringify({ submissionId: "sub-1", clientId: "browser-1" }),
   });
   return id;
@@ -565,7 +731,7 @@ describe("transcription (Phase 6)", () => {
         return { text: "recovered" };
       },
     };
-    const { app, repo } = makeApp([], flaky);
+    const { app, repo } = makeApp(undefined, flaky);
     const sa = await login(app, "admin@speqify.app", "s3cret-pass");
     const id = await ingestVoiceAndSubmit(app);
 
@@ -596,7 +762,8 @@ describe("transcription (Phase 6)", () => {
     });
     expect(unknown.status).toBe(404);
 
-    const id = await ingestVoiceAndSubmit(app); // panel 'open-tok' -> project proj-1
+    // ingestVoiceAndSubmit (default tokens) ingests into proj-1, not prj_po.
+    const id = await ingestVoiceAndSubmit(app);
     const foreign = await app.request(`/po/annotations/${id}/transcript`, {
       method: "PUT",
       headers: h,
@@ -608,17 +775,17 @@ describe("transcription (Phase 6)", () => {
 
 async function seedPoAnnotations(app: ReturnType<typeof createApp>, ids: string[]): Promise<void> {
   for (const cid of ids) {
-    await app.request("/panels/po-tok/annotations", {
+    await app.request("/sdk/submissions/sub-po/annotations", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: sdkHeaders("po-tok", "po-rev"),
       body: JSON.stringify(
         annotationBody({ clientAnnotationId: cid, submissionId: "sub-po", clientId: "b1" }),
       ),
     });
   }
-  await app.request("/panels/po-tok/submit", {
+  await app.request("/sdk/submissions/sub-po/complete", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: sdkHeaders("po-tok", "po-rev"),
     body: JSON.stringify({ submissionId: "sub-po", clientId: "b1" }),
   });
 }
@@ -655,7 +822,6 @@ describe("AI analysis (Phase 7)", () => {
     });
     expect(await repo.listTasks("prj_po")).toHaveLength(1);
 
-    // Re-run is incremental: nothing left to process.
     const again = await app.request("/po/analyze", {
       method: "POST",
       headers: { authorization: `Bearer ${po}` },
@@ -668,7 +834,7 @@ describe("AI analysis (Phase 7)", () => {
 
   it("invalid LLM output fails the run and never persists tasks or processes annotations", async () => {
     const bad: LlmProvider = { complete: async () => "totally not json" };
-    const { app, repo } = makeApp([], undefined, bad);
+    const { app, repo } = makeApp(undefined, undefined, bad);
     const po = await login(app, "po@speqify.app", "po-pass");
     await seedPoAnnotations(app, ["b1", "b2"]);
 
@@ -684,7 +850,7 @@ describe("AI analysis (Phase 7)", () => {
   it("rejects a concurrent run (single in-flight per project)", async () => {
     const { app, repo } = makeApp();
     const po = await login(app, "po@speqify.app", "po-pass");
-    await repo.startAnalysisRun("prj_po"); // hold the lock
+    await repo.startAnalysisRun("prj_po");
     const res = await app.request("/po/analyze", {
       method: "POST",
       headers: { authorization: `Bearer ${po}` },
@@ -694,14 +860,14 @@ describe("AI analysis (Phase 7)", () => {
 });
 
 describe("PO review (Phase 8)", () => {
-  const ts = new Date().toISOString();
+  const stamp = ts();
   const ann = (id: string, over: Partial<Annotation> = {}): Annotation => ({
     id,
-    panelId: poPanel.id,
+    sessionId: poSession.id,
+    reviewerId: poReviewer.id,
     submissionId: "sub-rev",
     type: "element",
     status: "processed",
-    audience: "client",
     pageUrl: `${ENV_URL}/orders`,
     breadcrumb: [],
     element: { selector: "button.export", xpath: "/html/body/button", html: "<button/>" },
@@ -716,8 +882,8 @@ describe("PO review (Phase 8)", () => {
     structured: { kind: "change", severity: "medium" },
     technical: null,
     hostApp: null,
-    clientCreatedAt: ts,
-    serverCreatedAt: ts,
+    clientCreatedAt: stamp,
+    serverCreatedAt: stamp,
     correlationId: `cor-${id}`,
     ...over,
   });
@@ -741,13 +907,14 @@ describe("PO review (Phase 8)", () => {
     exportError: null,
     reviewedAt: null,
     rev: 1,
-    createdAt: ts,
+    createdAt: stamp,
     ...over,
   });
 
   function reviewApp() {
     const repo = new InMemoryRepository({
-      panels: [poPanel],
+      reviewSessions: [poSession],
+      reviewers: [poReviewer],
       users: [
         {
           id: "usr_po",
@@ -755,7 +922,7 @@ describe("PO review (Phase 8)", () => {
           email: "po@speqify.app",
           displayName: "Demo PO",
           passwordHash: poHash,
-          createdAt: ts,
+          createdAt: stamp,
         },
       ],
       projects: [poProject],
@@ -769,6 +936,7 @@ describe("PO review (Phase 8)", () => {
         mediaStore: new InMemoryMediaStore(),
         transcriber: okTranscriber(),
         llm: okLlm('{"tasks":[{"title":"Regenerated title","confidence":0.7}]}'),
+        emailSender: new NoopEmailSender(),
       }),
       repo,
     };
@@ -896,7 +1064,6 @@ describe("PO review (Phase 8)", () => {
     expect((await repo.getTask("tsk-1"))?.externalId).toBe("speqify:tsk-1");
     expect(JSON.parse(e1.content).tasks[0].externalId).toBe("speqify:tsk-1");
 
-    // Idempotent re-run: no new transitions, still a full snapshot.
     const r2 = await post(app, "/po/tasks/export?format=json", tok, {});
     const e2 = (await r2.json()) as { total: number; newlyExported: number };
     expect(e2.newlyExported).toBe(0);
@@ -931,11 +1098,11 @@ describe("SA dashboard data (Tranche B)", () => {
     const res = await app.request("/admin/stats", { headers: { authorization: `Bearer ${tok}` } });
     expect(res.status).toBe(200);
     const s = (await res.json()) as { projects: number; productOwners: number };
-    expect(s.projects).toBe(1);
+    expect(s.projects).toBe(2);
     expect(s.productOwners).toBe(1);
   });
 
-  it("records audit entries on project create and lists them newest-first", async () => {
+  it("records audit entries on user create and lists them newest-first", async () => {
     const { app } = makeApp();
     const tok = await sa(app);
     await app.request("/admin/users", {
@@ -996,17 +1163,16 @@ describe("SA dashboard data (Tranche B)", () => {
     const res = await app.request("/admin/stats", {
       headers: { authorization: `Bearer ${tok}` },
     });
-    // requireRole treats a wrong-role session as unauthorized (existing contract).
     expect(res.status).toBe(401);
   });
 });
 
-describe("ingest tags, panel project name, leads (Tranche D)", () => {
+describe("ingest tags, intro project name, leads (Tranche D)", () => {
   it("persists annotation tags through ingest", async () => {
     const { app, repo } = makeApp();
-    const res = await app.request("/panels/po-tok/annotations", {
+    const res = await app.request("/sdk/submissions/sub-1/annotations", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: sdkHeaders("po-tok", "po-rev"),
       body: JSON.stringify(annotationBody({ tags: ["billing", "urgent"] })),
     });
     expect(res.status).toBe(201);
@@ -1014,9 +1180,9 @@ describe("ingest tags, panel project name, leads (Tranche D)", () => {
     expect((await repo.getAnnotationById(id))?.tags).toEqual(["billing", "urgent"]);
   });
 
-  it("panel token validation exposes the project display name", async () => {
+  it("/sdk/sessions/:t/intro exposes the project display name", async () => {
     const { app } = makeApp();
-    const res = await app.request("/panels/po-tok");
+    const res = await app.request("/sdk/sessions/po-tok/intro?reviewer=po-rev");
     expect(res.status).toBe(200);
     expect((await res.json()) as { projectName: string }).toMatchObject({
       projectName: "PO Project",

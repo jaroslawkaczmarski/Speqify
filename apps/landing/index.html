@@ -26,5 +26,8 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Speqify overlay SDK. Dark by default; activates only when the URL
+         carries both ?speqify_session=<token>&speqify_reviewer=<token>. -->
+    <script defer src="/sdk/v1/loader.js" data-speqify-api="http://127.0.0.1:8787"></script>
   </body>
 </html>

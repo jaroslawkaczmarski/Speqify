@@ -7,14 +7,15 @@ import type {
   ExportConfig,
   ExportTarget,
   Lead,
-  PanelAudience,
-  Panel,
-  PanelStatus,
   PlatformProviderConfig,
   PlatformProviderConfigView,
   Project,
   ProjectStatus,
-  ProjectTemplate,
+  ProjectTemplates,
+  Reviewer,
+  ReviewerStatus,
+  ReviewSession,
+  ReviewSessionStatus,
   Submission,
   SubtaskType,
   Task,
@@ -66,10 +67,34 @@ export type TaskMutation =
 export type UserWithSecret = User & { passwordHash: string | null };
 
 export interface AnnotationCreate {
-  panelId: string;
-  audience: PanelAudience;
+  sessionId: string;
+  reviewerId: string;
   correlationId: string;
   input: CreateAnnotationInput;
+}
+
+/** Editable fields on a ReviewSession (any non-status field). */
+export type ReviewSessionPatch = Partial<
+  Pick<ReviewSession, "name" | "description" | "instructions" | "envUrl" | "startsAt" | "endsAt">
+>;
+
+export interface CreateReviewSessionArgs {
+  projectId: string;
+  name: string;
+  description: string;
+  instructions: string;
+  envUrl: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  createdBy: string;
+  token: string;
+}
+
+export interface AddReviewerArgs {
+  sessionId: string;
+  name: string;
+  email: string;
+  token: string;
 }
 
 /**
@@ -77,19 +102,20 @@ export interface AnnotationCreate {
  * unit-testable with the in-memory adapter (no Cloudflare needed in CI).
  */
 export interface Repository {
-  getPanelByToken(token: string): Promise<Panel | null>;
+  // --- SDK ingest (token-gated) ---
 
   getOrCreateSubmission(args: {
-    panelId: string;
+    sessionId: string;
+    reviewerId: string;
     submissionId: string;
     clientId: string;
   }): Promise<Submission>;
 
-  /** Idempotent on (panelId, input.clientAnnotationId) — safe for SDK retries (§14). */
+  /** Idempotent on (sessionId, reviewerId, input.clientAnnotationId) — safe for SDK retries (§14). */
   upsertAnnotation(args: AnnotationCreate): Promise<{ annotation: Annotation; created: boolean }>;
 
   /** Marks the submission complete and transitions its draft annotations -> submitted. */
-  completeSubmission(args: { panelId: string; submissionId: string }): Promise<boolean>;
+  completeSubmission(args: { sessionId: string; submissionId: string }): Promise<boolean>;
 
   getUserByEmail(email: string): Promise<UserWithSecret | null>;
 
@@ -162,25 +188,41 @@ export interface Repository {
     name: string;
     productOwnerId: string;
     environmentUrls: string[];
-    template: ProjectTemplate;
+    templates: ProjectTemplates;
   }): Promise<Project>;
 
-  createPanel(args: {
-    projectId: string;
-    audience: PanelAudience;
-    environmentUrl: string;
-    secretToken: string;
-  }): Promise<Panel>;
+  // --- Review sessions (RS-3) ---
 
-  listPanels(projectId: string): Promise<Panel[]>;
+  createReviewSession(args: CreateReviewSessionArgs): Promise<ReviewSession>;
 
-  getPanelById(panelId: string): Promise<Panel | null>;
+  getReviewSession(id: string): Promise<ReviewSession | null>;
 
-  /** Open/close a panel for submissions (§14). */
-  updatePanelStatus(panelId: string, status: PanelStatus): Promise<Panel | null>;
+  getReviewSessionByToken(token: string): Promise<ReviewSession | null>;
 
-  /** Revoke a panel (deletes the capability token) (§9, §14). */
-  deletePanel(panelId: string): Promise<boolean>;
+  listReviewSessionsByProject(projectId: string): Promise<ReviewSession[]>;
+
+  updateReviewSession(id: string, patch: ReviewSessionPatch): Promise<ReviewSession | null>;
+
+  setReviewSessionStatus(id: string, status: ReviewSessionStatus): Promise<ReviewSession | null>;
+
+  // --- Reviewers (RS-3) ---
+
+  addReviewer(args: AddReviewerArgs): Promise<Reviewer>;
+
+  getReviewer(id: string): Promise<Reviewer | null>;
+
+  getReviewerByToken(token: string): Promise<Reviewer | null>;
+
+  listReviewersBySession(sessionId: string): Promise<Reviewer[]>;
+
+  /** PO revoke — sets status → declined. Idempotent. */
+  revokeReviewer(id: string): Promise<Reviewer | null>;
+
+  /** Idempotent: first call flips pending → active and stamps `acceptedAt`. */
+  markReviewerAccepted(id: string): Promise<Reviewer | null>;
+
+  /** Touch `lastSeenAt` (no status side-effect). */
+  markReviewerSeen(id: string, at: string): Promise<void>;
 
   // --- SA dashboard real data (Tranche B / Phase 11) ---
 
@@ -225,7 +267,7 @@ export interface Repository {
 
   getProjectByOwner(ownerId: string): Promise<Project | null>;
 
-  updateProjectTemplate(projectId: string, template: ProjectTemplate): Promise<Project | null>;
+  updateProjectTemplates(projectId: string, templates: ProjectTemplates): Promise<Project | null>;
 
   getExportConfig(projectId: string): Promise<ExportConfig | null>;
 
@@ -237,3 +279,7 @@ export interface Repository {
     defaults: Record<string, string>;
   }): Promise<ExportConfig>;
 }
+
+// `ReviewerStatus` re-export keeps the symbol available to importers that
+// pulled it through `repo/types` historically; harmless if unused.
+export type { ReviewerStatus };

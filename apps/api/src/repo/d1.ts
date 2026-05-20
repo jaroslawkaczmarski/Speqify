@@ -10,11 +10,12 @@ import type {
   TaskStatus,
   ExportConfig,
   ExportTarget,
-  PanelAudience,
-  PanelStatus,
-  Panel,
   Project,
-  ProjectTemplate,
+  ProjectTemplates,
+  Reviewer,
+  ReviewerStatus,
+  ReviewSession,
+  ReviewSessionStatus,
   Submission,
   TranscriptionStatus,
   User,
@@ -31,8 +32,11 @@ import type {
 } from "@speqify/shared";
 import { newId } from "../lib/ids.js";
 import type {
+  AddReviewerArgs,
   AnnotationCreate,
+  CreateReviewSessionArgs,
   Repository,
+  ReviewSessionPatch,
   TaskDraftInput,
   TaskMutation,
   TaskPatch,
@@ -40,11 +44,12 @@ import type {
 } from "./types.js";
 
 type Db = DrizzleD1Database<typeof schema>;
-type PanelRow = typeof schema.panels.$inferSelect;
 type SubmissionRow = typeof schema.submissions.$inferSelect;
 type AnnotationRow = typeof schema.annotations.$inferSelect;
 type UserRow = typeof schema.users.$inferSelect;
 type ProjectRow = typeof schema.projects.$inferSelect;
+type ReviewSessionRow = typeof schema.reviewSessions.$inferSelect;
+type ReviewerRow = typeof schema.reviewers.$inferSelect;
 
 type ExportConfigRow = typeof schema.exportConfigs.$inferSelect;
 type AnalysisRunRow = typeof schema.analysisRuns.$inferSelect;
@@ -105,28 +110,48 @@ function toProject(r: ProjectRow): Project {
     productOwnerId: r.productOwnerId,
     environmentUrls: r.environmentUrls,
     status: (r.status as ProjectStatus) ?? "live",
-    template: r.template,
+    templates: r.templates,
     exportConfigId: r.exportConfigId ?? null,
     createdAt: r.createdAt,
   };
 }
 
-function toPanel(r: PanelRow): Panel {
+function toReviewSession(r: ReviewSessionRow): ReviewSession {
   return {
     id: r.id,
     projectId: r.projectId,
-    audience: r.audience as PanelAudience,
-    secretToken: r.secretToken,
-    environmentUrl: r.environmentUrl,
-    status: r.status as PanelStatus,
+    name: r.name,
+    description: r.description,
+    instructions: r.instructions,
+    envUrl: r.envUrl,
+    token: r.token,
+    status: r.status as ReviewSessionStatus,
+    startsAt: r.startsAt ?? null,
+    endsAt: r.endsAt ?? null,
+    createdBy: r.createdBy,
     createdAt: r.createdAt,
+  };
+}
+
+function toReviewer(r: ReviewerRow): Reviewer {
+  return {
+    id: r.id,
+    sessionId: r.sessionId,
+    name: r.name,
+    email: r.email,
+    token: r.token,
+    status: r.status as ReviewerStatus,
+    invitedAt: r.invitedAt,
+    acceptedAt: r.acceptedAt ?? null,
+    lastSeenAt: r.lastSeenAt ?? null,
   };
 }
 
 function toSubmission(r: SubmissionRow): Submission {
   return {
     id: r.id,
-    panelId: r.panelId,
+    sessionId: r.sessionId,
+    reviewerId: r.reviewerId,
     clientId: r.clientId,
     complete: r.complete,
     createdAt: r.createdAt,
@@ -136,11 +161,11 @@ function toSubmission(r: SubmissionRow): Submission {
 function toAnnotation(r: AnnotationRow): Annotation {
   return {
     id: r.id,
-    panelId: r.panelId,
+    sessionId: r.sessionId,
+    reviewerId: r.reviewerId,
     submissionId: r.submissionId,
     type: r.type as AnnotationType,
     status: r.status as AnnotationStatus,
-    audience: r.audience as PanelAudience,
     pageUrl: r.pageUrl,
     breadcrumb: r.breadcrumb ?? [],
     element: r.element ?? null,
@@ -173,17 +198,9 @@ export class D1Repository implements Repository {
     this.db = drizzle(d1, { schema });
   }
 
-  async getPanelByToken(token: string): Promise<Panel | null> {
-    const rows = await this.db
-      .select()
-      .from(schema.panels)
-      .where(eq(schema.panels.secretToken, token))
-      .limit(1);
-    return rows[0] ? toPanel(rows[0]) : null;
-  }
-
   async getOrCreateSubmission(args: {
-    panelId: string;
+    sessionId: string;
+    reviewerId: string;
     submissionId: string;
     clientId: string;
   }): Promise<Submission> {
@@ -193,7 +210,7 @@ export class D1Repository implements Repository {
       .where(
         and(
           eq(schema.submissions.id, args.submissionId),
-          eq(schema.submissions.panelId, args.panelId),
+          eq(schema.submissions.sessionId, args.sessionId),
         ),
       )
       .limit(1);
@@ -203,7 +220,8 @@ export class D1Repository implements Repository {
       .insert(schema.submissions)
       .values({
         id: args.submissionId,
-        panelId: args.panelId,
+        sessionId: args.sessionId,
+        reviewerId: args.reviewerId,
         clientId: args.clientId,
         complete: false,
       })
@@ -220,7 +238,8 @@ export class D1Repository implements Repository {
       .from(schema.annotations)
       .where(
         and(
-          eq(schema.annotations.panelId, args.panelId),
+          eq(schema.annotations.sessionId, args.sessionId),
+          eq(schema.annotations.reviewerId, args.reviewerId),
           eq(schema.annotations.clientAnnotationId, input.clientAnnotationId),
         ),
       )
@@ -231,12 +250,12 @@ export class D1Repository implements Repository {
       .insert(schema.annotations)
       .values({
         id: newId(),
-        panelId: args.panelId,
+        sessionId: args.sessionId,
+        reviewerId: args.reviewerId,
         submissionId: input.submissionId,
         clientAnnotationId: input.clientAnnotationId,
         type: input.type,
         status: "draft",
-        audience: args.audience,
         pageUrl: input.pageUrl,
         breadcrumb: input.breadcrumb,
         element: input.element,
@@ -256,14 +275,14 @@ export class D1Repository implements Repository {
     return { annotation: toAnnotation(inserted[0] as AnnotationRow), created: true };
   }
 
-  async completeSubmission(args: { panelId: string; submissionId: string }): Promise<boolean> {
+  async completeSubmission(args: { sessionId: string; submissionId: string }): Promise<boolean> {
     const updated = await this.db
       .update(schema.submissions)
       .set({ complete: true })
       .where(
         and(
           eq(schema.submissions.id, args.submissionId),
-          eq(schema.submissions.panelId, args.panelId),
+          eq(schema.submissions.sessionId, args.sessionId),
         ),
       )
       .returning();
@@ -393,7 +412,7 @@ export class D1Repository implements Repository {
     name: string;
     productOwnerId: string;
     environmentUrls: string[];
-    template: ProjectTemplate;
+    templates: ProjectTemplates;
   }): Promise<Project> {
     const inserted = await this.db
       .insert(schema.projects)
@@ -402,64 +421,160 @@ export class D1Repository implements Repository {
         name: args.name,
         productOwnerId: args.productOwnerId,
         environmentUrls: args.environmentUrls,
-        template: args.template,
+        templates: args.templates,
       })
       .returning();
     return toProject(inserted[0] as ProjectRow);
   }
 
-  async createPanel(args: {
-    projectId: string;
-    audience: PanelAudience;
-    environmentUrl: string;
-    secretToken: string;
-  }): Promise<Panel> {
+  // --- Review sessions (RS-3) ---
+
+  async createReviewSession(args: CreateReviewSessionArgs): Promise<ReviewSession> {
     const inserted = await this.db
-      .insert(schema.panels)
+      .insert(schema.reviewSessions)
       .values({
         id: newId(),
         projectId: args.projectId,
-        audience: args.audience,
-        secretToken: args.secretToken,
-        environmentUrl: args.environmentUrl,
-        status: "open",
+        name: args.name,
+        description: args.description,
+        instructions: args.instructions,
+        envUrl: args.envUrl,
+        token: args.token,
+        status: "draft",
+        startsAt: args.startsAt,
+        endsAt: args.endsAt,
+        createdBy: args.createdBy,
       })
       .returning();
-    return toPanel(inserted[0] as PanelRow);
+    return toReviewSession(inserted[0] as ReviewSessionRow);
   }
 
-  async listPanels(projectId: string): Promise<Panel[]> {
+  async getReviewSession(id: string): Promise<ReviewSession | null> {
     const rows = await this.db
       .select()
-      .from(schema.panels)
-      .where(eq(schema.panels.projectId, projectId));
-    return rows.map(toPanel);
-  }
-
-  async getPanelById(panelId: string): Promise<Panel | null> {
-    const rows = await this.db
-      .select()
-      .from(schema.panels)
-      .where(eq(schema.panels.id, panelId))
+      .from(schema.reviewSessions)
+      .where(eq(schema.reviewSessions.id, id))
       .limit(1);
-    return rows[0] ? toPanel(rows[0]) : null;
+    return rows[0] ? toReviewSession(rows[0]) : null;
   }
 
-  async updatePanelStatus(panelId: string, status: PanelStatus): Promise<Panel | null> {
+  async getReviewSessionByToken(token: string): Promise<ReviewSession | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.reviewSessions)
+      .where(eq(schema.reviewSessions.token, token))
+      .limit(1);
+    return rows[0] ? toReviewSession(rows[0]) : null;
+  }
+
+  async listReviewSessionsByProject(projectId: string): Promise<ReviewSession[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.reviewSessions)
+      .where(eq(schema.reviewSessions.projectId, projectId))
+      .orderBy(desc(schema.reviewSessions.createdAt));
+    return rows.map(toReviewSession);
+  }
+
+  async updateReviewSession(id: string, patch: ReviewSessionPatch): Promise<ReviewSession | null> {
+    const set: Record<string, unknown> = {};
+    if (patch.name !== undefined) set["name"] = patch.name;
+    if (patch.description !== undefined) set["description"] = patch.description;
+    if (patch.instructions !== undefined) set["instructions"] = patch.instructions;
+    if (patch.envUrl !== undefined) set["envUrl"] = patch.envUrl;
+    if (patch.startsAt !== undefined) set["startsAt"] = patch.startsAt;
+    if (patch.endsAt !== undefined) set["endsAt"] = patch.endsAt;
+    if (Object.keys(set).length === 0) return this.getReviewSession(id);
     const updated = await this.db
-      .update(schema.panels)
-      .set({ status })
-      .where(eq(schema.panels.id, panelId))
+      .update(schema.reviewSessions)
+      .set(set)
+      .where(eq(schema.reviewSessions.id, id))
       .returning();
-    return updated[0] ? toPanel(updated[0]) : null;
+    return updated[0] ? toReviewSession(updated[0]) : null;
   }
 
-  async deletePanel(panelId: string): Promise<boolean> {
-    const deleted = await this.db
-      .delete(schema.panels)
-      .where(eq(schema.panels.id, panelId))
+  async setReviewSessionStatus(
+    id: string,
+    status: ReviewSessionStatus,
+  ): Promise<ReviewSession | null> {
+    const updated = await this.db
+      .update(schema.reviewSessions)
+      .set({ status })
+      .where(eq(schema.reviewSessions.id, id))
       .returning();
-    return deleted.length > 0;
+    return updated[0] ? toReviewSession(updated[0]) : null;
+  }
+
+  // --- Reviewers (RS-3) ---
+
+  async addReviewer(args: AddReviewerArgs): Promise<Reviewer> {
+    const inserted = await this.db
+      .insert(schema.reviewers)
+      .values({
+        id: newId(),
+        sessionId: args.sessionId,
+        name: args.name,
+        email: args.email,
+        token: args.token,
+        status: "pending",
+      })
+      .returning();
+    return toReviewer(inserted[0] as ReviewerRow);
+  }
+
+  async getReviewer(id: string): Promise<Reviewer | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.reviewers)
+      .where(eq(schema.reviewers.id, id))
+      .limit(1);
+    return rows[0] ? toReviewer(rows[0]) : null;
+  }
+
+  async getReviewerByToken(token: string): Promise<Reviewer | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.reviewers)
+      .where(eq(schema.reviewers.token, token))
+      .limit(1);
+    return rows[0] ? toReviewer(rows[0]) : null;
+  }
+
+  async listReviewersBySession(sessionId: string): Promise<Reviewer[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.reviewers)
+      .where(eq(schema.reviewers.sessionId, sessionId))
+      .orderBy(desc(schema.reviewers.invitedAt));
+    return rows.map(toReviewer);
+  }
+
+  async revokeReviewer(id: string): Promise<Reviewer | null> {
+    const updated = await this.db
+      .update(schema.reviewers)
+      .set({ status: "declined" })
+      .where(eq(schema.reviewers.id, id))
+      .returning();
+    return updated[0] ? toReviewer(updated[0]) : null;
+  }
+
+  async markReviewerAccepted(id: string): Promise<Reviewer | null> {
+    // Idempotent: only the pending → active transition stamps acceptedAt;
+    // a subsequent call on an already-active row is a no-op.
+    const updated = await this.db
+      .update(schema.reviewers)
+      .set({ status: "active", acceptedAt: new Date().toISOString() })
+      .where(and(eq(schema.reviewers.id, id), eq(schema.reviewers.status, "pending")))
+      .returning();
+    if (updated[0]) return toReviewer(updated[0]);
+    return this.getReviewer(id);
+  }
+
+  async markReviewerSeen(id: string, at: string): Promise<void> {
+    await this.db
+      .update(schema.reviewers)
+      .set({ lastSeenAt: at })
+      .where(eq(schema.reviewers.id, id));
   }
 
   async getProjectByOwner(ownerId: string): Promise<Project | null> {
@@ -471,13 +586,13 @@ export class D1Repository implements Repository {
     return rows[0] ? toProject(rows[0]) : null;
   }
 
-  async updateProjectTemplate(
+  async updateProjectTemplates(
     projectId: string,
-    template: ProjectTemplate,
+    templates: ProjectTemplates,
   ): Promise<Project | null> {
     const updated = await this.db
       .update(schema.projects)
-      .set({ template })
+      .set({ templates })
       .where(eq(schema.projects.id, projectId))
       .returning();
     return updated[0] ? toProject(updated[0]) : null;
@@ -573,19 +688,19 @@ export class D1Repository implements Repository {
   }
 
   async listSubmittedForProject(projectId: string): Promise<Annotation[]> {
-    const panels = await this.db
-      .select({ id: schema.panels.id })
-      .from(schema.panels)
-      .where(eq(schema.panels.projectId, projectId));
-    const panelIds = panels.map((p) => p.id);
-    if (panelIds.length === 0) return [];
+    const sessions = await this.db
+      .select({ id: schema.reviewSessions.id })
+      .from(schema.reviewSessions)
+      .where(eq(schema.reviewSessions.projectId, projectId));
+    const sessionIds = sessions.map((s) => s.id);
+    if (sessionIds.length === 0) return [];
     const rows = await this.db
       .select()
       .from(schema.annotations)
       .where(
         and(
           eq(schema.annotations.status, "submitted"),
-          inArray(schema.annotations.panelId, panelIds),
+          inArray(schema.annotations.sessionId, sessionIds),
         ),
       );
     return rows.map(toAnnotation);

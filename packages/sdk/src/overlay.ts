@@ -14,6 +14,7 @@ import type {
   CreateAnnotationInput,
   HostAppContext,
   NavigationStep,
+  SdkSessionIntro,
   TechnicalContext,
 } from "@speqify/shared";
 import type { SpeqifyClient } from "./client.js";
@@ -35,12 +36,13 @@ const CONSENT_KEY = "speqify.consent";
 const CONSENT_CAM_KEY = "speqify.consent.cam";
 
 /** Shadow-root stylesheet — ported from the Convergence SDK Overlay design. */
-const STYLE = `
+const STYLE =
+  `
 :host{all:initial}
 *,*::before,*::after{box-sizing:border-box}
 :host{
   --primary:#0F172A;--on-primary:#fff;--primary-hover:#1E293B;
-  --secondary:#475569;--accent:#DC2626;--accent-hover:#B91C1C;
+  --secondary:#334155;--accent:#DC2626;--accent-hover:#B91C1C;
   --success:#15803D;--warning:#B45309;--danger:#B91C1C;--info:#1D4ED8;
   --neutral:#F8FAFC;--surface:#fff;--surface-muted:#F1F5F9;--surface-sunken:#E2E8F0;
   --border:#E2E8F0;--border-strong:#CBD5E1;--border-focus:#1D4ED8;--muted:#64748B;
@@ -52,23 +54,6 @@ const STYLE = `
 }
 button{font-family:inherit;cursor:pointer}
 :where(button,textarea):focus-visible{outline:2px solid var(--border-focus);outline-offset:2px}
-
-/* Status pill */
-.sp-status{
-  position:fixed;top:14px;left:50%;transform:translateX(-50%);
-  background:var(--surface);border:1px solid var(--border);
-  box-shadow:var(--el-2);border-radius:999px;
-  padding:6px 6px 6px 14px;display:flex;align-items:center;gap:10px;
-  font-size:13px;color:var(--secondary);z-index:2147483000;max-width:92vw}
-.sp-status .live-dot{width:8px;height:8px;border-radius:50%;background:#22C55E;
-  box-shadow:0 0 0 3px rgba(34,197,94,.2);flex:none}
-.sp-status .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sp-status strong{color:var(--primary);font-weight:600}
-.sp-status .v{font-family:var(--font-mono);font-size:11px;color:var(--muted);
-  background:var(--surface-muted);padding:3px 8px;border-radius:999px;flex:none}
-.sp-status .close{border:0;background:transparent;color:var(--muted);
-  width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:none}
-.sp-status .close:hover{background:var(--surface-muted);color:var(--primary)}
 
 /* Bottom toolbar */
 .sp-toolbar{
@@ -86,6 +71,17 @@ button{font-family:inherit;cursor:pointer}
   font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:999px;
   display:grid;place-items:center;padding:0 5px;box-shadow:0 0 0 2px var(--primary)}
 .sp-toolbar .sep{width:1px;height:24px;background:rgba(255,255,255,.12);margin:0 4px}
+.sp-tool.primary{background:#fff;color:var(--primary);font-weight:600;width:auto;
+  padding:0 16px;gap:8px;display:inline-flex;align-items:center;font-size:12.5px;
+  letter-spacing:.01em}
+.sp-tool.primary:hover{background:#f1f5f9;color:var(--primary)}
+.sp-tool.primary:disabled{opacity:.5;cursor:not-allowed}
+.sp-tool.primary .badge{position:static;background:var(--accent);color:#fff;
+  box-shadow:0 0 0 2px var(--primary);min-width:18px;height:18px;font-size:11px}
+.sp-tool.outline{background:transparent;border:1px solid rgba(255,255,255,.22);
+  width:auto;padding:0 12px;gap:6px;display:inline-flex;align-items:center;
+  font-size:12px;font-weight:500;color:rgba(255,255,255,.85)}
+.sp-tool.outline:hover{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.35)}
 .sp-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
   background:#0B1220;color:#fff;font-size:11px;font-weight:500;padding:5px 8px;
   border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s}
@@ -94,7 +90,8 @@ button{font-family:inherit;cursor:pointer}
   padding:1px 4px;border-radius:3px;margin-left:6px}
 
 /* Annotation panel */
-.sp-panel{position:fixed;top:0;right:0;bottom:0;width:440px;max-width:100vw;
+.sp-panel[hidden]{display:none}
+.sp-panel{position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);max-width:100vw;
   background:var(--surface);color:var(--primary);box-shadow:-20px 0 60px rgba(15,23,42,.18);
   border-left:1px solid var(--border);display:flex;flex-direction:column;
   z-index:2147483000;animation:sp-slide .4s cubic-bezier(.2,.7,.2,1);font-size:14px;line-height:1.6}
@@ -247,8 +244,14 @@ button{font-family:inherit;cursor:pointer}
 
 .sp-foot{border-top:1px solid var(--border);padding:14px 20px;display:flex;
   align-items:center;gap:10px;background:var(--surface);flex:none}
+.sp-capbtn{background:transparent;border:1px solid var(--border-strong);
+  color:var(--secondary);width:36px;height:36px;border-radius:8px;
+  display:grid;place-items:center;cursor:pointer;transition:background .12s,color .12s}
+.sp-capbtn:hover{background:var(--surface-muted);color:var(--primary);
+  border-color:var(--primary)}
+.sp-capbtn svg{width:16px;height:16px}
 .sp-save{background:transparent;border:0;color:var(--secondary);font-size:14px;
-  font-weight:500;padding:10px 12px;border-radius:8px}
+  font-weight:500;padding:10px 12px;border-radius:8px;margin-left:6px}
 .sp-save:hover{color:var(--primary);background:var(--surface-muted)}
 .sp-save:disabled{opacity:.5;cursor:not-allowed}
 .sp-foot .sync{margin-left:auto;font-size:12px;color:var(--muted);
@@ -284,6 +287,11 @@ button{font-family:inherit;cursor:pointer}
   color:var(--info);display:grid;place-items:center;flex:none}
 .consent-list li .ic svg{width:13px;height:13px}
 .consent-list li strong{color:var(--primary);font-weight:600}
+.consent-about{padding:14px 22px 4px;display:flex;flex-direction:column;gap:10px}
+.consent-about .about-block{margin:0;padding:11px 13px;background:var(--surface-muted);
+  border-radius:10px;font-size:12.5px;line-height:1.55;color:var(--secondary);white-space:pre-wrap}
+.consent-about .about-block strong{display:block;font-size:11.5px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--primary);font-weight:600;margin-bottom:3px}
 .consent-checks{padding:16px 22px;display:flex;flex-direction:column;gap:9px}
 .consent-checks label{display:flex;align-items:flex-start;gap:9px;font-size:12.5px;
   line-height:1.5;color:var(--secondary);cursor:pointer}
@@ -310,39 +318,120 @@ button{font-family:inherit;cursor:pointer}
   .rec-btn::before,.rec.live .rec-wave span{animation:none}
 }
 
-/* Idle FAB + session pill (SDK Idle state) */
+/* Idle FAB — collapsed by default (just a ` +
+  ` circle), expands on hover into
+   the full "Speqify · Dodaj adnotację" pill. The previous logo-mark on the
+   left was dropped in RS-6d. */
 .sp-fab{position:fixed;bottom:24px;right:24px;z-index:2147483000;background:var(--primary);
-  color:#fff;border:0;cursor:pointer;border-radius:999px;padding:10px 18px 10px 12px;
-  display:flex;align-items:center;gap:12px;
+  color:#fff;border:0;cursor:pointer;border-radius:999px;padding:0;
+  display:flex;align-items:center;overflow:hidden;width:56px;height:56px;
   box-shadow:0 12px 32px rgba(15,23,42,.25),0 0 0 4px rgba(15,23,42,.05);
-  transition:transform .15s,box-shadow .15s;font-family:var(--font-sans)}
-.sp-fab:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(15,23,42,.3),0 0 0 6px rgba(15,23,42,.06)}
-.sp-fab-mark{width:32px;height:32px;border-radius:8px;background:#fff;color:var(--primary);
-  display:grid;place-items:center;position:relative;flex:none}
-.sp-fab-mark::after{content:"";position:absolute;width:10px;height:10px;border-radius:50%;
-  background:#22C55E;top:-2px;right:-2px;box-shadow:0 0 0 2px var(--primary);
-  animation:sp-livedot 1.6s ease-in-out infinite}
-@keyframes sp-livedot{50%{opacity:.4}}
-.sp-fab-mark svg{width:16px;height:16px}
-.sp-fab-body{display:flex;flex-direction:column;gap:1px;text-align:left}
+  transition:width .25s cubic-bezier(.2,.7,.2,1),transform .15s,box-shadow .15s;
+  font-family:var(--font-sans)}
+.sp-fab:hover,.sp-fab:focus-visible{width:224px;transform:translateY(-2px);
+  box-shadow:0 16px 40px rgba(15,23,42,.3),0 0 0 6px rgba(15,23,42,.06)}
+.sp-fab-cta{width:56px;height:56px;border-radius:50%;background:var(--accent);
+  display:grid;place-items:center;flex:none;color:#fff;position:relative}
+.sp-fab-cta::after{content:"";position:absolute;inset:-4px;border-radius:50%;
+  border:2px solid var(--accent);opacity:.35;animation:sp-livedot 1.8s ease-out infinite}
+@keyframes sp-livedot{0%{transform:scale(.95);opacity:.45}100%{transform:scale(1.12);opacity:0}}
+.sp-fab-cta svg{width:18px;height:18px}
+.sp-fab-body{flex:1;display:flex;flex-direction:column;gap:1px;text-align:left;
+  padding:0 16px 0 14px;white-space:nowrap;opacity:0;transition:opacity .12s ease-in;
+  pointer-events:none;min-width:0}
+.sp-fab:hover .sp-fab-body,.sp-fab:focus-visible .sp-fab-body{opacity:1;transition-delay:.1s}
 .sp-fab-label{font-weight:700;font-size:14px;letter-spacing:-.01em}
 .sp-fab-sub{font-size:11px;color:rgba(255,255,255,.65);font-family:var(--font-mono)}
-.sp-fab-cta{width:28px;height:28px;border-radius:50%;background:var(--accent);
-  display:grid;place-items:center;flex:none}
+@media (prefers-reduced-motion:reduce){
+  .sp-fab,.sp-fab:hover{transition:none;transform:none}
+  .sp-fab-body{transition:none}
+  .sp-fab-cta::after{animation:none}
+}
 .sp-fab-cta svg{width:14px;height:14px;color:#fff}
-.sp-session-pill{position:fixed;bottom:24px;right:232px;z-index:2147483000;
-  background:var(--surface);color:var(--primary);border:1px solid var(--border);
-  border-radius:999px;padding:8px 14px;display:flex;align-items:center;gap:10px;
-  font-size:12px;font-weight:500;box-shadow:var(--el-2);max-width:48vw}
-.sp-session-pill .av{width:20px;height:20px;border-radius:50%;
-  background:linear-gradient(135deg,#22D3EE,#3B82F6);color:#fff;font-size:9px;
-  font-weight:700;display:grid;place-items:center;flex:none}
-.sp-session-pill .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sp-session-pill strong{color:var(--primary);font-weight:600}
-.sp-session-pill .ct{color:var(--accent);font-weight:700;font-family:var(--font-mono)}
 @media (prefers-reduced-motion:reduce){
   .sp-fab-mark::after{animation:none}.sp-fab{transition:none}
 }
+
+/* Welcome / RODO consent modal — centered dialog, NOT in the right panel.
+   Matches the SDK Consent.html mock: pop-in animation, dimmed backdrop,
+   modal sits above the dock + side panel so the reviewer can't bypass it. */
+.sp-consent-wrap{position:fixed;top:0;right:0;bottom:0;left:0;width:100vw;height:100vh;
+  z-index:2147483600;display:none;
+  align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.4)}
+.sp-consent-wrap.open{display:flex}
+.sp-consent-modal{background:var(--surface);border-radius:20px;width:min(640px,100%);
+  box-shadow:0 24px 48px rgba(15,23,42,.3);overflow:hidden;
+  animation:sp-pop .35s cubic-bezier(.2,.7,.2,1);max-height:calc(100vh - 48px);
+  display:flex;flex-direction:column}
+@keyframes sp-pop{from{opacity:0;transform:translateY(8px) scale(.98)}
+  to{opacity:1;transform:translateY(0) scale(1)}}
+@media (prefers-reduced-motion:reduce){.sp-consent-modal{animation:none}}
+.sp-consent-modal .consent-head{padding:28px 32px 0;display:flex;align-items:center;gap:18px}
+.sp-consent-modal .consent-head .logo{width:48px;height:48px;border-radius:12px;
+  background:var(--primary);color:#fff;display:grid;place-items:center;
+  position:relative;flex:none;align-self:center}
+.sp-consent-modal .consent-head .logo::after{content:"";position:absolute;width:10px;
+  height:10px;border-radius:50%;background:var(--accent);top:-2px;right:-2px;
+  box-shadow:0 0 0 2px var(--surface)}
+.sp-consent-modal .consent-head .logo svg{width:22px;height:22px}
+.sp-consent-modal .consent-head .head-text{flex:1;min-width:0;display:flex;
+  flex-direction:column;justify-content:center;gap:6px}
+.sp-consent-modal .consent-head h2{margin:0;font-size:20px;font-weight:700;
+  letter-spacing:-.015em;line-height:1.25;color:var(--primary)}
+.sp-consent-modal .consent-head p{margin:0;color:var(--secondary);font-size:14px;
+  line-height:1.55}
+.sp-consent-modal .consent-head p strong{color:var(--primary);font-weight:600}
+.sp-consent-modal .consent-about{padding:14px 32px 0;display:flex;flex-direction:column;
+  gap:10px}
+.sp-consent-modal .consent-about .about-block{margin:0;padding:12px 14px;
+  background:var(--surface-muted);border-radius:10px;font-size:13px;line-height:1.55;
+  color:var(--secondary);white-space:pre-wrap}
+.sp-consent-modal .consent-about .about-block strong{display:block;font-size:11.5px;
+  letter-spacing:.04em;text-transform:uppercase;color:var(--primary);font-weight:600;
+  margin-bottom:3px}
+.sp-consent-modal .consent-body{padding:18px 32px 0;overflow-y:auto}
+.sp-consent-modal .consent-list{list-style:none;padding:0;margin:0;display:flex;
+  flex-direction:column;gap:10px}
+.sp-consent-modal .consent-list li{display:flex;align-items:flex-start;gap:12px;
+  padding:12px 14px;background:var(--surface-muted);border-radius:10px;font-size:13px;
+  line-height:1.5;color:var(--secondary)}
+.sp-consent-modal .consent-list li .ic{width:28px;height:28px;border-radius:8px;
+  background:var(--surface);color:var(--info);display:grid;place-items:center;flex:none}
+.sp-consent-modal .consent-list li .ic svg{width:14px;height:14px}
+.sp-consent-modal .consent-list li strong{color:var(--primary);font-weight:600}
+.sp-consent-modal .consent-checks{padding:18px 32px;display:flex;flex-direction:column;gap:10px}
+.sp-consent-modal .consent-checks label{display:flex;align-items:flex-start;gap:10px;
+  font-size:13px;line-height:1.5;color:var(--secondary);cursor:pointer}
+.sp-consent-modal .consent-checks label input{margin-top:2px;width:18px;height:18px;
+  accent-color:var(--primary);flex:none}
+.sp-consent-modal .consent-checks label strong{color:var(--primary);font-weight:600}
+.sp-consent-modal .consent-foot{padding:16px 32px;border-top:1px solid var(--border);
+  background:var(--surface-muted);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sp-consent-modal .consent-foot .btn-row{margin-left:auto;display:flex;gap:8px}
+.sp-consent-modal .consent-btn{height:40px;padding:0 18px;border-radius:8px;border:0;
+  font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;display:inline-flex;
+  align-items:center;gap:8px;white-space:nowrap;line-height:1}
+.sp-consent-modal .consent-btn svg{width:14px;height:14px;flex:none}
+.sp-consent-modal .consent-btn-primary{background:var(--primary);color:#fff}
+.sp-consent-modal .consent-btn-primary:hover{background:var(--primary-hover)}
+.sp-consent-modal .consent-btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.sp-consent-modal .consent-btn-secondary{background:transparent;color:var(--secondary)}
+.sp-consent-modal .consent-btn-secondary:hover{color:var(--primary);background:rgba(15,23,42,.04)}
+.sp-consent-modal .consent-foot a{color:var(--info);font-size:11.5px;font-weight:500;
+  text-decoration:none}
+.sp-consent-modal .consent-foot a:hover{text-decoration:underline}
+
+/* Mini confirm dialogs (X close, end session, RODO settings) — sit above
+   everything else inside the shadow root. */
+.sp-confirm-wrap{position:fixed;inset:0;z-index:2147483700;display:flex;
+  align-items:center;justify-content:center;padding:24px;
+  background:rgba(15,23,42,.4)}
+.sp-confirm{background:var(--surface);border-radius:14px;width:min(420px,100%);
+  padding:22px 24px;box-shadow:0 24px 48px rgba(15,23,42,.3);
+  display:flex;flex-direction:column;gap:12px;
+  animation:sp-pop .2s cubic-bezier(.2,.7,.2,1)}
+.sp-confirm p{margin:0;font-size:14px;line-height:1.55;color:var(--primary)}
+.sp-confirm .row{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
 
 /* Redactor modal */
 .layer{position:fixed;inset:0;z-index:2147483001;background:rgba(15,23,42,.6);
@@ -360,15 +449,24 @@ button{font-family:inherit;cursor:pointer}
 /** Document-level style so the picked element (light DOM) gets the accent pin. */
 const HOST_STYLE = `
 [data-speqify-annotated]{position:relative !important;outline:2px solid #DC2626 !important;
-  outline-offset:2px !important;border-radius:6px;box-shadow:0 0 0 6px rgba(220,38,38,.12) !important}
+  outline-offset:2px !important;border-radius:6px;box-shadow:0 0 0 6px rgba(220,38,38,.12) !important;
+  /* Force a high stacking context so the outline + pin clear any host
+     overlays (modals, dropdowns, sticky headers) that might paint over it. */
+  z-index:2147482998 !important;isolation:isolate !important}
 [data-speqify-annotated]::after{content:attr(data-speqify-pin);position:absolute;top:-12px;
   left:-14px;width:24px;height:24px;border-radius:50%;background:#DC2626;color:#fff;
   font:700 12px/1 "Inter",system-ui,sans-serif;display:grid;place-items:center;
   box-shadow:0 4px 12px rgba(220,38,38,.45);z-index:2147482999}
 [data-speqify-annotated]::before{content:"";position:absolute;inset:-6px;border-radius:8px;
-  border:2px solid #DC2626;opacity:.3;animation:speqify-host-pulse 1.8s ease-out infinite}
+  border:2px solid #DC2626;opacity:.3;animation:speqify-host-pulse 1.8s ease-out infinite;
+  z-index:2147482999}
 @keyframes speqify-host-pulse{0%{transform:scale(.98);opacity:.4}100%{transform:scale(1.08);opacity:0}}
-@media (prefers-reduced-motion:reduce){[data-speqify-annotated]::before{animation:none}}
+/* Reduced-motion fallback for the host-side annotation pulse. The body
+   margin-right used to push the host content left while the panel is open
+   is set inline from JS instead of via a CSS rule — see setHostShift(). */
+@media (prefers-reduced-motion:reduce){
+  [data-speqify-annotated]::before{animation:none}
+}
 `;
 
 const ICON = {
@@ -386,6 +484,7 @@ const ICON = {
   mic: '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/>',
   arrow: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
   logo: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
 };
 const svg = (paths: string, sw = "2"): string =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
@@ -402,6 +501,9 @@ export interface OverlayDeps {
   screenshotUrl?: string;
   /** Display name shown in the status pill / panel subtitle. */
   sessionLabel?: string;
+  /** PO-authored session intro (description + instructions + reviewer name).
+   *  Drives the welcome-modal copy. */
+  intro?: SdkSessionIntro;
   /** Offline-resilient send (outbox). Falls back to direct create if absent. */
   sendAnnotation?: (payload: CreateAnnotationInput) => Promise<"sent" | "queued">;
 }
@@ -439,6 +541,30 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   hostStyle.textContent = HOST_STYLE;
   document.head.appendChild(hostStyle);
 
+  // RS-6d/RS-6e: shifting host content left while the right panel is open is
+  // done by writing inline margin-right on <html> via setProperty(...,
+  // important). CSS rules + a class on body/html were silently swallowed in
+  // some React + shadow-DOM combinations on Chromium even with !important;
+  // the inline route is reliable and easier to clean up on destroy.
+  //
+  // Below SHIFT_THRESHOLD viewport width, side-by-side is unusable (the host
+  // is squeezed below ~440px). We fall back to overlay mode there: the panel
+  // covers the host instead of pushing it.
+  const PANEL_W = 440;
+  const SHIFT_THRESHOLD = 880;
+  const setHostShift = (on: boolean): void => {
+    const h = document.documentElement;
+    if (on && window.innerWidth >= SHIFT_THRESHOLD) {
+      h.style.setProperty("margin-right", `${PANEL_W}px`, "important");
+    } else {
+      h.style.removeProperty("margin-right");
+    }
+  };
+  const onResize = (): void => {
+    if (panelOpen) setHostShift(true);
+  };
+  window.addEventListener("resize", onResize);
+
   // ---- state -------------------------------------------------------------
   let tab: Tab = "new";
   let picked: ElementCapture | null = null;
@@ -455,6 +581,9 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   let recorder: VoiceRecorder | null = null;
   let recElapsed = 0;
   let recTimer: number | null = null;
+  let waveCtx: AudioContext | null = null;
+  let waveAnalyser: AnalyserNode | null = null;
+  let waveRaf: number | null = null;
 
   let screenRec: ScreenRecorder | null = null;
   let screenOut: ScreenRecording | null = null;
@@ -464,7 +593,15 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   // Idle by default (SDK Idle design): only the FAB + session pill show until
   // the reviewer engages; the host app stays fully usable.
   let minimized = true;
+  // Right panel is hidden by default after consent (RS-6b dock-primary UX);
+  // opened on demand via the "Szczegóły" dock button.
   let panelOpen = false;
+  // Mic-driven flow: when set, completing element-pick auto-starts recording
+  // and on stop auto-saves the annotation as a draft. Resets after one cycle.
+  let pendingVoiceCapture = false;
+  // Visual hint on the toolbar "pick" button while the page-click handler is
+  // armed — distinguishes "in pick mode" from idle.
+  let pickArmed = false;
   let lastSync: { ok: boolean; msg: string } | null = null;
 
   const consented = (): boolean => localStorage.getItem(CONSENT_KEY) === "1";
@@ -553,16 +690,9 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   };
 
   // ---- chrome ------------------------------------------------------------
-  const statusPill = document.createElement("div");
-  statusPill.className = "sp-status";
-  statusPill.setAttribute("role", "status");
-  statusPill.setAttribute("aria-live", "polite");
-  statusPill.innerHTML = `
-    <span class="live-dot" aria-hidden="true"></span>
-    <span class="txt"><strong>Speqify SDK aktywny</strong> · sesja review · ${esc(sessionLabel)}</span>
-    <span class="v">v0.5.0</span>
-    <button class="close" aria-label="Zwiń overlay">${svg('<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>', "2.5")}</button>`;
-  root.appendChild(statusPill);
+  // RS-6d: the top status pill ("Speqify SDK aktywny · …") was dropped — the
+  // FAB + dock + side panel already convey activity status; the pill added
+  // visual noise without conveying anything not already on screen.
 
   const toolbar = document.createElement("div");
   toolbar.className = "sp-toolbar";
@@ -581,36 +711,35 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   const fab = document.createElement("button");
   fab.className = "sp-fab";
   fab.type = "button";
-  fab.setAttribute("aria-label", "Otwórz Speqify SDK");
+  fab.setAttribute("aria-label", "Otwórz Speqify · dodaj adnotację");
   fab.innerHTML = `
-    <span class="sp-fab-mark" aria-hidden="true">${svg(ICON.logo, "2.5")}</span>
+    <span class="sp-fab-cta" aria-hidden="true">${svg('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>', "2.4")}</span>
     <span class="sp-fab-body">
       <span class="sp-fab-label">Speqify</span>
       <span class="sp-fab-sub">Dodaj adnotację</span>
-    </span>
-    <span class="sp-fab-cta" aria-hidden="true">${svg('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>', "2.4")}</span>`;
+    </span>`;
   root.appendChild(fab);
 
-  const sessionPill = document.createElement("div");
-  sessionPill.className = "sp-session-pill";
-  sessionPill.setAttribute("aria-live", "polite");
-  root.appendChild(sessionPill);
+  // Welcome / RODO consent modal — separate centered dialog (RS-6c). The
+  // consent gate lives here, not in the right `.sp-panel`, so the modal can
+  // overlay on top of the dock/panel and cannot be bypassed by closing them.
+  const consentWrap = document.createElement("div");
+  consentWrap.className = "sp-consent-wrap";
+  consentWrap.setAttribute("role", "dialog");
+  consentWrap.setAttribute("aria-modal", "true");
+  consentWrap.setAttribute("aria-label", "Speqify — zgoda RODO");
+  root.appendChild(consentWrap);
 
-  const annWord = (n: number): string =>
-    n === 1
-      ? "adnotacja"
-      : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)
-        ? "adnotacje"
-        : "adnotacji";
   const renderIdle = (): void => {
-    const n = session.length;
-    sessionPill.innerHTML = `
-      <span class="av" aria-hidden="true">TY</span>
-      <span class="txt">Sesja review · <strong>${esc(sessionLabel)}</strong> · <span class="ct">${n} ${annWord(n)}</span></span>`;
+    // Idle state is FAB-only (RS-6c). The session pill from the design mock
+    // was confusing for first-time reviewers — they assumed an empty count
+    // meant the SDK was broken — so it's intentionally dropped.
   };
   fab.addEventListener("click", () => {
+    // RS-6b: re-engaging from idle drops the reviewer into the dock-primary
+    // state, not the full annotation panel.
     minimized = false;
-    panelOpen = true;
+    panelOpen = false;
     render();
   });
 
@@ -619,21 +748,72 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       id: string,
       label: string,
       icon: string,
-      opts: { active?: boolean; accent?: boolean; badge?: number; kbd?: string } = {},
-    ): string =>
-      `<button class="sp-tool${opts.active ? " active" : ""}${opts.accent ? " accent" : ""}" data-t="${id}" aria-label="${esc(label)}">
+      opts: {
+        active?: boolean;
+        accent?: boolean;
+        primary?: boolean;
+        outline?: boolean;
+        badge?: number;
+        kbd?: string;
+        text?: string;
+        disabled?: boolean;
+        tip?: string;
+      } = {},
+    ): string => {
+      const cls = [
+        "sp-tool",
+        opts.active ? "active" : "",
+        opts.accent ? "accent" : "",
+        opts.primary ? "primary" : "",
+        opts.outline ? "outline" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const tip = opts.tip ?? label;
+      return `<button class="${cls}" data-t="${id}" aria-label="${esc(label)}"${opts.disabled ? " disabled" : ""}>
         ${svg(icon, "2")}
+        ${opts.text ? `<span class="label">${esc(opts.text)}</span>` : ""}
         ${opts.badge ? `<span class="badge">${opts.badge}</span>` : ""}
-        <span class="sp-tip">${esc(label)}${opts.kbd ? `<span class="kbd">${opts.kbd}</span>` : ""}</span>
+        <span class="sp-tip">${esc(tip)}${opts.kbd ? `<span class="kbd">${opts.kbd}</span>` : ""}</span>
       </button>`;
+    };
+    const draftCount = session.filter((s) => s.state !== "submitted").length;
+    const canSendCurrent = !!(noteText.trim() || voiceBlob);
+    const screenOk = canScreenRec();
+    // Primary dock layout (RS-6b): capture buttons → session counter →
+    // Szczegóły (open right panel on demand) → Wyślij (primary CTA).
     toolbar.innerHTML =
-      tool("pick", "Wskaż element", ICON.pick, { active: panelOpen && tab === "new", kbd: "E" }) +
-      tool("voice", "Notatka głosowa", ICON.voice, { accent: true, kbd: "V" }) +
+      tool("pick", "Wskaż element", ICON.pick, { active: pickArmed, kbd: "E" }) +
+      tool("voice", "Mic + element pick", ICON.voice, { accent: true, kbd: "V" }) +
       tool("text", "Notatka tekstowa", ICON.text, { kbd: "T" }) +
       tool("shot", "Zrzut + adnotacja", ICON.shot, { kbd: "S" }) +
-      tool("screen", "Nagraj ekran", ICON.screen) +
+      tool(
+        "screen",
+        screenOk ? "Nagraj ekran" : "Nagrywanie ekranu wyłączone w RODO",
+        ICON.screen,
+        {
+          disabled: !screenOk,
+          tip: screenOk ? "Nagraj ekran" : "Włącz w „Ustawienia RODO”",
+        },
+      ) +
       `<span class="sep"></span>` +
       tool("session", "Adnotacje w sesji", ICON.list, { badge: session.length || undefined }) +
+      tool("rodo", "Ustawienia RODO", ICON.shield ?? ICON.list, {
+        outline: true,
+        tip: "Ustawienia RODO",
+      }) +
+      tool("details", "Szczegóły adnotacji", ICON.list, {
+        outline: true,
+        text: "Szczegóły",
+        active: panelOpen,
+      }) +
+      tool("send", "Wyślij adnotację", ICON.arrow, {
+        primary: true,
+        text: "Wyślij adnotację",
+        disabled: !canSendCurrent && session.length === 0,
+        tip: canSendCurrent ? "Wyślij adnotację" : "Dodaj notatkę głosową lub tekstową",
+        ...(draftCount ? { badge: draftCount } : {}),
+      }) +
       tool("end", "Zakończ sesję", ICON.end);
     toolbar.querySelectorAll<HTMLButtonElement>(".sp-tool").forEach((b) => {
       b.addEventListener("click", () => onTool(b.dataset.t as string));
@@ -727,8 +907,11 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     const bars = Array.from(
       { length: 24 },
       (_, i) =>
-        `<span style="height:${6 + ((i * 7) % 26)}px;animation-delay:${(i % 8) * 0.08}s"></span>`,
+        `<span data-rec-bar style="height:${6 + ((i * 7) % 26)}px;animation-delay:${(i % 8) * 0.08}s"></span>`,
     ).join("");
+    const playBlock = voiceBlob
+      ? `<audio data-rec-audio controls preload="metadata" style="width:100%;margin-top:8px"></audio>`
+      : "";
     const recBlock = `<div class="${recCls}">
         <div class="rec-row">
           <button class="rec-btn" data-rec aria-label="${recorder ? "Zatrzymaj nagrywanie" : "Nagraj notatkę głosową"}">
@@ -753,6 +936,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
             }
           </span>
         </div>
+        ${playBlock}
       </div>`;
 
     const seg = (
@@ -804,7 +988,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         ${recBlock}
       </div>
       <div class="sec">
-        <span class="sec-label">Notatka tekstowa <span class="req">· opcjonalna</span></span>
+        <span class="sec-label">Notatka tekstowa</span>
         <textarea class="ta" data-note placeholder="Opisz, co ma się zmienić. Markdown wspierany.">${esc(noteText)}</textarea>
       </div>
       <div class="row-2">
@@ -843,44 +1027,36 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         <span class="sec-label">Załączony kontekst</span>
         ${ctxBlock}
       </div>
-      ${
-        others
-          ? `<div class="sec"><span class="sec-label">Inne adnotacje w sesji</span>${others}</div>`
-          : ""
-      }`;
+      `;
   };
 
   const fmt = (s: number): string => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-  const render = (): void => {
-    if (minimized) {
-      fab.style.display = "";
-      sessionPill.style.display = "";
-      statusPill.style.display = "none";
-      toolbar.style.display = "none";
-      panel.hidden = true;
-      renderIdle();
-      return;
-    }
-    fab.style.display = "none";
-    sessionPill.style.display = "none";
-    statusPill.style.display = "";
-    toolbar.style.display = "";
-    renderToolbar();
-    if (!panelOpen) {
-      panel.hidden = true;
-      return;
-    }
-    panel.hidden = false;
-    if (!consented()) {
-      const codeIcon = '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>';
-      panel.innerHTML = `<div class="consent">
-        <div class="consent-head">
-          <span class="logo" aria-hidden="true">${svg(ICON.logo, "2.5")}</span>
-          <h3>Witaj w sesji review · ${esc(sessionLabel)}</h3>
+  const renderConsentModal = (): void => {
+    const codeIcon = '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>';
+    const intro = deps.intro;
+    const reviewerName = intro?.reviewerName?.trim() ?? "";
+    const greeting = reviewerName ? `Witaj ${esc(reviewerName)}!` : "Witaj!";
+    const sessionDisplay = intro?.sessionName ?? sessionLabel;
+    const descBlock = intro?.description?.trim()
+      ? `<p class="about-block"><strong>O sesji</strong>${esc(intro.description)}</p>`
+      : "";
+    const instrBlock = intro?.instructions?.trim()
+      ? `<p class="about-block"><strong>Na co zwrócić uwagę</strong>${esc(intro.instructions)}</p>`
+      : "";
+    const aboutWrap =
+      descBlock || instrBlock ? `<div class="consent-about">${descBlock}${instrBlock}</div>` : "";
+    consentWrap.innerHTML = `<div class="sp-consent-modal">
+      <div class="consent-head">
+        <span class="logo" aria-hidden="true">${svg(ICON.logo, "2.5")}</span>
+        <div class="head-text">
+          <h2>${greeting} <span style="color:var(--muted);font-weight:500">·</span> ${esc(sessionDisplay)}</h2>
           <p>Zostałeś zaproszony do dodawania adnotacji wprost na działającej aplikacji.
           Zanim zaczniesz, potrzebujemy Twojej zgody.</p>
         </div>
+      </div>
+      ${aboutWrap}
+      <div class="consent-body">
         <ul class="consent-list">
           <li>
             <span class="ic">${svg(ICON.mic)}</span>
@@ -898,42 +1074,87 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
             konsola, sieć i build. Bez danych biznesowych.</span>
           </li>
         </ul>
-        <div class="consent-checks">
-          <label><input type="checkbox" data-consent-req checked> <span>Wyrażam zgodę na
-          nagrywanie głosu i zbieranie kontekstu technicznego podczas sesji review w projekcie
-          <strong>${esc(sessionLabel)}</strong>.</span></label>
-          <label><input type="checkbox" data-consent-cam> <span>Zgadzam się na włączenie
-          kamery do nagrań screen-cast z narracją (opcjonalne).</span></label>
+      </div>
+      <div class="consent-checks">
+        <label><input type="checkbox" data-consent-req checked> <span>Wyrażam zgodę na
+        nagrywanie głosu i zbieranie kontekstu technicznego podczas sesji review.</span></label>
+        <label><input type="checkbox" data-consent-cam> <span>Zgadzam się na nagrywanie
+        ekranu z narracją (opcjonalne — można włączyć później).</span></label>
+      </div>
+      <div class="consent-foot">
+        <a href="https://speqify.app/privacy.html" target="_blank" rel="noopener noreferrer">
+          Polityka prywatności →
+        </a>
+        <span style="color:var(--muted);font-size:11.5px">·</span>
+        <span style="font-size:11.5px;color:var(--muted)">sekrety usuwane przed wysłaniem</span>
+        <div class="btn-row">
+          <button class="consent-btn consent-btn-secondary" data-decline>Nie teraz</button>
+          <button class="consent-btn consent-btn-primary" data-agree>
+            <span>Akceptuj i zacznij</span>
+            ${svg(ICON.arrow, "2.4")}
+          </button>
         </div>
-        <div class="consent-foot">
-          <span style="font-size:11.5px;color:var(--muted)">Polityka prywatności · sekrety
-          usuwane przed wysłaniem</span>
-          <div class="btn-row">
-            <button class="decline" data-decline>Nie teraz</button>
-            <button class="agree" data-agree>Akceptuj i zacznij ${svg(ICON.arrow, "2.4")}</button>
-          </div>
-        </div>
-      </div>`;
-      const reqCb = panel.querySelector<HTMLInputElement>("[data-consent-req]");
-      const camCb = panel.querySelector<HTMLInputElement>("[data-consent-cam]");
-      const agreeBtn = panel.querySelector<HTMLButtonElement>("[data-agree]");
-      const syncAgree = (): void => {
-        if (agreeBtn) agreeBtn.disabled = !reqCb?.checked;
-      };
-      reqCb?.addEventListener("change", syncAgree);
-      syncAgree();
-      agreeBtn?.addEventListener("click", () => {
-        if (!reqCb?.checked) return;
-        localStorage.setItem(CONSENT_KEY, "1");
-        localStorage.setItem(CONSENT_CAM_KEY, camCb?.checked ? "1" : "0");
-        render();
-      });
-      panel.querySelector("[data-decline]")?.addEventListener("click", () => {
-        panelOpen = false;
-        render();
-      });
+      </div>
+    </div>`;
+    const reqCb = consentWrap.querySelector<HTMLInputElement>("[data-consent-req]");
+    const camCb = consentWrap.querySelector<HTMLInputElement>("[data-consent-cam]");
+    const agreeBtn = consentWrap.querySelector<HTMLButtonElement>("[data-agree]");
+    const syncAgree = (): void => {
+      if (agreeBtn) agreeBtn.disabled = !reqCb?.checked;
+    };
+    reqCb?.addEventListener("change", syncAgree);
+    syncAgree();
+    agreeBtn?.addEventListener("click", () => {
+      if (!reqCb?.checked) return;
+      localStorage.setItem(CONSENT_KEY, "1");
+      localStorage.setItem(CONSENT_CAM_KEY, camCb?.checked ? "1" : "0");
+      consentWrap.classList.remove("open");
+      render();
+    });
+    consentWrap.querySelector("[data-decline]")?.addEventListener("click", () => {
+      // Decline: keep the modal closed but also retreat to idle so the
+      // reviewer isn't stuck with the dock open without consent.
+      consentWrap.classList.remove("open");
+      minimized = true;
+      panelOpen = false;
+      render();
+    });
+  };
+
+  const render = (): void => {
+    // Consent gate is independent of the dock/panel: render the modal once
+    // (idempotent) on first activation, leave it open until accepted.
+    if (!consented()) {
+      if (!minimized && !consentWrap.classList.contains("open")) {
+        renderConsentModal();
+        consentWrap.classList.add("open");
+      }
+    } else {
+      consentWrap.classList.remove("open");
+    }
+    if (minimized) {
+      fab.style.display = "";
+      toolbar.style.display = "none";
+      panel.hidden = true;
+      setHostShift(false);
+      renderIdle();
       return;
     }
+    fab.style.display = "none";
+    // RS-6d: when the right panel is open, hide the bottom dock — both
+    // surfaces expose the same actions, so showing them together is just
+    // duplication. Dock is the quick/minimal surface, panel is the full one.
+    toolbar.style.display = panelOpen ? "none" : "";
+    if (!panelOpen) {
+      renderToolbar();
+      panel.hidden = true;
+      setHostShift(false);
+      return;
+    }
+    // Panel is open: push the host content left so the panel doesn't cover
+    // anything the reviewer wants to annotate.
+    setHostShift(true);
+    panel.hidden = false;
 
     const sync = lastSync
       ? `<span class="sync ${lastSync.ok ? "ok" : "err"}">${svg(ICON.check, "2.5")}<span>${esc(lastSync.msg)}</span></span>`
@@ -957,23 +1178,31 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       </div>
       <div class="sp-body">${renderBody()}</div>
       <div class="sp-foot">
+        <button class="sp-capbtn" data-cap-shot title="Zrzut + adnotacja">${svg(ICON.shot, "2")}</button>
+        <button class="sp-capbtn" data-cap-screen title="${canScreenRec() ? "Nagraj ekran" : "Włącz w „Ustawienia RODO”"}"${canScreenRec() ? "" : " disabled"}>${svg(ICON.screen, "2")}</button>
         <button class="sp-save" data-save>Zapisz draft</button>
         ${sync}
-        <button class="sp-submit" data-send>Wyślij ${svg(ICON.arrow, "2.4")}</button>
+        <button class="sp-submit" data-send${noteText.trim() || voiceBlob || session.length ? "" : " disabled"} title="${noteText.trim() || voiceBlob || session.length ? "Wyślij adnotację" : "Dodaj notatkę głosową lub tekstową"}">Wyślij adnotację ${svg(ICON.arrow, "2.4")}</button>
       </div>`;
 
     wireBody();
   };
 
   const wireBody = (): void => {
+    // RS-6d: minimize ≠ close.
+    //   data-min  → drop panel, keep the dock visible (dock-primary state).
+    //   data-close → retreat all the way back to the idle FAB.
     panel.querySelector("[data-min]")?.addEventListener("click", () => {
       panelOpen = false;
       render();
     });
     panel.querySelector("[data-close]")?.addEventListener("click", () => {
-      panelOpen = false;
-      render();
+      // Close = retreat to idle FAB. If the reviewer has a draft in progress
+      // they get a confirm modal first so a stray click doesn't drop work.
+      confirmEnd();
     });
+    panel.querySelector("[data-cap-shot]")?.addEventListener("click", () => onTool("shot"));
+    panel.querySelector("[data-cap-screen]")?.addEventListener("click", () => onTool("screen"));
     panel.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((b) =>
       b.addEventListener("click", () => {
         tab = b.dataset.tab as Tab;
@@ -1017,6 +1246,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       recorder?.cancel();
       recorder = null;
       stopTimer();
+      stopWaveform();
       render();
     });
     panel.querySelector("[data-rec-clear]")?.addEventListener("click", () => {
@@ -1024,6 +1254,15 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       voiceSec = 0;
       render();
     });
+    // Bind the playback <audio> to the in-memory blob via a transient
+    // object URL. The URL is revoked when the same audio element unmounts
+    // (next render or panel close) — we attach it via `dataset.objectUrl`.
+    const audioEl = panel.querySelector<HTMLAudioElement>("[data-rec-audio]");
+    if (audioEl && voiceBlob) {
+      const url = URL.createObjectURL(voiceBlob);
+      audioEl.src = url;
+      audioEl.dataset["objectUrl"] = url;
+    }
 
     panel.querySelector("[data-save]")?.addEventListener("click", () => void addAnnotation());
     panel.querySelector("[data-send]")?.addEventListener("click", () => void sendSession());
@@ -1046,12 +1285,27 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     target.setAttribute("data-speqify-pin", String(annIndex));
     picked = captureElement(target);
     document.removeEventListener("click", onPick, true);
-    panelOpen = true;
+    pickArmed = false;
     tab = "new";
+    if (pendingVoiceCapture) {
+      // Mic-driven flow (RS-6b): pick → auto-record. Whether the right
+      // panel was open or not is preserved by render().
+      pendingVoiceCapture = false;
+      render();
+      toggleVoice();
+      return;
+    }
+    // Manual pick. The dock and the panel state are both preserved — the
+    // reviewer chose how they want to keep working.
     render();
   };
   const startPick = (): void => {
-    panelOpen = false;
+    // RS-6d: don't force-close the panel — when the reviewer is using the
+    // panel surface the panel must stay open so they can switch right back
+    // into editing the just-picked annotation. The host page is shifted
+    // 440px to the left while the panel is open, so the click target is
+    // still visible on screen.
+    pickArmed = true;
     render();
     document.addEventListener("click", onPick, true);
   };
@@ -1063,20 +1317,77 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       recTimer = null;
     }
   };
+  const startWaveform = (): void => {
+    if (!recorder || waveCtx) return;
+    type AC = typeof AudioContext;
+    const Ctor: AC | undefined =
+      (window as unknown as { AudioContext?: AC; webkitAudioContext?: AC }).AudioContext ??
+      (window as unknown as { webkitAudioContext?: AC }).webkitAudioContext;
+    if (!Ctor) return;
+    try {
+      waveCtx = new Ctor();
+      const source = waveCtx.createMediaStreamSource(recorder.stream);
+      waveAnalyser = waveCtx.createAnalyser();
+      waveAnalyser.fftSize = 256;
+      source.connect(waveAnalyser);
+      const buf = new Uint8Array(waveAnalyser.frequencyBinCount);
+      const tick = (): void => {
+        if (!waveAnalyser) return;
+        waveAnalyser.getByteFrequencyData(buf);
+        // Downsample 128 freq bins to 24 visual bars.
+        const bars = panel.querySelectorAll<HTMLElement>("[data-rec-bar]");
+        if (bars.length) {
+          const step = Math.floor(buf.length / bars.length);
+          for (let i = 0; i < bars.length; i++) {
+            let sum = 0;
+            for (let j = 0; j < step; j++) sum += buf[i * step + j] ?? 0;
+            const avg = sum / step / 255; // 0..1
+            const h = 4 + Math.round(avg * 32);
+            bars[i]!.style.height = `${h}px`;
+          }
+        }
+        waveRaf = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch {
+      // AudioContext not available — fall back to CSS-only animation.
+      waveCtx = null;
+      waveAnalyser = null;
+    }
+  };
+  const stopWaveform = (): void => {
+    if (waveRaf !== null) {
+      cancelAnimationFrame(waveRaf);
+      waveRaf = null;
+    }
+    waveAnalyser?.disconnect();
+    waveAnalyser = null;
+    waveCtx?.close().catch(() => {});
+    waveCtx = null;
+  };
   const toggleVoice = (): void => {
     void (async () => {
       if (recorder) {
         const r = recorder;
         recorder = null;
         stopTimer();
+        stopWaveform();
         voiceBlob = await r.stop();
         voiceSec = recElapsed;
         render();
+        // RS-6e: only auto-save when the dock-driven 4-tap flow is in play
+        // (panel closed). With the panel open the reviewer wants to review
+        // / preview / edit the take before sending it, so we leave the
+        // voiceBlob queued instead of immediately uploading.
+        if (!panelOpen && voiceBlob && !noteText.trim() && picked) {
+          await addAnnotation();
+        }
       } else {
         try {
           recorder = await startVoiceRecording();
           recElapsed = 0;
           render();
+          startWaveform();
           recTimer = window.setInterval(() => {
             recElapsed++;
             const el = panel.querySelector("[data-rec-time]");
@@ -1091,7 +1402,9 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   };
 
   // ---- screen recording --------------------------------------------------
+  const canScreenRec = (): boolean => localStorage.getItem(CONSENT_CAM_KEY) === "1";
   const toggleScreen = (): void => {
+    if (!canScreenRec()) return;
     void (async () => {
       if (screenRec) {
         const r = screenRec;
@@ -1105,8 +1418,10 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
           lastSync = { ok: true, msg: "Nagrywanie ekranu…" };
           render();
         } catch {
-          lastSync = { ok: false, msg: "Przechwytywanie ekranu zablokowane" };
-          render();
+          // RS-6e: no toast — the button is the affordance. If the browser
+          // also blocks the picker on top of consent, the disabled state +
+          // tooltip already communicate it; a transient error message just
+          // adds noise.
         }
       }
     })();
@@ -1209,32 +1524,43 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   };
 
   // ---- tool dispatch -----------------------------------------------------
-  const open = (): void => {
+  const openDock = (): void => {
     minimized = false;
-    panelOpen = true;
     render();
   };
+  // Public open(): exposed via OverlayInstance.open(). Keeps the dock
+  // primary (right panel stays closed unless the reviewer hits "Szczegóły").
+  const open = openDock;
   const onTool = (id: string): void => {
     switch (id) {
       case "pick":
-        open();
+        openDock();
         tab = "new";
         startPick();
         break;
       case "voice":
-        open();
+        // RS-6b mic-driven flow. If no element is picked yet, arm pick first
+        // and have onPick chain into toggleVoice. Otherwise toggle directly.
+        openDock();
         tab = "new";
-        render();
-        toggleVoice();
+        if (!picked && !recorder) {
+          pendingVoiceCapture = true;
+          startPick();
+        } else {
+          toggleVoice();
+        }
         break;
       case "text":
-        open();
+        // The text-note tool is the one case that needs the right panel
+        // (textarea) — opening it on demand is intentional.
+        openDock();
+        panelOpen = true;
         tab = "new";
         render();
         panel.querySelector<HTMLTextAreaElement>("[data-note]")?.focus();
         break;
       case "shot":
-        open();
+        openDock();
         void (async () => {
           try {
             const base = await captureScreenshot(pickedEl, deps.screenshotUrl);
@@ -1246,21 +1572,113 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         })();
         break;
       case "screen":
-        open();
+        openDock();
         toggleScreen();
         break;
       case "session":
-        open();
+        openDock();
+        panelOpen = true;
         tab = "session";
         render();
         break;
-      case "end":
-        if (session.some((s) => s.state !== "submitted")) void sendSession();
-        panelOpen = false;
-        minimized = true;
+      case "details":
+        // Toggle the right panel. Always lands on the current annotation tab
+        // so the reviewer can review/edit the active draft.
+        openDock();
+        panelOpen = !panelOpen;
+        if (panelOpen) tab = "new";
         render();
         break;
+      case "send":
+        if (!noteText.trim() && !voiceBlob && session.length === 0) {
+          lastSync = { ok: false, msg: "Dodaj notatkę głosową lub tekstową" };
+          render();
+          break;
+        }
+        void sendSession();
+        break;
+      case "rodo":
+        openRodoSettings();
+        break;
+      case "end":
+        confirmEnd();
+        break;
     }
+  };
+
+  // ---- RODO settings + confirm end --------------------------------------
+  const hasUnsaved = (): boolean =>
+    !!(noteText.trim() || voiceBlob || picked || screenOut || tags.length || redactedShot);
+  const showConfirm = (msg: string, confirmLabel: string, onConfirm: () => void): void => {
+    const layer = document.createElement("div");
+    layer.className = "sp-confirm-wrap";
+    layer.innerHTML = `<div class="sp-confirm">
+      <p>${esc(msg)}</p>
+      <div class="row">
+        <button class="consent-btn consent-btn-secondary" data-cancel>Anuluj</button>
+        <button class="consent-btn consent-btn-primary" data-ok>${esc(confirmLabel)}</button>
+      </div>
+    </div>`;
+    root.appendChild(layer);
+    layer.querySelector("[data-cancel]")?.addEventListener("click", () => layer.remove());
+    layer.querySelector("[data-ok]")?.addEventListener("click", () => {
+      layer.remove();
+      onConfirm();
+    });
+  };
+  const confirmEnd = (): void => {
+    const finish = (): void => {
+      panelOpen = false;
+      minimized = true;
+      // Discard the in-progress draft so re-engaging is a clean slate.
+      voiceBlob = null;
+      voiceSec = 0;
+      noteText = "";
+      tags = [];
+      screenOut = null;
+      redactedShot = null;
+      clearPin();
+      picked = null;
+      pickedEl = null;
+      render();
+    };
+    if (hasUnsaved()) {
+      showConfirm(
+        "Masz niezapisaną adnotację. Zakończ sesję i odrzucić niewysłany draft?",
+        "Tak, zakończ",
+        finish,
+      );
+      return;
+    }
+    finish();
+  };
+  const openRodoSettings = (): void => {
+    const camOn = canScreenRec();
+    const layer = document.createElement("div");
+    layer.className = "sp-confirm-wrap";
+    layer.innerHTML = `<div class="sp-confirm" style="max-width:480px">
+      <h3 style="margin:0 0 6px;font-size:16px;font-weight:700">Ustawienia RODO</h3>
+      <p style="margin:0 0 14px;font-size:13px;color:var(--secondary)">
+        Zgoda na nagrywanie głosu i kontekst techniczny obowiązuje przez całą sesję
+        review. Dodatkowo możesz włączyć nagrywanie ekranu z narracją.
+      </p>
+      <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--secondary);cursor:pointer;margin-bottom:14px">
+        <input type="checkbox" data-cam ${camOn ? "checked" : ""} style="margin-top:2px;width:18px;height:18px;accent-color:var(--primary);flex:none">
+        <span><strong style="color:var(--primary)">Nagrywanie ekranu</strong> — pozwala SDK nagrać ekran z narracją mikrofonową w obrębie tej sesji.</span>
+      </label>
+      <div class="row">
+        <button class="consent-btn consent-btn-secondary" data-cancel>Anuluj</button>
+        <button class="consent-btn consent-btn-primary" data-ok>Zapisz</button>
+      </div>
+    </div>`;
+    root.appendChild(layer);
+    const camInput = layer.querySelector<HTMLInputElement>("[data-cam]");
+    layer.querySelector("[data-cancel]")?.addEventListener("click", () => layer.remove());
+    layer.querySelector("[data-ok]")?.addEventListener("click", () => {
+      localStorage.setItem(CONSENT_CAM_KEY, camInput?.checked ? "1" : "0");
+      layer.remove();
+      render();
+    });
   };
 
   // Keyboard shortcuts (E/V/T/S) when not typing.
@@ -1275,12 +1693,6 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   };
   document.addEventListener("keydown", onKey);
 
-  statusPill.querySelector(".close")?.addEventListener("click", () => {
-    panelOpen = false;
-    minimized = true;
-    render();
-  });
-
   render();
 
   return {
@@ -1292,9 +1704,12 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     },
     destroy: () => {
       stopTimer();
+      stopWaveform();
       recorder?.cancel();
       screenRec?.cancel();
       clearPin();
+      setHostShift(false);
+      window.removeEventListener("resize", onResize);
       document.removeEventListener("click", onPick, true);
       document.removeEventListener("keydown", onKey);
       hostStyle.remove();

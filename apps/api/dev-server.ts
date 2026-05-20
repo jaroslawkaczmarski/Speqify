@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { NoopLlmProvider } from "./src/analysis/providers.js";
 import { createApp } from "./src/app.js";
+import { NoopEmailSender } from "./src/email/resend.js";
 import { resolveConfig, type Env } from "./src/env.js";
 import { InMemoryMediaStore } from "./src/media/memory.js";
 import { InMemoryRepository } from "./src/repo/memory.js";
@@ -49,45 +50,72 @@ const repo = new InMemoryRepository({
     },
   ],
   projects: [
-    {
-      id: "prj_demo",
-      name: "Demo Project",
-      productOwnerId: "usr_po_dev",
-      environmentUrls: ["http://localhost:5173"],
-      status: "live",
-      template: {
-        language: "en",
+    (() => {
+      const baseTemplate = {
+        language: "en" as const,
         userStory: true,
         acceptanceCriteria: true,
         labels: ["frontend", "backend"],
         components: ["Cart", "Checkout"],
         versions: ["1.0"],
         customFields: {},
-      },
-      exportConfigId: null,
+      };
+      return {
+        id: "prj_demo",
+        name: "Demo Project",
+        productOwnerId: "usr_po_dev",
+        environmentUrls: ["http://localhost:5173"],
+        status: "live" as const,
+        templates: {
+          bug: baseTemplate,
+          change: baseTemplate,
+          feature: baseTemplate,
+          polish: baseTemplate,
+        },
+        exportConfigId: null,
+        createdAt: now,
+      };
+    })(),
+  ],
+  reviewSessions: [
+    {
+      id: "sess_demo",
+      projectId: "prj_demo",
+      name: "Q1 2026 — Smoke session (seed)",
+      description: "Pre-seeded session for local dev so /po/sessions is non-empty on first run.",
+      instructions:
+        "Klikajcie po stronie, nagrajcie głosówkę, wyślijcie batch. Wszystko leci do in-memory bazy.",
+      envUrl: "http://localhost:5173/",
+      token: "demo-session-token",
+      status: "live" as const,
+      startsAt: null,
+      endsAt: null,
+      createdBy: "usr_po_dev",
       createdAt: now,
     },
   ],
-  panels: [
+  reviewers: [
     {
-      id: "pnl_demo",
-      projectId: "prj_demo",
-      audience: "client",
-      secretToken: "demo-panel-token",
-      environmentUrl: "http://localhost:5173",
-      status: "open",
-      createdAt: now,
+      id: "rev_demo",
+      sessionId: "sess_demo",
+      name: "Tester Demo",
+      email: "tester@example.com",
+      token: "demo-reviewer-token",
+      status: "active" as const,
+      invitedAt: now,
+      acceptedAt: now,
+      lastSeenAt: null,
     },
   ],
   // Demo review queue so the PO panel is usable offline (Phase 8).
   annotations: [
     {
       id: "ann_demo_1",
-      panelId: "pnl_demo",
+      sessionId: "sess_demo",
+      reviewerId: "rev_demo",
       submissionId: "sub_demo",
       type: "element",
       status: "processed",
-      audience: "client",
       pageUrl: "http://localhost:5173/dashboard/orders",
       breadcrumb: [],
       element: {
@@ -113,11 +141,11 @@ const repo = new InMemoryRepository({
     },
     {
       id: "ann_demo_2",
-      panelId: "pnl_demo",
+      sessionId: "sess_demo",
+      reviewerId: "rev_demo",
       submissionId: "sub_demo",
       type: "global",
       status: "processed",
-      audience: "client",
       pageUrl: "http://localhost:5173/dashboard/orders",
       breadcrumb: [],
       element: null,
@@ -139,11 +167,11 @@ const repo = new InMemoryRepository({
     },
     {
       id: "ann_demo_3",
-      panelId: "pnl_demo",
+      sessionId: "sess_demo",
+      reviewerId: "rev_demo",
       submissionId: "sub_demo",
       type: "element",
       status: "processed",
-      audience: "tester",
       pageUrl: "http://localhost:5173/dashboard/orders",
       breadcrumb: [],
       element: {
@@ -287,6 +315,7 @@ const app = createApp({
   mediaStore: new InMemoryMediaStore(),
   transcriber: new NoopTranscriber(),
   llm: new NoopLlmProvider(),
+  emailSender: new NoopEmailSender(),
 });
 
 const port = 8787;

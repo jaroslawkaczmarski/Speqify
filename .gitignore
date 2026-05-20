@@ -25,3 +25,10 @@ Thumbs.db
 .prod-secrets.tmp.json
 
 .cf.tmp.mjs
+
+# Generated SDK bundle dropped into the landing public dir for local dev so
+# /sdk/v1/loader.js is served by `pnpm dev`. Built via:
+#   pnpm --filter @speqify/sdk bundle && cp packages/sdk/dist/loader.js \
+#     apps/landing/public/sdk/v1/loader.js
+# In production the loader is served by Workers Static Assets, not this path.
+apps/landing/public/sdk/

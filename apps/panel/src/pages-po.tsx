@@ -3,22 +3,25 @@ import type { FormEvent, ReactNode } from "react";
 import type {
   PoSourceAnnotation,
   ProjectTemplate,
+  ReviewerView,
+  ReviewSession,
+  ReviewSessionStatus,
   SubtaskType,
   Task,
   TaskEditInput,
+  TaskType,
 } from "@speqify/shared";
+import { TASK_TYPES } from "@speqify/shared";
 import { api, type PoProjectView } from "./api.js";
 import {
   Alert,
   Avatar,
-  AvatarStack,
   Button,
   Card,
   EmptyState,
   Field,
   Page,
   Pill,
-  RoleBadge,
   Skeleton,
   Stat,
   Toggle,
@@ -70,9 +73,9 @@ export function PoOverview() {
             </div>
             <div className="stat">
               <span className="l">Język zadań</span>
-              <span className="n">{v.project.template.language.toUpperCase()}</span>
+              <span className="n">{v.project.templates.bug.language.toUpperCase()}</span>
               <span className="d">
-                <span className="sp">szablon zadań</span>
+                <span className="sp">szablon zadań (bug)</span>
               </span>
             </div>
             <div className="stat">
@@ -110,25 +113,37 @@ export function PoOverview() {
   );
 }
 
+const TASK_TYPE_LABELS: Record<TaskType, string> = {
+  bug: "Błąd",
+  change: "Zmiana",
+  feature: "Nowa funkcja",
+  polish: "Polish",
+};
+
 export function PoTemplate() {
-  const [t, setT] = useState<ProjectTemplate | null>(null);
+  const [allTemplates, setAllTemplates] = useState<Record<TaskType, ProjectTemplate> | null>(null);
+  const [activeType, setActiveType] = useState<TaskType>("bug");
   const [saved, setSaved] = useState(false);
   const { error, busy, run } = useAsync();
   useEffect(() => {
-    void run(async () => setT((await api.poProject()).project.template));
+    void run(async () => setAllTemplates((await api.poProject()).project.templates));
   }, []);
+
+  const t = allTemplates ? allTemplates[activeType] : null;
 
   const submit = (e: FormEvent): void => {
     e.preventDefault();
     if (!t) return;
     void run(async () => {
-      await api.putTemplate(t);
+      await api.putTemplate(activeType, t);
       setSaved(true);
     });
   };
   const set = (patch: Partial<ProjectTemplate>): void => {
     setSaved(false);
-    if (t) setT({ ...t, ...patch });
+    if (allTemplates && t) {
+      setAllTemplates({ ...allTemplates, [activeType]: { ...t, ...patch } });
+    }
   };
 
   return (
@@ -136,11 +151,47 @@ export function PoTemplate() {
       <div className="page-h">
         <div>
           <h1>Szablon zadań</h1>
-          <p className="sub">Kształtuje każde zadanie generowane przez AI</p>
+          <p className="sub">
+            Per typ zadania (bug / change / feature / polish) — AI dobiera szablon przy
+            klasyfikacji.
+          </p>
         </div>
       </div>
+      <div
+        className="tabs"
+        role="tablist"
+        aria-label="Typ zadania"
+        style={{ display: "flex", gap: 6, marginBottom: 14 }}
+      >
+        {TASK_TYPES.map((tt) => (
+          <button
+            key={tt}
+            type="button"
+            role="tab"
+            aria-selected={tt === activeType}
+            className={`pill${tt === activeType ? " active" : ""}`}
+            onClick={() => {
+              setActiveType(tt);
+              setSaved(false);
+            }}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: "1px solid var(--border)",
+              background: tt === activeType ? "var(--primary)" : "transparent",
+              color: tt === activeType ? "#fff" : "inherit",
+              cursor: "pointer",
+              fontSize: ".8125rem",
+            }}
+          >
+            {TASK_TYPE_LABELS[tt]}
+          </button>
+        ))}
+      </div>
       {error ? <Alert kind="danger">{error}</Alert> : null}
-      {saved ? <Alert kind="success">Szablon zapisany.</Alert> : null}
+      {saved ? (
+        <Alert kind="success">Szablon ({TASK_TYPE_LABELS[activeType]}) zapisany.</Alert>
+      ) : null}
       {!t ? (
         <div
           className="card card-pad"
@@ -1075,16 +1126,6 @@ export function PoTasks() {
  *  Batch 4 — PO bundle screens                                          *
  * ===================================================================== */
 
-/** Honesty banner for screens whose backend is out of V1 scope. */
-function RepBanner({ children }: { children: ReactNode }) {
-  return (
-    <Alert kind="warning" title="Widok poglądowy">
-      {children} Dane i akcje są reprezentatywne — encja sesji / recenzentów nie istnieje w V1
-      (Phase 11). Adnotacje i zadania w pozostałych widokach pochodzą z realnego API.
-    </Alert>
-  );
-}
-
 function relTime(iso: string): string {
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return "—";
@@ -1098,129 +1139,130 @@ function relTime(iso: string): string {
   return d === 1 ? "wczoraj" : `${d} dni temu`;
 }
 
-/** Representative review-session card (no session entity in V1). */
-type RepSession = {
-  name: string;
-  env: "prod" | "stg" | "dev";
-  state: "live" | "danger" | "archived";
-  stateLabel: string;
-  desc: string;
-  range: string;
-  by: string;
-  url: string;
-  anns: number;
-  ai: number | null;
-  people: string[];
-  pct: number;
-  pctNote: string;
-  done?: boolean;
-};
+function sessionStatusLabel(s: ReviewSessionStatus): string {
+  if (s === "live") return "aktywna";
+  if (s === "draft") return "szkic";
+  return "zamknięta";
+}
 
-const REP_SESSIONS: RepSession[] = [
-  {
-    name: "Q1 2026 — Zamówienia & rozliczenia",
-    env: "prod",
-    state: "live",
-    stateLabel: "aktywna",
-    desc: "Przegląd przepływu zamówień na produkcji przed sprintem 24 — eksport raportów i statusy zwrotów.",
-    range: "12.05 → 24.05.2026",
-    by: "Ty",
-    url: "app.lumen-lab.com/orders",
-    anns: 34,
-    ai: 12,
-    people: ["MK", "TW", "AL", "JK", "PG"],
-    pct: 68,
-    pctNote: "68% · do 24.05",
-  },
-  {
-    name: "Hotfix — formularz kontakt B2B",
-    env: "prod",
-    state: "danger",
-    stateLabel: "kończy jutro",
-    desc: "Szybka weryfikacja formularza B2B po włączeniu walidacji NIP — edge case'y.",
-    range: "18.05 → 20.05.2026",
-    by: "Patrycja Górska",
-    url: "app.lumen-lab.com/contact",
-    anns: 10,
-    ai: null,
-    people: ["TW"],
-    pct: 92,
-    pctNote: "92% · kończy jutro",
-  },
-  {
-    name: "Q2 2026 — Refresh nawigacji",
-    env: "stg",
-    state: "live",
-    stateLabel: "aktywna",
-    desc: "Przegląd nowej nawigacji bocznej i top-baru na staging'u przed wdrożeniem na prod.",
-    range: "17.05 → 14.06.2026",
-    by: "Ty",
-    url: "staging.lumen-lab.com",
-    anns: 18,
-    ai: null,
-    people: ["MK", "AL", "PG"],
-    pct: 24,
-    pctNote: "24% · 26 dni do końca",
-  },
-  {
-    name: "Q4 2025 — Onboarding nowych klientów",
-    env: "prod",
-    state: "archived",
-    stateLabel: "ukończona",
-    desc: "12.04 → 30.04.2026 · 24 adnotacje · 9 zadań w Jira",
-    range: "12.04 → 30.04.2026",
-    by: "Marta Kowalska",
-    url: "app.lumen-lab.com/onboarding",
-    anns: 24,
-    ai: 9,
-    people: ["MK", "TW", "AL"],
-    pct: 100,
-    pctNote: "Raport →",
-    done: true,
-  },
-  {
-    name: "Q3 2025 — Płatności PSD2",
-    env: "prod",
-    state: "archived",
-    stateLabel: "ukończona",
-    desc: "22.03 → 12.04.2026 · 42 adnotacje · 14 zadań",
-    range: "22.03 → 12.04.2026",
-    by: "Marta Kowalska",
-    url: "app.lumen-lab.com/checkout",
-    anns: 42,
-    ai: 14,
-    people: ["MK", "JK", "TW"],
-    pct: 100,
-    pctNote: "Raport →",
-    done: true,
-  },
-];
+function sessionStatusPill(s: ReviewSessionStatus): "live" | "danger" | "archived" {
+  if (s === "live") return "live";
+  if (s === "draft") return "danger";
+  return "archived";
+}
+
+function fmtRange(startsAt: string | null, endsAt: string | null): string {
+  const fmt = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleDateString("pl-PL", { day: "2-digit", month: "short" }) : null;
+  const a = fmt(startsAt);
+  const b = fmt(endsAt);
+  if (!a && !b) return "bez okna czasowego";
+  if (a && b) return `${a} → ${b}`;
+  if (a) return `od ${a}`;
+  return `do ${b ?? ""}`;
+}
 
 export function PoSessions() {
   const [name, setName] = useState<string>("Mój projekt");
-  const { run } = useAsync();
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<ReviewSession[] | null>(null);
+  const { error, run } = useAsync();
+
   useEffect(() => {
     void run(async () => {
-      try {
-        setName((await api.poProject()).project.name);
-      } catch {
-        /* representative header — name is non-critical */
-      }
+      const v = await api.poProject();
+      setName(v.project.name);
+      setProjectId(v.project.id);
+      const { sessions: list } = await api.listSessions(v.project.id);
+      setSessions(list);
     });
   }, []);
 
-  const active = REP_SESSIONS.filter((s) => !s.done);
-  const done = REP_SESSIONS.filter((s) => s.done);
+  const active = (sessions ?? []).filter((s) => s.status !== "closed");
+  const done = (sessions ?? []).filter((s) => s.status === "closed");
+
+  const renderRow = (s: ReviewSession): ReactNode => {
+    const pillKind = sessionStatusPill(s.status);
+    return (
+      <Card
+        key={s.id}
+        role="button"
+        tabIndex={0}
+        style={{ cursor: "pointer" }}
+        onClick={() => (window.location.hash = `/sessions/${s.id}`)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            window.location.hash = `/sessions/${s.id}`;
+          }
+        }}
+      >
+        <div
+          style={{
+            padding: "18px 22px",
+            display: "grid",
+            gridTemplateColumns: "1fr auto auto",
+            gap: 18,
+            alignItems: "center",
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <span style={{ fontSize: "1.0625rem", fontWeight: 700 }}>{s.name}</span>
+              <Pill kind={pillKind}>{sessionStatusLabel(s.status)}</Pill>
+            </div>
+            {s.description ? (
+              <div
+                style={{
+                  fontSize: ".8125rem",
+                  color: "var(--secondary)",
+                  lineHeight: 1.5,
+                  marginBottom: 8,
+                  maxWidth: 640,
+                }}
+              >
+                {s.description}
+              </div>
+            ) : null}
+            <div
+              style={{
+                fontSize: ".75rem",
+                color: "var(--muted)",
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <span>
+                <strong style={{ color: "var(--primary)" }}>
+                  {fmtRange(s.startsAt, s.endsAt)}
+                </strong>
+              </span>
+              <span>·</span>
+              <span className="mono">{s.envUrl}</span>
+              <span>·</span>
+              <span>utworzona {relTime(s.createdAt)}</span>
+            </div>
+          </div>
+          <div className="mono" style={{ fontSize: ".75rem", color: "var(--muted)" }}>
+            {s.token.slice(0, 6)}…
+          </div>
+          <span style={{ fontSize: ".75rem", color: "var(--secondary)" }}>otwórz →</span>
+        </div>
+      </Card>
+    );
+  };
 
   return (
     <Page
       crumbs={[name, "Sesje review"]}
-      env="prod"
       actions={
-        <Button onClick={() => (window.location.hash = "/sessions/new")}>
-          <IconPlus width={14} height={14} />
-          Nowa sesja
-        </Button>
+        projectId ? (
+          <Button onClick={() => (window.location.hash = "/sessions/new")}>
+            <IconPlus width={14} height={14} />
+            Nowa sesja
+          </Button>
+        ) : null
       }
     >
       <div
@@ -1237,416 +1279,234 @@ export function PoSessions() {
             Sesje review
           </h1>
           <div style={{ color: "var(--muted)", fontSize: ".875rem", marginTop: 4 }}>
-            {active.length} aktywne · {done.length} ukończone · czasowo ograniczone okna zbierania
-            feedbacku
+            {sessions === null
+              ? "Ładowanie…"
+              : `${active.length} aktywne · ${done.length} zamknięte`}
           </div>
         </div>
       </div>
 
-      <div style={{ marginBottom: 18 }}>
-        <RepBanner>
-          „Sesje review" grupują adnotacje w okno czasowe. W V1 adnotacje są zbierane przez panele
-          bez warstwy sesji.
-        </RepBanner>
-      </div>
+      {error ? <Alert kind="danger">{error}</Alert> : null}
 
-      <div className="stats" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 24 }}>
-        <Stat label="Aktywne" value={active.length} delta="+1 nowa w tym tyg." />
-        <Stat label="Ukończone · maj" value={done.length} delta="→ 23 zadania w Jira" />
-        <Stat label="Avg. czas trwania" value="5,2 dni" delta="↓ 0,8 d vs. kwiecień" />
-        <Stat label="Avg. adnotacje / sesja" value="17" delta="+22% vs. kwiecień" />
-      </div>
+      {sessions !== null && sessions.length === 0 ? (
+        <EmptyState
+          icon={<IconPlus />}
+          title="Brak sesji review"
+          description="Utwórz pierwszą sesję — wygeneruje link, który zaprosi recenzentów do SDK."
+          action={
+            projectId ? (
+              <Button onClick={() => (window.location.hash = "/sessions/new")}>Nowa sesja</Button>
+            ) : null
+          }
+        />
+      ) : null}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {active.map((s) => (
-          <Card
-            key={s.name}
-            role="button"
-            tabIndex={0}
-            style={{ cursor: "pointer" }}
-            onClick={() => (window.location.hash = `/sessions/${REP_SESSIONS.indexOf(s)}`)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                window.location.hash = `/sessions/${REP_SESSIONS.indexOf(s)}`;
-              }
-            }}
-          >
-            <div
+        {active.map(renderRow)}
+        {done.length > 0 ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "16px 0 4px" }}>
+            <span
               style={{
-                padding: "18px 22px",
-                display: "grid",
-                gridTemplateColumns: "1fr auto auto auto auto",
-                gap: 18,
-                alignItems: "center",
+                fontSize: ".75rem",
+                fontWeight: 700,
+                letterSpacing: ".06em",
+                textTransform: "uppercase",
+                color: "var(--muted)",
               }}
             >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                  <span style={{ fontSize: "1.0625rem", fontWeight: 700 }}>{s.name}</span>
-                  <span className={`env-pill env-${s.env}`}>{s.env}</span>
-                  <Pill kind={s.state}>{s.stateLabel}</Pill>
-                </div>
-                <div
-                  style={{
-                    fontSize: ".8125rem",
-                    color: "var(--secondary)",
-                    lineHeight: 1.5,
-                    marginBottom: 8,
-                    maxWidth: 560,
-                  }}
-                >
-                  {s.desc}
-                </div>
-                <div
-                  style={{
-                    fontSize: ".75rem",
-                    color: "var(--muted)",
-                    display: "flex",
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span>
-                    <strong style={{ color: "var(--primary)" }}>{s.range}</strong>
-                  </span>
-                  <span>·</span>
-                  <span>
-                    utworzone przez <strong style={{ color: "var(--secondary)" }}>{s.by}</strong>
-                  </span>
-                  <span>·</span>
-                  <span className="mono">{s.url}</span>
-                </div>
-              </div>
-              <div style={{ textAlign: "center" }}>
-                <div className="mono" style={{ fontSize: "1.25rem", fontWeight: 700 }}>
-                  {s.anns}
-                </div>
-                <div
-                  style={{
-                    fontSize: ".625rem",
-                    color: "var(--muted)",
-                    fontWeight: 600,
-                    letterSpacing: ".04em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  adnotacje
-                </div>
-              </div>
-              <div style={{ textAlign: "center" }}>
-                <div
-                  className="mono"
-                  style={{
-                    fontSize: "1.25rem",
-                    fontWeight: 700,
-                    color: s.ai == null ? "var(--muted)" : "var(--accent)",
-                  }}
-                >
-                  {s.ai == null ? "—" : s.ai}
-                </div>
-                <div
-                  style={{
-                    fontSize: ".625rem",
-                    color: "var(--muted)",
-                    fontWeight: 600,
-                    letterSpacing: ".04em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {s.ai == null ? "analiza wkrótce" : "zadania AI"}
-                </div>
-              </div>
-              <AvatarStack people={s.people} />
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "flex-end",
-                  gap: 6,
-                }}
-              >
-                <div
-                  style={{
-                    height: 6,
-                    width: 140,
-                    borderRadius: 999,
-                    background: "var(--surface-muted)",
-                    overflow: "hidden",
-                  }}
-                >
-                  <i
-                    style={{
-                      display: "block",
-                      height: "100%",
-                      width: `${s.pct}%`,
-                      borderRadius: 999,
-                      background: s.state === "danger" ? "var(--accent)" : "var(--success)",
-                    }}
-                  />
-                </div>
-                <span style={{ fontSize: ".6875rem", color: "var(--muted)" }}>{s.pctNote}</span>
-              </div>
-            </div>
-          </Card>
-        ))}
-
-        <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "16px 0 4px" }}>
-          <span
-            style={{
-              fontSize: ".75rem",
-              fontWeight: 700,
-              letterSpacing: ".06em",
-              textTransform: "uppercase",
-              color: "var(--muted)",
-            }}
-          >
-            Ukończone
-          </span>
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-        </div>
-
-        {done.map((s) => (
-          <Card
-            key={s.name}
-            role="button"
-            tabIndex={0}
-            style={{ cursor: "pointer" }}
-            onClick={() => (window.location.hash = `/sessions/${REP_SESSIONS.indexOf(s)}`)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                window.location.hash = `/sessions/${REP_SESSIONS.indexOf(s)}`;
-              }
-            }}
-          >
-            <div
-              style={{
-                padding: "14px 22px",
-                display: "grid",
-                gridTemplateColumns: "1fr auto auto auto",
-                gap: 18,
-                alignItems: "center",
-                opacity: 0.82,
-              }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                  <span style={{ fontSize: ".9375rem", fontWeight: 600 }}>{s.name}</span>
-                  <span className={`env-pill env-${s.env}`}>{s.env}</span>
-                  <Pill kind="archived">{s.stateLabel}</Pill>
-                </div>
-                <div style={{ fontSize: ".75rem", color: "var(--muted)" }}>{s.desc}</div>
-              </div>
-              <div className="mono" style={{ fontWeight: 600, fontSize: ".8125rem" }}>
-                {s.anns} adn.
-              </div>
-              <div
-                className="mono"
-                style={{ fontWeight: 600, fontSize: ".8125rem", color: "var(--success)" }}
-              >
-                {s.ai} wyeksp.
-              </div>
-              <span style={{ fontSize: ".75rem", color: "var(--muted)" }}>{s.pctNote}</span>
-            </div>
-          </Card>
-        ))}
+              Zamknięte
+            </span>
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          </div>
+        ) : null}
+        {done.map(renderRow)}
       </div>
     </Page>
   );
 }
 
-const NS_STEPS = ["Podstawy", "Zakres & instrukcje", "Recenzenci", "Harmonogram"];
-const NS_FOCUS = [
-  "Eksport raportów",
-  "Statusy zamówień i zwrotów",
-  "Tabela zamówień (filtry, sortowanie, paginacja)",
-  "Dashboard analityka",
-  "Ustawienia konta",
-];
-
 export function PoNewSession() {
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [envUrls, setEnvUrls] = useState<string[]>([]);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [instructions, setInstructions] = useState("");
+  const [envUrl, setEnvUrl] = useState("");
+  const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
+  const { error, busy, run } = useAsync();
+
+  useEffect(() => {
+    void run(async () => {
+      const v = await api.poProject();
+      setProjectId(v.project.id);
+      setEnvUrls(v.project.environmentUrls);
+      setEnvUrl(v.project.environmentUrls[0] ?? "");
+    });
+  }, []);
+
+  const toIsoOrNull = (local: string): string | null => {
+    if (!local) return null;
+    const t = new Date(local).getTime();
+    return Number.isNaN(t) ? null : new Date(t).toISOString();
+  };
+
+  const canSubmit = !!projectId && name.trim() && envUrl.trim();
+
+  const submit = (e: FormEvent): void => {
+    e.preventDefault();
+    if (!projectId || !canSubmit) return;
+    void run(async () => {
+      const created = await api.createSession(projectId, {
+        name: name.trim(),
+        description: description.trim(),
+        instructions: instructions.trim(),
+        envUrl: envUrl.trim(),
+        startsAt: toIsoOrNull(startsAt),
+        endsAt: toIsoOrNull(endsAt),
+      });
+      window.location.hash = `/sessions/${created.id}`;
+    });
+  };
+
   return (
-    <Page crumbs={["Mój projekt", "Nowa sesja review"]} env="prod">
+    <Page crumbs={["Mój projekt", "Nowa sesja review"]}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 18 }}>
         <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-.015em" }}>
           Nowa sesja review
         </h1>
         <span style={{ fontSize: ".875rem", color: "var(--muted)" }}>
-          krok 2 z 4 · Zakres & instrukcje
+          szkic — opublikujesz po dodaniu recenzentów
         </span>
       </div>
 
-      <div style={{ marginBottom: 20 }}>
-        <RepBanner>
-          Kreator sesji to makieta — w V1 panele recenzentów tworzy SuperAdmin, a adnotacje trafiają
-          wprost do projektu.
-        </RepBanner>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${NS_STEPS.length},1fr)`,
-          marginBottom: 24,
-        }}
-      >
-        {NS_STEPS.map((label, i) => {
-          const doneStep = i === 0;
-          const cur = i === 1;
-          return (
-            <div
-              key={label}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "10px 16px",
-                background: doneStep ? "var(--success)" : cur ? "var(--primary)" : "var(--surface)",
-                color: doneStep || cur ? "#fff" : "var(--muted)",
-                border: doneStep || cur ? 0 : "1px solid var(--border)",
-                borderRadius:
-                  i === 0 ? "8px 0 0 8px" : i === NS_STEPS.length - 1 ? "0 8px 8px 0" : 0,
-              }}
-            >
-              <span
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: "50%",
-                  background: doneStep || cur ? "rgba(255,255,255,.2)" : "var(--surface-muted)",
-                  fontWeight: 700,
-                  fontSize: ".75rem",
-                  display: "grid",
-                  placeItems: "center",
-                  flex: "none",
-                }}
-              >
-                {doneStep ? "✓" : i + 1}
-              </span>
-              <div>
-                <div
-                  style={{
-                    fontSize: ".75rem",
-                    opacity: 0.8,
-                    fontWeight: 600,
-                    letterSpacing: ".04em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Krok {i + 1}
-                </div>
-                <div style={{ fontSize: ".875rem", fontWeight: 600 }}>{label}</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {error ? <Alert kind="danger">{error}</Alert> : null}
 
       <Card>
         <div className="card-h">
           <div>
-            <h2>Zakres & instrukcje</h2>
-            <p className="sub">co recenzent ma sprawdzić i jak</p>
+            <h2>Podstawy sesji</h2>
+            <p className="sub">co recenzent ma sprawdzić i gdzie</p>
           </div>
         </div>
-        <div
+        <form
+          onSubmit={submit}
           style={{
             padding: "20px 22px",
             display: "flex",
             flexDirection: "column",
             gap: 18,
-            maxWidth: 620,
+            maxWidth: 720,
           }}
         >
-          <div>
-            <label
-              style={{ fontSize: ".875rem", fontWeight: 500, marginBottom: 6, display: "block" }}
-            >
-              URL aplikacji do review
-            </label>
+          <Field label="Nazwa sesji" htmlFor="ns-name">
             <input
-              type="url"
-              defaultValue="https://app.lumen-lab.com/orders"
-              disabled
-              style={{
-                width: "100%",
-                height: 40,
-                border: "1px solid var(--border-strong)",
-                borderRadius: 6,
-                padding: "0 12px",
-                fontSize: ".875rem",
-                fontFamily: "var(--font-mono)",
-              }}
+              id="ns-name"
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Q1 2026 — przegląd checkoutu"
+              required
             />
-            <div style={{ fontSize: ".75rem", color: "var(--muted)", marginTop: 6 }}>
-              SDK aktywuje się tylko na tej domenie i jej podścieżkach.
-            </div>
-          </div>
+          </Field>
 
-          <div>
-            <label
-              style={{
-                fontSize: ".875rem",
-                fontWeight: 500,
-                marginBottom: 8,
-                display: "block",
-              }}
-            >
-              Obszary skupienia
-            </label>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {NS_FOCUS.map((f, i) => (
-                <label
-                  key={f}
-                  style={{ display: "flex", alignItems: "center", gap: 8, fontSize: ".875rem" }}
-                >
-                  <input
-                    type="checkbox"
-                    defaultChecked={i < 3}
-                    disabled
-                    style={{ width: 18, height: 18, accentColor: "var(--primary)" }}
-                  />
-                  {f}
-                </label>
-              ))}
-            </div>
-          </div>
+          <Field
+            label="URL aplikacji do review"
+            htmlFor="ns-url"
+            hint="Reviewerzy dostaną link zaczynający się od tego adresu z dopisanymi tokenami."
+          >
+            {envUrls.length > 1 ? (
+              <select
+                id="ns-url"
+                className="select"
+                value={envUrl}
+                onChange={(e) => setEnvUrl(e.target.value)}
+              >
+                {envUrls.map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id="ns-url"
+                type="url"
+                className="input"
+                value={envUrl}
+                onChange={(e) => setEnvUrl(e.target.value)}
+                placeholder="https://app.lumen-lab.com"
+                required
+              />
+            )}
+          </Field>
 
-          <div>
-            <label
-              style={{ fontSize: ".875rem", fontWeight: 500, marginBottom: 6, display: "block" }}
-            >
-              Instrukcje dla recenzentów
-            </label>
+          <Field
+            label="Opis sesji"
+            htmlFor="ns-desc"
+            hint={"Wyświetlany w okienku powitalnym SDK. „O czym jest ta sesja”."}
+          >
             <textarea
-              disabled
-              defaultValue={
-                "Skup się na przepływie eksportu raportów Q1 — w szczególności przycisk Eksportuj raport oraz powiadomienia dla zespołu finansowego.\n\nSprawdź statusy zamówień (anulowane vs zwrócone) — czy etykiety są jednoznaczne wizualnie."
-              }
-              style={{
-                width: "100%",
-                minHeight: 120,
-                border: "1px solid var(--border-strong)",
-                borderRadius: 6,
-                padding: 12,
-                fontSize: ".875rem",
-                fontFamily: "inherit",
-                lineHeight: 1.55,
-                resize: "vertical",
-              }}
+              id="ns-desc"
+              className="ta"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              style={{ minHeight: 80 }}
+              placeholder="Krótka informacja, dlaczego prosimy o feedback."
             />
+          </Field>
+
+          <Field
+            label="Instrukcje dla recenzentów"
+            htmlFor="ns-instr"
+            hint={"„Na co zwrócić uwagę”. Pokazane tuż pod opisem, w trybie ciemnym przyjazne."}
+          >
+            <textarea
+              id="ns-instr"
+              className="ta"
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              rows={5}
+              style={{ minHeight: 120 }}
+              placeholder={`Skupcie się na przepływie zamówienia — przyciski, statusy, błędy.\nDodajcie głosową notatkę gdy coś jest niejasne.`}
+            />
+          </Field>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <Field label="Start (opcjonalnie)" htmlFor="ns-start">
+              <input
+                id="ns-start"
+                type="datetime-local"
+                className="input"
+                value={startsAt}
+                onChange={(e) => setStartsAt(e.target.value)}
+              />
+            </Field>
+            <Field label="Koniec (opcjonalnie)" htmlFor="ns-end">
+              <input
+                id="ns-end"
+                type="datetime-local"
+                className="input"
+                value={endsAt}
+                onChange={(e) => setEndsAt(e.target.value)}
+              />
+            </Field>
           </div>
 
           <div style={{ display: "flex", gap: 8 }}>
-            <Button variant="secondary" onClick={() => (window.location.hash = "/sessions")}>
-              Wróć do sesji
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => (window.location.hash = "/sessions")}
+            >
+              Anuluj
             </Button>
-            <Button disabled title="Kreator sesji — poza V1 (Phase 11)">
-              Dalej: Recenzenci
+            <Button type="submit" disabled={!canSubmit || busy}>
+              {busy ? "Tworzenie…" : "Utwórz sesję (szkic)"}
             </Button>
           </div>
-        </div>
+        </form>
       </Card>
     </Page>
   );
@@ -1956,96 +1816,48 @@ export function PoAnnotations() {
   );
 }
 
-type RepReviewer = {
-  initials: string;
-  name: string;
-  email: string;
-  role: "Lead" | "Reviewer";
-  sessions: number;
-  anns: number;
-  last: string;
-  twofa: boolean;
-  status: "active" | "idle";
-};
-
-const REP_REVIEWERS: RepReviewer[] = [
-  {
-    initials: "TW",
-    name: "Tomek Wójcik",
-    email: "tomek.wojcik@lumen-lab.com",
-    role: "Lead",
-    sessions: 3,
-    anns: 28,
-    last: "8 min temu · online",
-    twofa: true,
-    status: "active",
-  },
-  {
-    initials: "AL",
-    name: "Anna Lis",
-    email: "anna.lis@lumen-lab.com",
-    role: "Reviewer",
-    sessions: 3,
-    anns: 24,
-    last: "2 godz. temu",
-    twofa: true,
-    status: "active",
-  },
-  {
-    initials: "JK",
-    name: "Jacek Kowal",
-    email: "j.kowal@fintech-co.pl",
-    role: "Reviewer",
-    sessions: 2,
-    anns: 18,
-    last: "wczoraj",
-    twofa: true,
-    status: "active",
-  },
-  {
-    initials: "PG",
-    name: "Patrycja Górska",
-    email: "p.gorska@northstack.io",
-    role: "Reviewer",
-    sessions: 2,
-    anns: 14,
-    last: "wczoraj",
-    twofa: false,
-    status: "idle",
-  },
-  {
-    initials: "MN",
-    name: "Marek Nowak",
-    email: "m.nowak@lumen-lab.com",
-    role: "Reviewer",
-    sessions: 1,
-    anns: 8,
-    last: "3 dni temu",
-    twofa: false,
-    status: "idle",
-  },
-  {
-    initials: "SK",
-    name: "Sebastian Kotowicz",
-    email: "s.kotowicz@lumen-lab.com",
-    role: "Reviewer",
-    sessions: 1,
-    anns: 3,
-    last: "12 dni temu",
-    twofa: false,
-    status: "idle",
-  },
-];
+interface ReviewerRow {
+  reviewer: ReviewerView;
+  sessionId: string;
+  sessionName: string;
+}
 
 export function PoReviewers() {
+  const [rows, setRows] = useState<ReviewerRow[] | null>(null);
+  const [sessions, setSessions] = useState<ReviewSession[]>([]);
+  const { error, run } = useAsync();
+
+  useEffect(() => {
+    void run(async () => {
+      const v = await api.poProject();
+      const list = await api.listSessions(v.project.id);
+      setSessions(list.sessions);
+      const details = await Promise.all(list.sessions.map((s) => api.getSession(s.id)));
+      const flat: ReviewerRow[] = [];
+      for (const d of details) {
+        for (const r of d.reviewers) {
+          flat.push({ reviewer: r, sessionId: d.session.id, sessionName: d.session.name });
+        }
+      }
+      // Stable order: by invitation time desc.
+      flat.sort(
+        (a, b) =>
+          new Date(b.reviewer.invitedAt).getTime() - new Date(a.reviewer.invitedAt).getTime(),
+      );
+      setRows(flat);
+    });
+  }, []);
+
+  const active = (rows ?? []).filter((r) => r.reviewer.status !== "declined").length;
+  const pending = (rows ?? []).filter((r) => r.reviewer.status === "pending").length;
+
   return (
     <Page
       crumbs={["Mój projekt", "Recenzenci"]}
-      env="prod"
       actions={
-        <Button disabled title="Zapraszanie recenzentów — panele tworzy SuperAdmin (V1)">
-          <IconUsers width={14} height={14} />
-          Zaproś recenzenta
+        <Button onClick={() => (window.location.hash = "/sessions")}>
+          <IconPlus width={14} height={14} />
+          Nowa sesja (zaproś)
         </Button>
       }
     >
@@ -2054,206 +1866,179 @@ export function PoReviewers() {
           Recenzenci
         </h1>
         <div style={{ color: "var(--muted)", fontSize: ".875rem", marginTop: 4 }}>
-          {REP_REVIEWERS.length} osób w projekcie · feedback przez nakładkę SDK
+          {rows === null
+            ? "Ładowanie…"
+            : `${rows.length} zaproszeń · ${active} aktywnych · ${pending} oczekuje`}
         </div>
       </div>
 
-      <div style={{ marginBottom: 20 }}>
-        <RepBanner>
-          W V1 „recenzent" to rola panelu, którą wydaje SuperAdmin — dedykowana lista osób z 2FA i
-          statystykami jest poglądowa.
-        </RepBanner>
+      {error ? <Alert kind="danger">{error}</Alert> : null}
+
+      <div className="stats" style={{ gridTemplateColumns: "repeat(3,1fr)", marginBottom: 20 }}>
+        <Stat
+          label="Sesje review"
+          value={sessions.length}
+          delta={<span className="sp">w projekcie</span>}
+        />
+        <Stat
+          label="Aktywni recenzenci"
+          value={active}
+          delta={<span className="sp">zaakceptowali zaproszenie</span>}
+        />
+        <Stat
+          label="Oczekujące zaproszenia"
+          value={pending}
+          delta={<span className="sp">nikt jeszcze nie kliknął linka</span>}
+        />
       </div>
 
-      <div className="stats" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 20 }}>
-        <Stat label="Aktywni" value={8} delta="+2 w tym mies." />
-        <Stat label="Aktywni · 7d" value={5} delta="62%" />
-        <Stat label="Avg. adnotacje / recenzent" value={12} delta="+3 vs. poprzedni mies." />
-        <Stat label="Zaproszenia oczekujące" value={3} delta="2 starsze niż 3 dni" deltaNeg />
-      </div>
+      {rows !== null && rows.length === 0 ? (
+        <EmptyState
+          icon={<IconUsers />}
+          title="Brak recenzentów"
+          description="Recenzentów zapraszasz w widoku sesji — każda sesja ma własną listę."
+          action={
+            <Button onClick={() => (window.location.hash = "/sessions")}>Otwórz sesje</Button>
+          }
+        />
+      ) : null}
 
-      <Card style={{ overflow: "hidden" }}>
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "separate",
-            borderSpacing: 0,
-            fontSize: ".875rem",
-          }}
-        >
-          <thead>
-            <tr>
-              {["Recenzent", "Rola", "Sesje", "Adn.", "Ostatnio", "2FA", "Status"].map((h) => (
-                <th
-                  key={h}
-                  style={{
-                    textAlign: "left",
-                    fontSize: ".6875rem",
-                    color: "var(--muted)",
-                    textTransform: "uppercase",
-                    letterSpacing: ".06em",
-                    fontWeight: 700,
-                    padding: "10px 16px",
-                    background: "var(--surface-muted)",
-                    borderBottom: "1px solid var(--border)",
-                  }}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {REP_REVIEWERS.map((r) => (
-              <tr key={r.email}>
-                <td style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <Avatar initials={r.initials} />
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: ".875rem" }}>{r.name}</div>
-                      <div
-                        style={{
-                          fontFamily: "var(--font-mono)",
-                          fontSize: ".6875rem",
-                          color: "var(--muted)",
-                        }}
-                      >
-                        {r.email}
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
-                  <RoleBadge role="rev" />
-                  {r.role === "Lead" ? (
-                    <span
-                      style={{
-                        marginLeft: 6,
-                        fontSize: ".6875rem",
-                        color: "var(--info)",
-                        fontWeight: 700,
-                      }}
-                    >
-                      Lead
-                    </span>
-                  ) : null}
-                </td>
-                <td
-                  style={{
-                    padding: "14px 16px",
-                    borderBottom: "1px solid var(--border)",
-                    fontVariantNumeric: "tabular-nums",
-                    fontWeight: 600,
-                  }}
-                >
-                  {r.sessions}
-                </td>
-                <td
-                  style={{
-                    padding: "14px 16px",
-                    borderBottom: "1px solid var(--border)",
-                    fontVariantNumeric: "tabular-nums",
-                    fontWeight: 600,
-                  }}
-                >
-                  {r.anns}
-                </td>
-                <td
-                  style={{
-                    padding: "14px 16px",
-                    borderBottom: "1px solid var(--border)",
-                    fontSize: ".8125rem",
-                    color: "var(--secondary)",
-                  }}
-                >
-                  {r.last}
-                </td>
-                <td style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
-                  {r.twofa ? (
-                    <span
-                      style={{ fontSize: ".6875rem", color: "var(--success)", fontWeight: 600 }}
-                    >
-                      ✓ 2FA
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: ".6875rem", color: "var(--muted)" }}>— brak</span>
-                  )}
-                </td>
-                <td style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
-                  <Pill kind={r.status === "active" ? "live" : "warn"}>{r.status}</Pill>
-                </td>
+      {rows && rows.length > 0 ? (
+        <Card style={{ overflow: "hidden" }}>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Recenzent</th>
+                <th>E-mail</th>
+                <th>Sesja</th>
+                <th>Status</th>
+                <th>Zaproszono</th>
+                <th>Ost. aktywność</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const r = row.reviewer;
+                const rp = reviewerStatusPill(r.status);
+                return (
+                  <tr key={r.id}>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <Avatar initials={r.name.slice(0, 2).toUpperCase()} />
+                        <div style={{ fontWeight: 600, fontSize: ".875rem" }}>{r.name}</div>
+                      </div>
+                    </td>
+                    <td className="mono" style={{ fontSize: ".75rem" }}>
+                      {r.email}
+                    </td>
+                    <td>
+                      <a
+                        href={`#/sessions/${row.sessionId}`}
+                        style={{ color: "var(--info)", fontWeight: 500 }}
+                      >
+                        {row.sessionName}
+                      </a>
+                    </td>
+                    <td>
+                      <Pill kind={rp.kind}>{rp.label}</Pill>
+                    </td>
+                    <td style={{ fontSize: ".75rem", color: "var(--muted)" }}>
+                      {relTime(r.invitedAt)}
+                    </td>
+                    <td style={{ fontSize: ".75rem", color: "var(--muted)" }}>
+                      {r.lastSeenAt ? relTime(r.lastSeenAt) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
+      ) : null}
     </Page>
   );
 }
 
-type TlEntry = {
-  time: string;
-  who: string;
-  ini: string;
-  action: string;
-  env?: "prod" | "stg" | "dev";
-  annId: string;
-  selector: string;
-  voice?: string;
-  note: string;
-  tags: string[];
-};
+interface InviteFlash {
+  reviewer: ReviewerView;
+  inviteUrl: string;
+  emailSent: boolean;
+  emailError?: string;
+}
 
-const REP_TIMELINE: TlEntry[] = [
-  {
-    time: "14:32",
-    who: "Tomek Wójcik",
-    ini: "TW",
-    action: "dodał głos + tekst",
-    env: "prod",
-    annId: "SPQ-A-091",
-    selector: 'button.btn-export[data-action="export"]',
-    voice: "0:42",
-    note: "Po eksporcie raport powinien lądować na e-mailu PO oraz jako załącznik w Slacku — w tej chwili pobiera się tylko CSV. To jeden z top requestów zespołu finansów.",
-    tags: ["eksport", "notyfikacje"],
-  },
-  {
-    time: "13:58",
-    who: "Anna Lis",
-    ini: "AL",
-    action: "dodała notatkę tekstową",
-    env: "prod",
-    annId: "SPQ-A-090",
-    selector: ".status-pill--cancelled",
-    note: 'Etykiety „anulowane" i „zwrócone" mają identyczny kolor — łatwo je pomylić na liście zamówień.',
-    tags: ["UX", "statusy"],
-  },
-  {
-    time: "11:20",
-    who: "Anna Lis",
-    ini: "AL",
-    action: "dodała głos",
-    env: "prod",
-    annId: "SPQ-A-088",
-    selector: "button.btn-export",
-    voice: "0:18",
-    note: "Brakuje notyfikacji dla zespołu, że ktoś pobrał raport — przydałby się ślad w audycie.",
-    tags: ["eksport"],
-  },
-];
+function reviewerStatusPill(s: ReviewerView["status"]): {
+  kind: "live" | "danger" | "archived";
+  label: string;
+} {
+  if (s === "active") return { kind: "live", label: "aktywny" };
+  if (s === "pending") return { kind: "danger", label: "oczekuje" };
+  return { kind: "archived", label: "odwołany" };
+}
 
-/** PO · Sesja review — detail (PO Session.html). Representative: there is
- *  no session entity in V1; annotations/tasks live at project scope. */
 export function PoSessionDetail({ id }: { id: string }) {
-  const idx = Math.max(0, Math.min(REP_SESSIONS.length - 1, Number(id) || 0));
-  const s = REP_SESSIONS[idx];
-  if (!s) {
+  const [session, setSession] = useState<ReviewSession | null>(null);
+  const [reviewers, setReviewers] = useState<ReviewerView[] | null>(null);
+  const [invName, setInvName] = useState("");
+  const [invEmail, setInvEmail] = useState("");
+  const [invFlash, setInvFlash] = useState<InviteFlash | null>(null);
+  const { error, busy, run } = useAsync();
+
+  const load = (): void =>
+    void run(async () => {
+      const { session: s, reviewers: rs } = await api.getSession(id);
+      setSession(s);
+      setReviewers(rs);
+    });
+  useEffect(() => load(), [id]);
+
+  const transition = (target: ReviewSessionStatus): void =>
+    void run(async () => {
+      await api.setSessionStatus(id, target);
+      load();
+    });
+  const invite = (e: FormEvent): void => {
+    e.preventDefault();
+    if (!invName.trim() || !invEmail.trim()) return;
+    void run(async () => {
+      const r = await api.inviteReviewer(id, invName.trim(), invEmail.trim());
+      setInvFlash(r);
+      setInvName("");
+      setInvEmail("");
+      load();
+    });
+  };
+  const revoke = (rid: string): void =>
+    void run(async () => {
+      await api.revokeReviewer(id, rid);
+      load();
+    });
+  const resend = (rid: string): void =>
+    void run(async () => {
+      const r = await api.resendInvite(id, rid);
+      const fresh = reviewers?.find((x) => x.id === rid);
+      if (fresh) {
+        setInvFlash({
+          reviewer: fresh,
+          inviteUrl: r.inviteUrl,
+          emailSent: r.emailSent,
+          ...(r.emailError ? { emailError: r.emailError } : {}),
+        });
+      }
+    });
+  const copy = (text: string): void => {
+    void navigator.clipboard?.writeText(text);
+  };
+
+  if (!session) {
     return (
       <Page crumbs={["Mój projekt", "Sesje review", "Sesja"]}>
+        {error ? <Alert kind="danger">{error}</Alert> : null}
         <EmptyState
           icon={<IconInfo />}
-          title="Nie znaleziono sesji"
-          description="Ta sesja nie istnieje lub została zakończona."
+          title={reviewers === null ? "Ładowanie…" : "Nie znaleziono sesji"}
+          description={
+            reviewers === null ? "" : "Ta sesja nie istnieje lub została usunięta — wróć do listy."
+          }
           action={
             <Button variant="secondary" onClick={() => (window.location.hash = "/sessions")}>
               Wróć do sesji
@@ -2264,22 +2049,35 @@ export function PoSessionDetail({ id }: { id: string }) {
     );
   }
 
+  const s = session;
+  const pill = sessionStatusPill(s.status);
+  const canPublish = s.status === "draft";
+  const canClose = s.status === "live" || s.status === "draft";
+
   return (
     <Page
       crumbs={["Mój projekt", "Sesje review", s.name]}
-      env={s.env}
       actions={
         <>
           <Button variant="secondary" onClick={() => (window.location.hash = "/sessions")}>
             Wszystkie sesje
           </Button>
-          <Button onClick={() => (window.location.hash = "/tasks")}>
-            <IconZap width={14} height={14} />
-            Uruchom analizę AI
-          </Button>
+          {canPublish ? (
+            <Button onClick={() => transition("live")} disabled={busy}>
+              <IconPlay width={14} height={14} />
+              Opublikuj sesję
+            </Button>
+          ) : null}
+          {canClose && !canPublish ? (
+            <Button variant="secondary" onClick={() => transition("closed")} disabled={busy}>
+              Zamknij sesję
+            </Button>
+          ) : null}
         </>
       }
     >
+      {error ? <Alert kind="danger">{error}</Alert> : null}
+
       <div
         style={{
           background: "var(--surface)",
@@ -2316,8 +2114,7 @@ export function PoSessionDetail({ id }: { id: string }) {
             >
               {s.name}
             </h1>
-            <span className={`env-pill env-${s.env}`}>{s.env}</span>
-            <Pill kind={s.done ? "archived" : s.state}>{s.stateLabel}</Pill>
+            <Pill kind={pill}>{sessionStatusLabel(s.status)}</Pill>
           </div>
           <div
             style={{
@@ -2329,229 +2126,239 @@ export function PoSessionDetail({ id }: { id: string }) {
               flexWrap: "wrap",
             }}
           >
-            <span className="mono">{s.url}</span>
+            <span className="mono">{s.envUrl}</span>
             <span>·</span>
             <span>
-              <strong style={{ color: "var(--primary)" }}>{s.range}</strong>
+              <strong style={{ color: "var(--primary)" }}>{fmtRange(s.startsAt, s.endsAt)}</strong>
             </span>
             <span>·</span>
-            <span>
-              owner: <strong style={{ color: "var(--secondary)" }}>{s.by}</strong>
-            </span>
+            <span>utworzona {relTime(s.createdAt)}</span>
           </div>
         </div>
       </div>
 
-      <div style={{ marginBottom: 18 }}>
-        <RepBanner>
-          Widok pojedynczej sesji (timeline + nagrania) to makieta — w V1 adnotacje są zbierane
-          przez panele i analizowane w kolejce zadań bez warstwy sesji.
-        </RepBanner>
+      <div className="stats" style={{ gridTemplateColumns: "repeat(3,1fr)", marginBottom: 20 }}>
+        <Stat
+          label="Recenzenci"
+          value={reviewers?.length ?? 0}
+          delta={
+            <span className="sp">
+              {(reviewers ?? []).filter((r) => r.status === "active").length} aktywnych
+            </span>
+          }
+        />
+        <Stat
+          label="Status"
+          value={sessionStatusLabel(s.status)}
+          delta={<span className="sp">draft → live → closed</span>}
+        />
+        <Stat
+          label="Token sesji"
+          value={`${s.token.slice(0, 8)}…`}
+          delta={<span className="sp mono">/?speqify_session={s.token.slice(0, 4)}…</span>}
+        />
       </div>
 
-      <div className="stats" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 20 }}>
-        <Stat label="Adnotacje" value={s.anns} delta="+8 dzisiaj" />
-        <Stat label="Głosowe" value={Math.round(s.anns * 0.65)} delta="avg 0:34" />
-        <Stat label="Recenzenci" value={s.people.length} delta="6 aktywnych w 24h" />
-        <Stat label="Postęp" value={`${s.pct}%`} delta={s.pctNote} />
-      </div>
-
-      <nav
-        style={{
-          display: "flex",
-          gap: 2,
-          borderBottom: "1px solid var(--border)",
-          marginBottom: 18,
-        }}
-      >
-        {["Timeline", "Adnotacje", "Recenzenci", "Analiza AI", "Ustawienia"].map((t, i) => (
-          <span
-            key={t}
-            style={{
-              padding: "11px 14px",
-              fontSize: ".875rem",
-              fontWeight: i === 0 ? 600 : 500,
-              color: i === 0 ? "var(--primary)" : "var(--muted)",
-              borderBottom: `2px solid ${i === 0 ? "var(--primary)" : "transparent"}`,
-              marginBottom: -1,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 7,
-            }}
-          >
-            {t}
-            {i === 0 ? (
-              <span
-                className="mono"
-                style={{
-                  fontSize: ".6875rem",
-                  fontWeight: 700,
-                  background: "#FEF2F2",
-                  color: "var(--accent)",
-                  padding: "1px 6px",
-                  borderRadius: 999,
-                }}
-              >
-                {s.anns}
-              </span>
+      {s.description || s.instructions ? (
+        <Card style={{ marginBottom: 18 }}>
+          <div className="card-h">
+            <div>
+              <h2>Opis & instrukcje</h2>
+              <p className="sub">tekst widoczny w okienku powitalnym SDK</p>
+            </div>
+          </div>
+          <div style={{ padding: "16px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
+            {s.description ? (
+              <div>
+                <div
+                  style={{
+                    fontSize: ".6875rem",
+                    color: "var(--muted)",
+                    fontWeight: 700,
+                    letterSpacing: ".06em",
+                    textTransform: "uppercase",
+                    marginBottom: 6,
+                  }}
+                >
+                  Opis
+                </div>
+                <div
+                  style={{
+                    fontSize: ".875rem",
+                    color: "var(--secondary)",
+                    whiteSpace: "pre-wrap",
+                    lineHeight: 1.55,
+                  }}
+                >
+                  {s.description}
+                </div>
+              </div>
             ) : null}
-          </span>
-        ))}
-      </nav>
+            {s.instructions ? (
+              <div>
+                <div
+                  style={{
+                    fontSize: ".6875rem",
+                    color: "var(--muted)",
+                    fontWeight: 700,
+                    letterSpacing: ".06em",
+                    textTransform: "uppercase",
+                    marginBottom: 6,
+                  }}
+                >
+                  Instrukcje
+                </div>
+                <div
+                  style={{
+                    fontSize: ".875rem",
+                    color: "var(--secondary)",
+                    whiteSpace: "pre-wrap",
+                    lineHeight: 1.55,
+                  }}
+                >
+                  {s.instructions}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
 
       <Card>
         <div className="card-h">
           <div>
-            <h2>Timeline adnotacji</h2>
-            <p className="sub">chronologicznie · ostatnie 24h · poglądowo</p>
+            <h2>Recenzenci</h2>
+            <p className="sub">jedna osoba = jeden token. Magic-link tylko dla nich.</p>
           </div>
         </div>
-        <div style={{ padding: "6px 0" }}>
-          <div
-            style={{
-              padding: "14px 22px 4px",
-              fontSize: ".6875rem",
-              fontWeight: 700,
-              color: "var(--muted)",
-              letterSpacing: ".06em",
-              textTransform: "uppercase",
-            }}
-          >
-            Dziś
+
+        {invFlash ? (
+          <div style={{ padding: "12px 22px 0" }}>
+            <Alert kind={invFlash.emailSent ? "success" : "warning"}>
+              <strong>{invFlash.reviewer.name}</strong> ({invFlash.reviewer.email}):{" "}
+              {invFlash.emailSent
+                ? "email z linkiem wysłany."
+                : "email nie został wysłany — skopiuj link i prześlij go ręcznie."}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                <input
+                  className="input mono"
+                  value={invFlash.inviteUrl}
+                  readOnly
+                  style={{ flex: 1, fontSize: ".75rem" }}
+                />
+                <Button variant="secondary" size="sm" onClick={() => copy(invFlash.inviteUrl)}>
+                  Kopiuj
+                </Button>
+              </div>
+              {invFlash.emailError ? (
+                <div style={{ marginTop: 6, fontSize: ".75rem", color: "var(--muted)" }}>
+                  Powód: <span className="mono">{invFlash.emailError}</span>
+                </div>
+              ) : null}
+            </Alert>
           </div>
-          {REP_TIMELINE.map((e, i) => (
-            <div
-              key={e.annId}
-              style={{
-                padding: "14px 22px",
-                borderBottom: i < REP_TIMELINE.length - 1 ? "1px solid var(--border)" : "none",
-                display: "flex",
-                gap: 14,
-              }}
-            >
-              <div style={{ width: 40, textAlign: "right", flex: "none" }}>
-                <div
-                  className="mono"
-                  style={{ fontSize: ".75rem", fontWeight: 600, color: "var(--primary)" }}
-                >
-                  {e.time}
-                </div>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  flex: "none",
-                }}
-              >
-                <Avatar initials={e.ini} size="sm" />
-                {i < REP_TIMELINE.length - 1 ? (
-                  <div
-                    style={{
-                      width: 2,
-                      flex: 1,
-                      background: "var(--border)",
-                      marginTop: 6,
-                    }}
-                  />
-                ) : null}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    marginBottom: 6,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <strong style={{ fontWeight: 600, fontSize: ".875rem" }}>{e.who}</strong>
-                  <span style={{ fontSize: ".75rem", color: "var(--muted)" }}>{e.action}</span>
-                  {e.env ? <span className={`env-pill env-${e.env}`}>{e.env}</span> : null}
-                  <span
-                    className="mono"
-                    style={{
-                      marginLeft: "auto",
-                      fontSize: ".6875rem",
-                      color: "var(--muted)",
-                    }}
-                  >
-                    {e.annId}
-                  </span>
-                </div>
-                <div
-                  className="mono"
-                  style={{
-                    fontSize: ".75rem",
-                    color: "var(--primary)",
-                    background: "var(--surface-muted)",
-                    padding: "5px 10px",
-                    borderRadius: 6,
-                    marginBottom: 8,
-                    display: "inline-block",
-                    wordBreak: "break-all",
-                  }}
-                >
-                  {e.selector}
-                </div>
-                {e.voice ? (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      fontSize: ".75rem",
-                      color: "var(--accent)",
-                      fontWeight: 600,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <IconMic width={13} height={13} />
-                    Nagranie głosowe · {e.voice}
-                  </div>
-                ) : null}
-                <div
-                  style={{
-                    fontSize: ".8125rem",
-                    lineHeight: 1.55,
-                    color: "var(--secondary)",
-                    fontStyle: "italic",
-                  }}
-                >
-                  „{e.note}"
-                </div>
-                <div
-                  style={{
-                    marginTop: 8,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    flexWrap: "wrap",
-                    fontSize: ".6875rem",
-                  }}
-                >
-                  {e.tags.map((t) => (
-                    <span
-                      key={t}
-                      style={{
-                        background: "var(--surface-muted)",
-                        border: "1px solid var(--border)",
-                        padding: "2px 7px",
-                        borderRadius: 999,
-                        color: "var(--secondary)",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        ) : null}
+
+        <form
+          onSubmit={invite}
+          style={{
+            padding: "16px 22px",
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr auto",
+            gap: 8,
+            alignItems: "end",
+            borderBottom: "1px solid var(--border)",
+          }}
+        >
+          <Field label="Imię i nazwisko" htmlFor="rv-name">
+            <input
+              id="rv-name"
+              className="input"
+              value={invName}
+              onChange={(e) => setInvName(e.target.value)}
+              placeholder="Tomek Wójcik"
+              required
+            />
+          </Field>
+          <Field label="E-mail" htmlFor="rv-email">
+            <input
+              id="rv-email"
+              className="input"
+              type="email"
+              value={invEmail}
+              onChange={(e) => setInvEmail(e.target.value)}
+              placeholder="tomek@firma.pl"
+              required
+            />
+          </Field>
+          <Button type="submit" disabled={busy}>
+            <IconUsers width={14} height={14} />
+            Zaproś
+          </Button>
+        </form>
+
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Recenzent</th>
+              <th>E-mail</th>
+              <th>Status</th>
+              <th>Zaproszono</th>
+              <th>Token</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {reviewers === null ? (
+              <tr>
+                <td colSpan={6} style={{ color: "var(--muted)" }}>
+                  Ładowanie…
+                </td>
+              </tr>
+            ) : reviewers.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ color: "var(--muted)" }}>
+                  Brak recenzentów. Zaproś pierwszego powyżej.
+                </td>
+              </tr>
+            ) : (
+              reviewers.map((r) => {
+                const rp = reviewerStatusPill(r.status);
+                return (
+                  <tr key={r.id}>
+                    <td>{r.name}</td>
+                    <td className="mono" style={{ fontSize: ".75rem" }}>
+                      {r.email}
+                    </td>
+                    <td>
+                      <Pill kind={rp.kind}>{rp.label}</Pill>
+                    </td>
+                    <td style={{ fontSize: ".75rem", color: "var(--muted)" }}>
+                      {relTime(r.invitedAt)}
+                    </td>
+                    <td className="mono" style={{ fontSize: ".75rem", color: "var(--muted)" }}>
+                      …{r.tokenHint}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        {r.status !== "declined" ? (
+                          <Button variant="secondary" size="sm" onClick={() => resend(r.id)}>
+                            Ponów link
+                          </Button>
+                        ) : null}
+                        {r.status !== "declined" ? (
+                          <Button variant="danger-ghost" size="sm" onClick={() => revoke(r.id)}>
+                            Odwołaj
+                          </Button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </Card>
     </Page>
   );

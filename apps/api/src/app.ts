@@ -3,34 +3,49 @@ import type { Context } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import {
+  canTransitionReviewSession,
   canTransitionTask,
   createAnnotationSchema,
+  createReviewSessionSchema,
+  inviteReviewerSchema,
   leadSchema,
   projectStatusSchema,
+  projectTemplateSchema,
+  projectTemplatesSchema,
   providerConfigSchema,
+  reviewSessionStatusSchema,
   submitSchema,
   taskActionSchema,
   taskEditSchema,
+  updateReviewSessionSchema,
   IMMUTABLE_TASK_STATUSES,
+  TASK_TYPES,
   type CreateAnnotationInput,
   type PlatformProviderConfig,
   type PoSourceAnnotation,
   type ProjectTemplate,
+  type ProjectTemplates,
+  type Reviewer,
+  type ReviewerView,
+  type SdkSessionIntro,
   type SubmitInput,
   type Task,
+  type TaskType,
 } from "@speqify/shared";
 import { buildPrompt } from "./analysis/prompt.js";
 import { parseAnalysisOutput } from "./analysis/schema.js";
 import { runAnalysis } from "./analysis/service.js";
 import type { LlmProvider } from "./analysis/types.js";
 import { authenticate, requireRole } from "./auth/auth.js";
+import { buildInvitationEmail } from "./email/templates.js";
+import type { EmailSender } from "./email/types.js";
 import type { AppConfig } from "./env.js";
 import { b64url, encryptJson, hashPassword } from "./lib/crypto.js";
 import { ApiException, errorEnvelope } from "./lib/http.js";
 import { newId, newSecretToken } from "./lib/ids.js";
 import { MEDIA_LIMITS, type MediaStore } from "./media/types.js";
 import { requestContext } from "./middleware/context.js";
-import { requireOpenPanel, withPanel } from "./middleware/panel.js";
+import { withSdkSession } from "./middleware/sdk-auth.js";
 import { body, validateJson } from "./middleware/validate.js";
 import type { Repository } from "./repo/types.js";
 import { runOnce as runTranscription } from "./transcribe/service.js";
@@ -40,16 +55,6 @@ import type { AppEnv } from "./types.js";
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1).max(1024),
-});
-
-const templateSchema = z.object({
-  language: z.enum(["pl", "en"]),
-  userStory: z.boolean(),
-  acceptanceCriteria: z.boolean(),
-  labels: z.array(z.string().max(64)).max(50),
-  components: z.array(z.string().max(64)).max(50),
-  versions: z.array(z.string().max(64)).max(50),
-  customFields: z.record(z.string(), z.string().max(200)),
 });
 
 const DEFAULT_TEMPLATE: ProjectTemplate = {
@@ -62,6 +67,13 @@ const DEFAULT_TEMPLATE: ProjectTemplate = {
   customFields: {},
 };
 
+const DEFAULT_TEMPLATES: ProjectTemplates = {
+  bug: DEFAULT_TEMPLATE,
+  change: DEFAULT_TEMPLATE,
+  feature: DEFAULT_TEMPLATE,
+  polish: DEFAULT_TEMPLATE,
+};
+
 const createUserSchema = z.object({
   email: z.string().email(),
   displayName: z.string().min(1).max(200),
@@ -72,15 +84,9 @@ const createProjectSchema = z.object({
   name: z.string().min(1).max(200),
   productOwnerId: z.string().min(1).max(64),
   environmentUrls: z.array(z.string().url()).min(1).max(20),
-  template: templateSchema.optional(),
+  /** Either the full per-task-type map, or omit to seed with defaults. */
+  templates: projectTemplatesSchema.optional(),
 });
-
-const createPanelSchema = z.object({
-  audience: z.enum(["client", "tester", "po"]),
-  environmentUrl: z.string().url(),
-});
-
-const panelStatusSchema = z.object({ status: z.enum(["open", "closed"]) });
 
 const transcriptEditSchema = z.object({ transcript: z.string().max(100_000) });
 
@@ -91,23 +97,38 @@ const exportConfigSchema = z.object({
   defaults: z.record(z.string(), z.string().max(200)).default({}),
 });
 
+/** Public reviewer projection — hides the bearer token. */
+function toReviewerView(r: Reviewer): ReviewerView {
+  const tokenHint = r.token ? r.token.slice(-6) : "";
+  const { token: _t, ...rest } = r;
+  return { ...rest, tokenHint };
+}
+
+/** Build the magic-link URL the reviewer receives in the invitation email. */
+function buildInviteUrl(envUrl: string, sessionToken: string, reviewerToken: string): string {
+  const u = new URL(envUrl);
+  u.searchParams.set("speqify_session", sessionToken);
+  u.searchParams.set("speqify_reviewer", reviewerToken);
+  return u.toString();
+}
+
 export function createApp(deps: {
   repo: Repository;
   config: AppConfig;
   mediaStore: MediaStore;
   transcriber: Transcriber;
   llm: LlmProvider;
+  emailSender: EmailSender;
 }): Hono<AppEnv> {
-  const { repo, config, mediaStore, transcriber, llm } = deps;
+  const { repo, config, mediaStore, transcriber, llm, emailSender } = deps;
   const app = new Hono<AppEnv>();
 
   app.use("*", requestContext);
 
-  // CORS for the SA/PO SPA (separate origin from the API, §3). Panel
-  // capability-token ingest keeps its own per-project Origin allowlist.
+  // CORS for the SA/PO SPA (separate origin from the API, §3).
   const spaCors = cors({
     origin: config.panelOrigins,
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["content-type", "authorization"],
   });
   app.use("/health", spaCors);
@@ -116,22 +137,20 @@ export function createApp(deps: {
 
   app.get("/health", (c) => c.json({ status: "ok", service: "speqify-api" }));
 
-  // Public closed-beta lead capture from the marketing landing (any origin —
-  // it only accepts an email; no self-serve signup in V1, §11).
+  // Public closed-beta lead capture from the marketing landing.
   app.use(
     "/leads",
     cors({ origin: "*", allowMethods: ["POST", "OPTIONS"], allowHeaders: ["content-type"] }),
   );
-  // The SDK runs inside the host app (a different origin from the API), so
-  // browser fetches to the capability-token endpoints are cross-origin and
-  // need CORS. The capability token is the auth boundary; ingest/submit also
-  // enforce the strict per-panel Origin allowlist server-side (requireOpenPanel).
+  // The SDK runs on arbitrary host-app origins (it ships as a generic script
+  // that activates only when a URL carries the session+reviewer token pair).
+  // The token pair is the auth boundary, so CORS is intentionally permissive.
   app.use(
-    "/panels/*",
+    "/sdk/*",
     cors({
       origin: (o) => o ?? "*",
       allowMethods: ["GET", "POST", "OPTIONS"],
-      allowHeaders: ["content-type"],
+      allowHeaders: ["content-type", "x-speqify-session", "x-speqify-reviewer"],
       maxAge: 86400,
     }),
   );
@@ -149,8 +168,7 @@ export function createApp(deps: {
     return c.json({ ok: true, id: lead.id }, 201);
   });
 
-  // Public media (unguessable keys are the access control, §14). Stable URLs
-  // so links embedded in exported tickets never rot.
+  // Public media (unguessable keys are the access control, §14).
   app.get("/media/*", async (c) => {
     const key = c.req.path.slice("/media/".length);
     const media = await mediaStore.get(key);
@@ -183,7 +201,6 @@ export function createApp(deps: {
 
   admin.post("/users", validateJson(createUserSchema), async (c) => {
     const b = body<z.infer<typeof createUserSchema>>(c);
-    // Generated password is returned ONCE (SA shares it with the PO, §11).
     const password = b.password ?? b64url(crypto.getRandomValues(new Uint8Array(12)));
     const passwordHash = await hashPassword(password);
     try {
@@ -216,7 +233,7 @@ export function createApp(deps: {
       name: b.name,
       productOwnerId: b.productOwnerId,
       environmentUrls: b.environmentUrls,
-      template: b.template ?? DEFAULT_TEMPLATE,
+      templates: b.templates ?? DEFAULT_TEMPLATES,
     });
     await repo.appendAudit({
       kind: "project.created",
@@ -226,59 +243,6 @@ export function createApp(deps: {
       projectId: project.id,
     });
     return c.json(project, 201);
-  });
-
-  admin.get("/projects/:id/panels", async (c) => {
-    const project = await repo.getProject(c.req.param("id"));
-    if (!project) throw new ApiException("not_found", "Project not found");
-    return c.json({ panels: await repo.listPanels(project.id) });
-  });
-
-  admin.post("/projects/:id/panels", validateJson(createPanelSchema), async (c) => {
-    const project = await repo.getProject(c.req.param("id"));
-    if (!project) throw new ApiException("not_found", "Project not found");
-    const b = body<z.infer<typeof createPanelSchema>>(c);
-    const secretToken = newSecretToken();
-    const panel = await repo.createPanel({
-      projectId: project.id,
-      audience: b.audience,
-      environmentUrl: b.environmentUrl,
-      secretToken,
-    });
-    await repo.appendAudit({
-      kind: "panel.created",
-      actor: c.get("session").sub,
-      summary: `Nowy panel (${b.audience}) dla „${project.name}”`,
-      severity: "ok",
-      projectId: project.id,
-    });
-    const sep = b.environmentUrl.includes("?") ? "&" : "?";
-    return c.json(
-      { id: panel.id, secretToken, panelUrl: `${b.environmentUrl}${sep}speqify=${secretToken}` },
-      201,
-    );
-  });
-
-  admin.post("/panels/:panelId/status", validateJson(panelStatusSchema), async (c) => {
-    const panel = await repo.getPanelById(c.req.param("panelId"));
-    if (!panel) throw new ApiException("not_found", "Panel not found");
-    const { status } = body<z.infer<typeof panelStatusSchema>>(c);
-    const updated = await repo.updatePanelStatus(panel.id, status);
-    if (!updated) throw new ApiException("not_found", "Panel not found");
-    return c.json({ id: updated.id, status: updated.status });
-  });
-
-  admin.delete("/panels/:panelId", async (c) => {
-    const ok = await repo.deletePanel(c.req.param("panelId"));
-    if (!ok) throw new ApiException("not_found", "Panel not found");
-    await repo.appendAudit({
-      kind: "panel.deleted",
-      actor: c.get("session").sub,
-      summary: `Usunięto panel ${c.req.param("panelId")} (link odwołany)`,
-      severity: "warn",
-      projectId: null,
-    });
-    return c.json({ deleted: true });
   });
 
   // --- SA dashboard real data (Tranche B) ---
@@ -311,7 +275,6 @@ export function createApp(deps: {
   admin.put("/providers", validateJson(providerConfigSchema), async (c) => {
     const b = body<z.infer<typeof providerConfigSchema>>(c);
     const key = b.aiKey?.trim();
-    // Key is envelope-encrypted at rest; only a 4-char hint is ever echoed (§9).
     const aiKeyRef = key ? await encryptJson(config.envelopeKey, { aiKey: key }) : null;
     const aiKeyHint = key ? key.slice(-4) : null;
     const cfg: PlatformProviderConfig = {
@@ -332,8 +295,6 @@ export function createApp(deps: {
     return c.json({ config: view });
   });
 
-  // Manual trigger now; a Cloudflare Queue consumer + Cron drives this in
-  // production (needs Workers Paid — operational prerequisite, §6).
   admin.post("/transcribe/run", async (c) => {
     const batch = Number(c.req.query("batch")) || 20;
     const lang = c.req.query("lang");
@@ -366,7 +327,7 @@ export function createApp(deps: {
         id: project.id,
         name: project.name,
         environmentUrls: project.environmentUrls,
-        template: project.template,
+        templates: project.templates,
       },
       export: ec
         ? { target: ec.target, fieldMapping: ec.fieldMapping, defaults: ec.defaults }
@@ -374,19 +335,209 @@ export function createApp(deps: {
     });
   });
 
-  po.put("/project/template", validateJson(templateSchema), async (c) => {
+  // --- Review sessions (RS-4 + RS-7) ---
+  //
+  // Sessions are PO-driven. SA can manage them too via the same routes by
+  // passing ?projectId=<id> -- resolvePoProject handles both. Ownership is
+  // enforced inside the session-scope helper so a PO can never touch a
+  // session that does not belong to their project.
+
+  const ownedSession = async (c: Context<AppEnv>) => {
     const project = await resolvePoProject(c);
     if (!project) throw new ApiException("not_found", "No project for this account");
-    const t = body<z.infer<typeof templateSchema>>(c);
-    const updated = await repo.updateProjectTemplate(project.id, t);
+    const session = await repo.getReviewSession(c.req.param("id") ?? "");
+    if (!session || session.projectId !== project.id) {
+      throw new ApiException("not_found", "Session not found");
+    }
+    return { project, session };
+  };
+
+  po.get("/sessions", async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    return c.json({ sessions: await repo.listReviewSessionsByProject(project.id) });
+  });
+
+  po.post("/sessions", validateJson(createReviewSessionSchema), async (c) => {
+    const project = await resolvePoProject(c);
+    if (!project) throw new ApiException("not_found", "No project for this account");
+    const b = body<z.infer<typeof createReviewSessionSchema>>(c);
+    const session = await repo.createReviewSession({
+      projectId: project.id,
+      name: b.name,
+      description: b.description,
+      instructions: b.instructions,
+      envUrl: b.envUrl,
+      startsAt: b.startsAt,
+      endsAt: b.endsAt,
+      createdBy: c.get("session").sub,
+      token: newSecretToken(),
+    });
+    await repo.appendAudit({
+      kind: "session.created",
+      actor: c.get("session").sub,
+      summary: `Utworzono sesję review „${session.name}” w „${project.name}”`,
+      severity: "ok",
+      projectId: project.id,
+    });
+    return c.json(session, 201);
+  });
+
+  po.get("/sessions/:id", async (c) => {
+    const { session } = await ownedSession(c);
+    const reviewers = await repo.listReviewersBySession(session.id);
+    return c.json({ session, reviewers: reviewers.map(toReviewerView) });
+  });
+
+  po.patch("/sessions/:id", validateJson(updateReviewSessionSchema), async (c) => {
+    const { session } = await ownedSession(c);
+    const b = body<z.infer<typeof updateReviewSessionSchema>>(c);
+    const updated = await repo.updateReviewSession(session.id, b);
+    if (!updated) throw new ApiException("not_found", "Session not found");
     return c.json(updated);
   });
+
+  po.post("/sessions/:id/status", validateJson(reviewSessionStatusSchema), async (c) => {
+    const { session } = await ownedSession(c);
+    const { status } = body<z.infer<typeof reviewSessionStatusSchema>>(c);
+    if (status !== session.status && !canTransitionReviewSession(session.status, status)) {
+      throw new ApiException(
+        "bad_request",
+        `Cannot transition session from "${session.status}" to "${status}"`,
+      );
+    }
+    const updated = await repo.setReviewSessionStatus(session.id, status);
+    if (!updated) throw new ApiException("not_found", "Session not found");
+    const kind = status === "live" ? "session.published" : `session.${status}`;
+    await repo.appendAudit({
+      kind,
+      actor: c.get("session").sub,
+      summary: `Sesja „${updated.name}” → ${status}`,
+      severity: status === "closed" ? "warn" : "ok",
+      projectId: updated.projectId,
+    });
+    return c.json({ id: updated.id, status: updated.status });
+  });
+
+  po.post("/sessions/:id/reviewers", validateJson(inviteReviewerSchema), async (c) => {
+    const { project, session } = await ownedSession(c);
+    const b = body<z.infer<typeof inviteReviewerSchema>>(c);
+    const reviewer = await repo.addReviewer({
+      sessionId: session.id,
+      name: b.name,
+      email: b.email,
+      token: newSecretToken(),
+    });
+    const inviteUrl = buildInviteUrl(session.envUrl, session.token, reviewer.token);
+    const sendResult = await emailSender.send(
+      buildInvitationEmail({
+        reviewerName: reviewer.name,
+        reviewerEmail: reviewer.email,
+        projectName: project.name,
+        sessionName: session.name,
+        description: session.description,
+        inviteUrl,
+      }),
+    );
+    await repo.appendAudit({
+      kind: "reviewer.invited",
+      actor: c.get("session").sub,
+      summary: sendResult.sent
+        ? `Zaproszono ${reviewer.email} do sesji „${session.name}” (email wysłany)`
+        : `Zaproszono ${reviewer.email} do sesji „${session.name}” (link gotowy do skopiowania)`,
+      severity: "ok",
+      projectId: session.projectId,
+    });
+    return c.json(
+      {
+        reviewer: toReviewerView(reviewer),
+        inviteUrl,
+        emailSent: sendResult.sent,
+        ...(sendResult.reason ? { emailError: sendResult.reason } : {}),
+      },
+      201,
+    );
+  });
+
+  po.delete("/sessions/:id/reviewers/:rid", async (c) => {
+    const { session } = await ownedSession(c);
+    const reviewer = await repo.getReviewer(c.req.param("rid"));
+    if (!reviewer || reviewer.sessionId !== session.id) {
+      throw new ApiException("not_found", "Reviewer not found");
+    }
+    const updated = await repo.revokeReviewer(reviewer.id);
+    if (!updated) throw new ApiException("not_found", "Reviewer not found");
+    await repo.appendAudit({
+      kind: "reviewer.revoked",
+      actor: c.get("session").sub,
+      summary: `Odebrano dostęp ${updated.email} (sesja „${session.name}”)`,
+      severity: "warn",
+      projectId: session.projectId,
+    });
+    return c.json({ id: updated.id, status: updated.status });
+  });
+
+  po.post("/sessions/:id/reviewers/:rid/resend", async (c) => {
+    const { project, session } = await ownedSession(c);
+    const reviewer = await repo.getReviewer(c.req.param("rid"));
+    if (!reviewer || reviewer.sessionId !== session.id) {
+      throw new ApiException("not_found", "Reviewer not found");
+    }
+    if (reviewer.status === "declined") {
+      throw new ApiException("bad_request", "Reviewer access was revoked");
+    }
+    const inviteUrl = buildInviteUrl(session.envUrl, session.token, reviewer.token);
+    const sendResult = await emailSender.send(
+      buildInvitationEmail({
+        reviewerName: reviewer.name,
+        reviewerEmail: reviewer.email,
+        projectName: project.name,
+        sessionName: session.name,
+        description: session.description,
+        inviteUrl,
+      }),
+    );
+    return c.json({
+      inviteUrl,
+      emailSent: sendResult.sent,
+      ...(sendResult.reason ? { emailError: sendResult.reason } : {}),
+    });
+  });
+
+  // Per-type templates: PO sends the full ProjectTemplates map; we also accept
+  // a single { taskType, template } body so the panel can update one tab at a
+  // time without round-tripping all four.
+  po.put(
+    "/project/templates",
+    validateJson(
+      z.union([
+        projectTemplatesSchema,
+        z.object({
+          taskType: z.enum(["bug", "change", "feature", "polish"]),
+          template: projectTemplateSchema,
+        }),
+      ]),
+    ),
+    async (c) => {
+      const project = await resolvePoProject(c);
+      if (!project) throw new ApiException("not_found", "No project for this account");
+      const b = body<ProjectTemplates | { taskType: TaskType; template: ProjectTemplate }>(c);
+      const next: ProjectTemplates =
+        "taskType" in b ? { ...project.templates, [b.taskType]: b.template } : b;
+      // Defensive: ensure all four keys are populated even if the caller sent
+      // a partial bundle (shouldn't happen via the schema, but cheap).
+      for (const t of TASK_TYPES) {
+        if (!next[t]) next[t] = project.templates[t] ?? DEFAULT_TEMPLATE;
+      }
+      const updated = await repo.updateProjectTemplates(project.id, next);
+      return c.json(updated);
+    },
+  );
 
   po.put("/project/export", validateJson(exportConfigSchema), async (c) => {
     const project = await resolvePoProject(c);
     if (!project) throw new ApiException("not_found", "No project for this account");
     const b = body<z.infer<typeof exportConfigSchema>>(c);
-    // Credentials are envelope-encrypted at rest; never returned to clients (§9).
     const encryptedCredentialsRef =
       b.credentials && Object.keys(b.credentials).length > 0
         ? await encryptJson(config.envelopeKey, b.credentials)
@@ -434,8 +585,8 @@ export function createApp(deps: {
     if (!project) throw new ApiException("not_found", "No project for this account");
     const ann = await repo.getAnnotationById(c.req.param("id"));
     if (!ann) throw new ApiException("not_found", "Annotation not found");
-    const panel = await repo.getPanelById(ann.panelId);
-    if (!panel || panel.projectId !== project.id) {
+    const session = await repo.getReviewSession(ann.sessionId);
+    if (!session || session.projectId !== project.id) {
       throw new ApiException("forbidden", "Not your annotation");
     }
     const b = body<z.infer<typeof transcriptEditSchema>>(c);
@@ -443,8 +594,6 @@ export function createApp(deps: {
     return c.json({ ok: true });
   });
 
-  // AI analysis — single in-flight per project; manual trigger now, a
-  // Workflow drives it in production (Workers Paid, §14).
   po.post("/analyze", async (c) => {
     const project = await resolvePoProject(c);
     if (!project) throw new ApiException("not_found", "No project for this account");
@@ -468,7 +617,6 @@ export function createApp(deps: {
 
   // --- PO review (Phase 8) ---
 
-  /** Resolve a task that belongs to the requesting PO's project (else 404). */
   const ownedTask = async (c: Context<AppEnv>): Promise<Task> => {
     const project = await resolvePoProject(c);
     if (!project) throw new ApiException("not_found", "No project for this account");
@@ -557,7 +705,6 @@ export function createApp(deps: {
     return c.json({ task: applyMutation(r) });
   });
 
-  // Regenerate = scoped re-analysis of just this task's source annotations.
   po.post("/tasks/:id/regenerate", validateJson(taskActionSchema), async (c) => {
     const project = await resolvePoProject(c);
     if (!project) throw new ApiException("not_found", "No project for this account");
@@ -590,10 +737,6 @@ export function createApp(deps: {
     return c.json({ task: applyMutation(r) });
   });
 
-  // Phase 9: self-contained JSON/CSV export of accepted tasks. Idempotent —
-  // accepted -> exported with a stable externalId; re-running never duplicates
-  // and re-includes already-exported tasks (full snapshot). Jira/GitHub live
-  // push still needs PO creds (later Phase 9).
   po.post("/tasks/export", async (c) => {
     const project = await resolvePoProject(c);
     if (!project) throw new ApiException("not_found", "No project for this account");
@@ -691,76 +834,118 @@ export function createApp(deps: {
 
   app.route("/po", po);
 
-  // --- Panel (capability-token) ---
-  const panel = new Hono<AppEnv>();
-  panel.use("/:token", withPanel(repo));
-  panel.use("/:token/*", withPanel(repo));
+  // --- SDK ingest (token-pair gated) ---
+  const sdk = new Hono<AppEnv>();
 
-  panel.get("/:token", async (c) => {
-    const p = c.get("panel");
-    const project = await repo.getProject(p.projectId);
-    return c.json({
-      panelId: p.id,
-      audience: p.audience,
-      status: p.status,
-      environmentUrl: p.environmentUrl,
-      projectName: project?.name ?? null,
-    });
-  });
+  /**
+   * Intro / welcome bootstrap. Public to any host origin; the token pair is
+   * the gate. Idempotently flips reviewer.pending → active and returns the
+   * copy the SDK renders in the welcome modal.
+   */
+  sdk.get(
+    "/sessions/:sessionToken/intro",
+    withSdkSession(repo, { sessionTokenParam: "sessionToken", reviewerTokenQuery: "reviewer" }),
+    async (c) => {
+      const session = c.get("reviewSession");
+      const reviewer = c.get("reviewer");
+      const wasPending = reviewer.status === "pending";
+      const accepted = await repo.markReviewerAccepted(reviewer.id);
+      if (wasPending && accepted?.status === "active") {
+        await repo.appendAudit({
+          kind: "reviewer.accepted",
+          actor: reviewer.email,
+          summary: `Reviewer ${reviewer.email} dołączył do sesji „${session.name}”`,
+          severity: "ok",
+          projectId: session.projectId,
+        });
+      }
+      const project = await repo.getProject(session.projectId);
+      const firstName = (accepted ?? reviewer).name.trim().split(/\s+/)[0] ?? "";
+      const intro: SdkSessionIntro = {
+        projectName: project?.name ?? "",
+        sessionName: session.name,
+        description: session.description,
+        instructions: session.instructions,
+        reviewerName: firstName,
+      };
+      return c.json(intro);
+    },
+  );
 
-  panel.post(
-    "/:token/annotations",
-    requireOpenPanel,
+  sdk.post(
+    "/submissions/:submissionId/annotations",
+    withSdkSession(repo),
     validateJson(createAnnotationSchema),
     async (c) => {
-      const p = c.get("panel");
+      const session = c.get("reviewSession");
+      const reviewer = c.get("reviewer");
       const input = body<CreateAnnotationInput>(c);
+      // The submissionId in the URL must agree with the body's; the body
+      // value is what the schema accepted, so reject mismatches early.
+      const submissionId = c.req.param("submissionId");
+      if (submissionId !== input.submissionId) {
+        throw new ApiException("bad_request", "submissionId mismatch");
+      }
       await repo.getOrCreateSubmission({
-        panelId: p.id,
+        sessionId: session.id,
+        reviewerId: reviewer.id,
         submissionId: input.submissionId,
         clientId: input.clientId,
       });
       const { annotation, created } = await repo.upsertAnnotation({
-        panelId: p.id,
-        audience: p.audience,
+        sessionId: session.id,
+        reviewerId: reviewer.id,
         correlationId: c.get("correlationId"),
         input,
       });
+      await repo.markReviewerSeen(reviewer.id, new Date().toISOString());
       return c.json({ id: annotation.id, created }, created ? 201 : 200);
     },
   );
 
-  panel.post("/:token/submit", requireOpenPanel, validateJson(submitSchema), async (c) => {
-    const p = c.get("panel");
-    const input = body<SubmitInput>(c);
-    const ok = await repo.completeSubmission({
-      panelId: p.id,
-      submissionId: input.submissionId,
-    });
-    if (!ok) throw new ApiException("not_found", "Submission not found");
-    // Near-real-time transcription: poke the queue. `runOnce` is an idempotent
-    // sweep backstop, so a missing queue (tests/local) or send failure is
-    // non-fatal — never block the reviewer's submit on it.
-    const queue = c.env?.TRANSCRIPTION_QUEUE;
-    if (queue) {
-      const msg: TranscriptionMessage = {
-        kind: "transcribe",
-        panelId: p.id,
-        submissionId: input.submissionId,
-      };
-      try {
-        c.executionCtx.waitUntil(queue.send(msg).catch(() => {}));
-      } catch {
-        /* no execution context (unit tests) — sweep/consumer still covers it */
+  sdk.post(
+    "/submissions/:submissionId/complete",
+    withSdkSession(repo),
+    validateJson(submitSchema),
+    async (c) => {
+      const session = c.get("reviewSession");
+      const input = body<SubmitInput>(c);
+      const submissionId = c.req.param("submissionId");
+      if (submissionId !== input.submissionId) {
+        throw new ApiException("bad_request", "submissionId mismatch");
       }
-    }
-    return c.json({ complete: true });
-  });
+      const ok = await repo.completeSubmission({
+        sessionId: session.id,
+        submissionId: input.submissionId,
+      });
+      if (!ok) throw new ApiException("not_found", "Submission not found");
+      await repo.appendAudit({
+        kind: "annotation.submitted",
+        actor: c.get("reviewer").email,
+        summary: `Reviewer ${c.get("reviewer").email} wysłał batch w sesji „${session.name}”`,
+        severity: "ok",
+        projectId: session.projectId,
+      });
+      const queue = c.env?.TRANSCRIPTION_QUEUE;
+      if (queue) {
+        const msg: TranscriptionMessage = {
+          kind: "transcribe",
+          sessionId: session.id,
+          submissionId: input.submissionId,
+        };
+        try {
+          c.executionCtx.waitUntil(queue.send(msg).catch(() => {}));
+        } catch {
+          /* no execution context (unit tests) — sweep/consumer still covers it */
+        }
+      }
+      return c.json({ complete: true });
+    },
+  );
 
-  // Media upload: raw body, ?kind=, size-capped. Returns a MediaRef the SDK
-  // then attaches to the annotation. Public URL is stable for ticket links.
-  panel.post("/:token/uploads", requireOpenPanel, async (c) => {
-    const p = c.get("panel");
+  sdk.post("/uploads", withSdkSession(repo), async (c) => {
+    const session = c.get("reviewSession");
+    const reviewer = c.get("reviewer");
     const kind = c.req.query("kind") ?? "";
     const limit = MEDIA_LIMITS[kind];
     if (limit === undefined) throw new ApiException("bad_request", "Unknown media kind");
@@ -768,13 +953,13 @@ export function createApp(deps: {
     if (buf.byteLength === 0) throw new ApiException("bad_request", "Empty upload");
     if (buf.byteLength > limit) throw new ApiException("bad_request", "Media too large");
     const contentType = c.req.header("content-type") ?? "application/octet-stream";
-    const bucketKey = `panels/${p.id}/${kind}/${newId()}`;
+    const bucketKey = `sessions/${session.id}/reviewers/${reviewer.id}/${kind}/${newId()}`;
     await mediaStore.put(bucketKey, buf, contentType);
     const publicUrl = new URL(`/media/${bucketKey}`, c.req.url).href;
     return c.json({ bucketKey, contentType, bytes: buf.byteLength, publicUrl }, 201);
   });
 
-  app.route("/panels", panel);
+  app.route("/sdk", sdk);
 
   // --- Error envelope (§9, §14: every response traceable) ---
   app.notFound((c) =>

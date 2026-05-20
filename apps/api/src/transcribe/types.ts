@@ -26,6 +26,6 @@ export interface AiBinding {
  */
 export interface TranscriptionMessage {
   kind: "transcribe";
-  panelId: string;
+  sessionId: string;
   submissionId: string;
 }

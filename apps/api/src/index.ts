@@ -1,6 +1,8 @@
 import { DynamicLlmProvider } from "./analysis/providers.js";
 import type { LlmProvider } from "./analysis/types.js";
 import { createApp } from "./app.js";
+import { NoopEmailSender, ResendSender } from "./email/resend.js";
+import type { EmailSender } from "./email/types.js";
 import { resolveConfig, type Env } from "./env.js";
 import { decryptJson } from "./lib/crypto.js";
 import { InMemoryMediaStore } from "./media/memory.js";
@@ -18,6 +20,7 @@ interface Runtime {
   mediaStore: MediaStore;
   transcriber: Transcriber;
   llm: LlmProvider;
+  emailSender: EmailSender;
 }
 
 /**
@@ -74,7 +77,14 @@ function buildRuntime(env: Env): Runtime {
     return null;
   });
 
-  return { repo, mediaStore, transcriber, llm };
+  const emailSender: EmailSender = env.RESEND_API_KEY
+    ? new ResendSender({
+        apiKey: env.RESEND_API_KEY,
+        ...(env.RESEND_FROM ? { from: env.RESEND_FROM } : {}),
+      })
+    : new NoopEmailSender();
+
+  return { repo, mediaStore, transcriber, llm, emailSender };
 }
 
 /**
@@ -84,8 +94,12 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
       const config = resolveConfig(env);
-      const { repo, mediaStore, transcriber, llm } = buildRuntime(env);
-      return createApp({ repo, config, mediaStore, transcriber, llm }).fetch(request, env, ctx);
+      const { repo, mediaStore, transcriber, llm, emailSender } = buildRuntime(env);
+      return createApp({ repo, config, mediaStore, transcriber, llm, emailSender }).fetch(
+        request,
+        env,
+        ctx,
+      );
     } catch (err) {
       const correlationId = request.headers.get("x-correlation-id") ?? crypto.randomUUID();
       return Response.json(
