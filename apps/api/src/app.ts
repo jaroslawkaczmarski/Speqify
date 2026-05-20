@@ -521,14 +521,9 @@ export function createApp(deps: {
     async (c) => {
       const project = await resolvePoProject(c);
       if (!project) throw new ApiException("not_found", "No project for this account");
-      const b = body<
-        | ProjectTemplates
-        | { taskType: TaskType; template: ProjectTemplate }
-      >(c);
+      const b = body<ProjectTemplates | { taskType: TaskType; template: ProjectTemplate }>(c);
       const next: ProjectTemplates =
-        "taskType" in b
-          ? { ...project.templates, [b.taskType]: b.template }
-          : b;
+        "taskType" in b ? { ...project.templates, [b.taskType]: b.template } : b;
       // Defensive: ensure all four keys are populated even if the caller sent
       // a partial bundle (shouldn't happen via the schema, but cheap).
       for (const t of TASK_TYPES) {

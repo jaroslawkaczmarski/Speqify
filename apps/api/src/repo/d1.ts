@@ -476,10 +476,7 @@ export class D1Repository implements Repository {
     return rows.map(toReviewSession);
   }
 
-  async updateReviewSession(
-    id: string,
-    patch: ReviewSessionPatch,
-  ): Promise<ReviewSession | null> {
+  async updateReviewSession(id: string, patch: ReviewSessionPatch): Promise<ReviewSession | null> {
     const set: Record<string, unknown> = {};
     if (patch.name !== undefined) set["name"] = patch.name;
     if (patch.description !== undefined) set["description"] = patch.description;

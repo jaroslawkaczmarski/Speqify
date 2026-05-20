@@ -1252,9 +1252,8 @@ export function AdminProject(props: { id: string }) {
             </ul>
             <h2 className="section-title">Szablon zadań (bug)</h2>
             <p style={{ color: "var(--secondary)", margin: 0 }}>
-              Język <b>{bug.language.toUpperCase()}</b> ·{" "}
-              {bug.userStory ? "user-story" : "prosty"} ·{" "}
-              {bug.acceptanceCriteria ? "z AC" : "bez AC"} · etykiety:{" "}
+              Język <b>{bug.language.toUpperCase()}</b> · {bug.userStory ? "user-story" : "prosty"}{" "}
+              · {bug.acceptanceCriteria ? "z AC" : "bez AC"} · etykiety:{" "}
               {bug.labels.join(", ") || "—"}
             </p>
             <p className="hint">PO konfiguruje pełne 4 szablony (bug/change/feature/polish).</p>
@@ -1345,12 +1344,12 @@ export function Panels() {
       <div className="card card-pad">
         <Alert kind="info">
           Tworzenie i zarządzanie sesjami review (zaproszenia recenzentów, publikacja, zamknięcie)
-          odbywa się w panelu Product Ownera, w zakładce „Sesje review”. SA widzi sesje tutaj
-          tylko podglądowo.
+          odbywa się w panelu Product Ownera, w zakładce „Sesje review”. SA widzi sesje tutaj tylko
+          podglądowo.
         </Alert>
         <p className="hint" style={{ marginTop: 12 }}>
-          Projektów w workspace: <strong>{projects.length}</strong>. RS-7 follow-up doda tu
-          tabelę sesji z linkiem do widoku projektu.
+          Projektów w workspace: <strong>{projects.length}</strong>. RS-7 follow-up doda tu tabelę
+          sesji z linkiem do widoku projektu.
         </p>
       </div>
     </Page>

@@ -151,10 +151,18 @@ export function PoTemplate() {
       <div className="page-h">
         <div>
           <h1>Szablon zadań</h1>
-          <p className="sub">Per typ zadania (bug / change / feature / polish) — AI dobiera szablon przy klasyfikacji.</p>
+          <p className="sub">
+            Per typ zadania (bug / change / feature / polish) — AI dobiera szablon przy
+            klasyfikacji.
+          </p>
         </div>
       </div>
-      <div className="tabs" role="tablist" aria-label="Typ zadania" style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+      <div
+        className="tabs"
+        role="tablist"
+        aria-label="Typ zadania"
+        style={{ display: "flex", gap: 6, marginBottom: 14 }}
+      >
         {TASK_TYPES.map((tt) => (
           <button
             key={tt}
@@ -181,7 +189,9 @@ export function PoTemplate() {
         ))}
       </div>
       {error ? <Alert kind="danger">{error}</Alert> : null}
-      {saved ? <Alert kind="success">Szablon ({TASK_TYPE_LABELS[activeType]}) zapisany.</Alert> : null}
+      {saved ? (
+        <Alert kind="success">Szablon ({TASK_TYPE_LABELS[activeType]}) zapisany.</Alert>
+      ) : null}
       {!t ? (
         <div
           className="card card-pad"
@@ -1285,9 +1295,7 @@ export function PoSessions() {
           description="Utwórz pierwszą sesję — wygeneruje link, który zaprosi recenzentów do SDK."
           action={
             projectId ? (
-              <Button onClick={() => (window.location.hash = "/sessions/new")}>
-                Nowa sesja
-              </Button>
+              <Button onClick={() => (window.location.hash = "/sessions/new")}>Nowa sesja</Button>
             ) : null
           }
         />
@@ -1833,7 +1841,8 @@ export function PoReviewers() {
       }
       // Stable order: by invitation time desc.
       flat.sort(
-        (a, b) => new Date(b.reviewer.invitedAt).getTime() - new Date(a.reviewer.invitedAt).getTime(),
+        (a, b) =>
+          new Date(b.reviewer.invitedAt).getTime() - new Date(a.reviewer.invitedAt).getTime(),
       );
       setRows(flat);
     });
@@ -1957,7 +1966,10 @@ interface InviteFlash {
   emailError?: string;
 }
 
-function reviewerStatusPill(s: ReviewerView["status"]): { kind: "live" | "danger" | "archived"; label: string } {
+function reviewerStatusPill(s: ReviewerView["status"]): {
+  kind: "live" | "danger" | "archived";
+  label: string;
+} {
   if (s === "active") return { kind: "live", label: "aktywny" };
   if (s === "pending") return { kind: "danger", label: "oczekuje" };
   return { kind: "archived", label: "odwołany" };
@@ -2025,9 +2037,7 @@ export function PoSessionDetail({ id }: { id: string }) {
           icon={<IconInfo />}
           title={reviewers === null ? "Ładowanie…" : "Nie znaleziono sesji"}
           description={
-            reviewers === null
-              ? ""
-              : "Ta sesja nie istnieje lub została usunięta — wróć do listy."
+            reviewers === null ? "" : "Ta sesja nie istnieje lub została usunięta — wróć do listy."
           }
           action={
             <Button variant="secondary" onClick={() => (window.location.hash = "/sessions")}>
@@ -2132,11 +2142,9 @@ export function PoSessionDetail({ id }: { id: string }) {
           label="Recenzenci"
           value={reviewers?.length ?? 0}
           delta={
-            (
-              <span className="sp">
-                {(reviewers ?? []).filter((r) => r.status === "active").length} aktywnych
-              </span>
-            )
+            <span className="sp">
+              {(reviewers ?? []).filter((r) => r.status === "active").length} aktywnych
+            </span>
           }
         />
         <Stat
@@ -2339,11 +2347,7 @@ export function PoSessionDetail({ id }: { id: string }) {
                           </Button>
                         ) : null}
                         {r.status !== "declined" ? (
-                          <Button
-                            variant="danger-ghost"
-                            size="sm"
-                            onClick={() => revoke(r.id)}
-                          >
+                          <Button variant="danger-ghost" size="sm" onClick={() => revoke(r.id)}>
                             Odwołaj
                           </Button>
                         ) : null}

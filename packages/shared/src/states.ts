@@ -38,8 +38,7 @@ export const ReviewSessionStatus = {
   Live: "live",
   Closed: "closed",
 } as const;
-export type ReviewSessionStatus =
-  (typeof ReviewSessionStatus)[keyof typeof ReviewSessionStatus];
+export type ReviewSessionStatus = (typeof ReviewSessionStatus)[keyof typeof ReviewSessionStatus];
 
 const REVIEW_SESSION_TRANSITIONS: Record<ReviewSessionStatus, readonly ReviewSessionStatus[]> = {
   draft: ["live", "closed"],

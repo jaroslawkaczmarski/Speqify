@@ -145,10 +145,9 @@ export const api = {
       body: JSON.stringify({ name, email }),
     }),
   revokeReviewer: (sessionId: string, reviewerId: string) =>
-    call<{ id: string; status: string }>(
-      `/po/sessions/${sessionId}/reviewers/${reviewerId}`,
-      { method: "DELETE" },
-    ),
+    call<{ id: string; status: string }>(`/po/sessions/${sessionId}/reviewers/${reviewerId}`, {
+      method: "DELETE",
+    }),
   resendInvite: (sessionId: string, reviewerId: string) =>
     call<{ inviteUrl: string; emailSent: boolean; emailError?: string }>(
       `/po/sessions/${sessionId}/reviewers/${reviewerId}/resend`,

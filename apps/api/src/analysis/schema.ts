@@ -11,6 +11,9 @@ const baseTask = z.object({
   priority: z.enum(["low", "medium", "high"]).nullable().default(null),
   /** Model self-assessed confidence 0–1 (PO review surfaces this). */
   confidence: z.number().min(0).max(1).nullable().default(null),
+  /** AI classification — picks which ProjectTemplate the PO panel applies
+   *  during review. Defaults to "bug" if the model omits the field. */
+  taskType: z.enum(["bug", "change", "feature", "polish"]).default("bug"),
   /** Sub-task discipline; meaningful on `subtasks`, null on parents. */
   subtaskType: z.enum(["backend", "frontend", "integration", "other"]).nullable().default(null),
   annotationIds: z.array(z.string().max(64)).max(200).default([]),

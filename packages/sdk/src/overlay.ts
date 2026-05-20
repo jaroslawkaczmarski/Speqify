@@ -36,7 +36,8 @@ const CONSENT_KEY = "speqify.consent";
 const CONSENT_CAM_KEY = "speqify.consent.cam";
 
 /** Shadow-root stylesheet — ported from the Convergence SDK Overlay design. */
-const STYLE = `
+const STYLE =
+  `
 :host{all:initial}
 *,*::before,*::after{box-sizing:border-box}
 :host{
@@ -317,7 +318,8 @@ button{font-family:inherit;cursor:pointer}
   .rec-btn::before,.rec.live .rec-wave span{animation:none}
 }
 
-/* Idle FAB — collapsed by default (just a `+` circle), expands on hover into
+/* Idle FAB — collapsed by default (just a ` +
+  ` circle), expands on hover into
    the full "Speqify · Dodaj adnotację" pill. The previous logo-mark on the
    left was dropped in RS-6d. */
 .sp-fab{position:fixed;bottom:24px;right:24px;z-index:2147483000;background:var(--primary);
@@ -785,10 +787,15 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
       tool("voice", "Mic + element pick", ICON.voice, { accent: true, kbd: "V" }) +
       tool("text", "Notatka tekstowa", ICON.text, { kbd: "T" }) +
       tool("shot", "Zrzut + adnotacja", ICON.shot, { kbd: "S" }) +
-      tool("screen", screenOk ? "Nagraj ekran" : "Nagrywanie ekranu wyłączone w RODO", ICON.screen, {
-        disabled: !screenOk,
-        tip: screenOk ? "Nagraj ekran" : "Włącz w „Ustawienia RODO”",
-      }) +
+      tool(
+        "screen",
+        screenOk ? "Nagraj ekran" : "Nagrywanie ekranu wyłączone w RODO",
+        ICON.screen,
+        {
+          disabled: !screenOk,
+          tip: screenOk ? "Nagraj ekran" : "Włącz w „Ustawienia RODO”",
+        },
+      ) +
       `<span class="sep"></span>` +
       tool("session", "Adnotacje w sesji", ICON.list, { badge: session.length || undefined }) +
       tool("rodo", "Ustawienia RODO", ICON.shield ?? ICON.list, {
@@ -1037,9 +1044,8 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     const instrBlock = intro?.instructions?.trim()
       ? `<p class="about-block"><strong>Na co zwrócić uwagę</strong>${esc(intro.instructions)}</p>`
       : "";
-    const aboutWrap = descBlock || instrBlock
-      ? `<div class="consent-about">${descBlock}${instrBlock}</div>`
-      : "";
+    const aboutWrap =
+      descBlock || instrBlock ? `<div class="consent-about">${descBlock}${instrBlock}</div>` : "";
     consentWrap.innerHTML = `<div class="sp-consent-modal">
       <div class="consent-head">
         <span class="logo" aria-hidden="true">${svg(ICON.logo, "2.5")}</span>
@@ -1176,7 +1182,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
         <button class="sp-capbtn" data-cap-screen title="${canScreenRec() ? "Nagraj ekran" : "Włącz w „Ustawienia RODO”"}"${canScreenRec() ? "" : " disabled"}>${svg(ICON.screen, "2")}</button>
         <button class="sp-save" data-save>Zapisz draft</button>
         ${sync}
-        <button class="sp-submit" data-send${(noteText.trim() || voiceBlob || session.length) ? "" : " disabled"} title="${(noteText.trim() || voiceBlob || session.length) ? "Wyślij adnotację" : "Dodaj notatkę głosową lub tekstową"}">Wyślij adnotację ${svg(ICON.arrow, "2.4")}</button>
+        <button class="sp-submit" data-send${noteText.trim() || voiceBlob || session.length ? "" : " disabled"} title="${noteText.trim() || voiceBlob || session.length ? "Wyślij adnotację" : "Dodaj notatkę głosową lub tekstową"}">Wyślij adnotację ${svg(ICON.arrow, "2.4")}</button>
       </div>`;
 
     wireBody();
@@ -1603,11 +1609,7 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
   // ---- RODO settings + confirm end --------------------------------------
   const hasUnsaved = (): boolean =>
     !!(noteText.trim() || voiceBlob || picked || screenOut || tags.length || redactedShot);
-  const showConfirm = (
-    msg: string,
-    confirmLabel: string,
-    onConfirm: () => void,
-  ): void => {
+  const showConfirm = (msg: string, confirmLabel: string, onConfirm: () => void): void => {
     const layer = document.createElement("div");
     layer.className = "sp-confirm-wrap";
     layer.innerHTML = `<div class="sp-confirm">
@@ -1690,7 +1692,6 @@ export function mountOverlay(client: SpeqifyClient, deps: OverlayDeps = {}): Ove
     else if (k === "s") onTool("shot");
   };
   document.addEventListener("keydown", onKey);
-
 
   render();
 

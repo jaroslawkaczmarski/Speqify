@@ -42,7 +42,10 @@ export class ResendSender implements EmailSender {
       });
       if (!res.ok) {
         const detail = await res.text().catch(() => "");
-        return { sent: false, reason: `resend_http_${res.status}${detail ? `:${detail.slice(0, 200)}` : ""}` };
+        return {
+          sent: false,
+          reason: `resend_http_${res.status}${detail ? `:${detail.slice(0, 200)}` : ""}`,
+        };
       }
       const data = (await res.json().catch(() => null)) as { id?: string } | null;
       return data?.id ? { sent: true, id: data.id } : { sent: true };

@@ -344,10 +344,7 @@ export class InMemoryRepository implements Repository {
     return [...this.reviewSessions.values()].filter((s) => s.projectId === projectId);
   }
 
-  async updateReviewSession(
-    id: string,
-    patch: ReviewSessionPatch,
-  ): Promise<ReviewSession | null> {
+  async updateReviewSession(id: string, patch: ReviewSessionPatch): Promise<ReviewSession | null> {
     const existing = this.reviewSessions.get(id);
     if (!existing) return null;
     const next: ReviewSession = { ...existing, ...patch };
@@ -493,9 +490,7 @@ export class InMemoryRepository implements Repository {
 
   async listSubmittedForProject(projectId: string): Promise<Annotation[]> {
     const sessionIds = new Set(
-      [...this.reviewSessions.values()]
-        .filter((s) => s.projectId === projectId)
-        .map((s) => s.id),
+      [...this.reviewSessions.values()].filter((s) => s.projectId === projectId).map((s) => s.id),
     );
     if (sessionIds.size === 0) return [];
     return [...this.annotations.values()].filter(

@@ -35,7 +35,13 @@
         margin: 0;
       }
       body {
-        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
         font-size: 16px;
         line-height: 1.65;
         color: var(--primary);
@@ -150,7 +156,14 @@
       <a href="/" header>
         <header>
           <span class="mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path d="M9 11l3 3L22 4" />
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
             </svg>
@@ -181,16 +194,16 @@
       <p>
         Speqify SDK jest „dark by default” — kod loadera może być zainstalowany na dowolnym
         środowisku (również produkcyjnym), ale nic nie robi dopóki adres URL nie zawiera pary
-        tokenów <code>?speqify_session</code> + <code>?speqify_reviewer</code>. Dopiero wtedy
-        SDK otwiera nakładkę i zaczyna zbierać informacje powiązane z konkretną sesją review.
+        tokenów <code>?speqify_session</code> + <code>?speqify_reviewer</code>. Dopiero wtedy SDK
+        otwiera nakładkę i zaczyna zbierać informacje powiązane z konkretną sesją review.
       </p>
 
       <h2>2. Co dokładnie zbieramy</h2>
       <ul>
         <li>
           <strong>Mikrofon</strong> — głos jest nagrywany wyłącznie w momencie, gdy reviewer
-          świadomie kliknie ikonę mikrofonu. Po zatrzymaniu nagrywania plik trafia do bazy w
-          ramach sesji.
+          świadomie kliknie ikonę mikrofonu. Po zatrzymaniu nagrywania plik trafia do bazy w ramach
+          sesji.
         </li>
         <li>
           <strong>Zrzuty viewportu</strong> — robione tylko gdy reviewer dodaje adnotację. Sekrety
@@ -198,21 +211,18 @@
           maskowane lokalnie w przeglądarce zanim trafią do backendu.
         </li>
         <li>
-          <strong>Kontekst techniczny</strong> — selektor elementu, XPath, fragment HTML
-          docelowego elementu, ostatnie wpisy z konsoli przeglądarki, ostatnie żądania sieciowe,
-          wersja przeglądarki, system operacyjny, rozdzielczość. Bez treści ciasteczek i bez
-          danych biznesowych z aplikacji klienta.
+          <strong>Kontekst techniczny</strong> — selektor elementu, XPath, fragment HTML docelowego
+          elementu, ostatnie wpisy z konsoli przeglądarki, ostatnie żądania sieciowe, wersja
+          przeglądarki, system operacyjny, rozdzielczość. Bez treści ciasteczek i bez danych
+          biznesowych z aplikacji klienta.
         </li>
-        <li>
-          <strong>Notatka tekstowa</strong> — to co reviewer sam wpisze.
-        </li>
+        <li><strong>Notatka tekstowa</strong> — to co reviewer sam wpisze.</li>
       </ul>
 
       <h2>3. Kogo dotyczą dane</h2>
       <p>
         Wyłącznie osoby zaproszonej do sesji review (reviewera). Tożsamość = jego imię/nazwisko +
-        adres e-mail + per-sesyjny token. Nie zbieramy danych innych użytkowników aplikacji
-        klienta.
+        adres e-mail + per-sesyjny token. Nie zbieramy danych innych użytkowników aplikacji klienta.
       </p>
 
       <h2>4. Cel przetwarzania</h2>
@@ -220,28 +230,37 @@
         <li>Wygenerowanie ticketu/zadania (Jira/GitHub) na bazie zebranych adnotacji.</li>
         <li>
           Transkrypcja notatek głosowych (provider AI, zgodnie z umową powierzenia — Whisper na
-          infrastrukturze UE, OpenAI z klauzulą Data Processing Addendum, lub samohost wybrany
-          przez właściciela projektu).
+          infrastrukturze UE, OpenAI z klauzulą Data Processing Addendum, lub samohost wybrany przez
+          właściciela projektu).
         </li>
-        <li>Analiza pakietu adnotacji przez LLM (Claude / OpenAI / OpenRouter — konfiguracja platformy).</li>
+        <li>
+          Analiza pakietu adnotacji przez LLM (Claude / OpenAI / OpenRouter — konfiguracja
+          platformy).
+        </li>
       </ul>
 
       <h2>5. Twoje prawa</h2>
       <ul>
-        <li>Wycofanie zgody w dowolnym momencie — Product Owner sesji odwołuje Twój token jednym kliknięciem.</li>
-        <li>Wgląd, sprostowanie, usunięcie danych — wniosek na <a href="mailto:rodo@speqify.app">rodo@speqify.app</a>.</li>
         <li>
-          Przeniesienie danych — eksport ZIP z surowych adnotacji + transkrypcji + zrzutów dla
-          danej sesji review na wniosek.
+          Wycofanie zgody w dowolnym momencie — Product Owner sesji odwołuje Twój token jednym
+          kliknięciem.
+        </li>
+        <li>
+          Wgląd, sprostowanie, usunięcie danych — wniosek na
+          <a href="mailto:rodo@speqify.app">rodo@speqify.app</a>.
+        </li>
+        <li>
+          Przeniesienie danych — eksport ZIP z surowych adnotacji + transkrypcji + zrzutów dla danej
+          sesji review na wniosek.
         </li>
         <li>Skarga do organu nadzorczego (UODO).</li>
       </ul>
 
       <h2>6. Retencja</h2>
       <p>
-        Adnotacje i wyprodukowane na ich bazie zadania są przechowywane przez okres trwania
-        projektu klienta + 12 miesięcy archiwum. Surowe nagrania głosowe i zrzuty są usuwane po 90
-        dniach od wygenerowania zadania, chyba że klient skonfiguruje krótszą politykę retencji.
+        Adnotacje i wyprodukowane na ich bazie zadania są przechowywane przez okres trwania projektu
+        klienta + 12 miesięcy archiwum. Surowe nagrania głosowe i zrzuty są usuwane po 90 dniach od
+        wygenerowania zadania, chyba że klient skonfiguruje krótszą politykę retencji.
       </p>
 
       <h2>7. Podwykonawcy</h2>
@@ -256,8 +275,8 @@
 
       <footer>
         Masz pytania albo zastrzeżenia? Napisz na
-        <a href="mailto:rodo@speqify.app">rodo@speqify.app</a>. Wersja umowna polityki dla
-        wdrożeń produkcyjnych jest częścią umowy SaaS.
+        <a href="mailto:rodo@speqify.app">rodo@speqify.app</a>. Wersja umowna polityki dla wdrożeń
+        produkcyjnych jest częścią umowy SaaS.
       </footer>
     </main>
   </body>
