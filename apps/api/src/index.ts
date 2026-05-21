@@ -1,6 +1,7 @@
 import { DynamicLlmProvider } from "./analysis/providers.js";
 import type { LlmProvider } from "./analysis/types.js";
 import { createApp } from "./app.js";
+import { GmailSender } from "./email/gmail.js";
 import { NoopEmailSender, ResendSender } from "./email/resend.js";
 import type { EmailSender } from "./email/types.js";
 import { resolveConfig, type Env } from "./env.js";
@@ -77,12 +78,19 @@ function buildRuntime(env: Env): Runtime {
     return null;
   });
 
-  const emailSender: EmailSender = env.RESEND_API_KEY
-    ? new ResendSender({
-        apiKey: env.RESEND_API_KEY,
-        ...(env.RESEND_FROM ? { from: env.RESEND_FROM } : {}),
-      })
-    : new NoopEmailSender();
+  const emailSender: EmailSender =
+    env.GMAIL_SA_KEY && env.GMAIL_IMPERSONATE
+      ? new GmailSender({
+          saKey: env.GMAIL_SA_KEY,
+          impersonate: env.GMAIL_IMPERSONATE,
+          ...(env.GMAIL_FROM ? { from: env.GMAIL_FROM } : {}),
+        })
+      : env.RESEND_API_KEY
+        ? new ResendSender({
+            apiKey: env.RESEND_API_KEY,
+            ...(env.RESEND_FROM ? { from: env.RESEND_FROM } : {}),
+          })
+        : new NoopEmailSender();
 
   return { repo, mediaStore, transcriber, llm, emailSender };
 }

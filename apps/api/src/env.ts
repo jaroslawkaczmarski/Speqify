@@ -34,13 +34,19 @@ export interface Env {
   readonly LLM_MODEL?: string;
   /** Comma-separated allowed origins for the SA/PO SPA (CORS). */
   readonly PANEL_ORIGINS?: string;
-  /** Resend API key for transactional invite emails. Optional — when absent
-   *  the invite endpoint returns the magic-link URL so the PO can hand-deliver
-   *  it (graceful-fallback contract, RS-NOTES.md §RS-5). */
+  /** Resend API key — kept as a fallback while migrating to Gmail API. */
   readonly RESEND_API_KEY?: string;
-  /** Verified Resend sender ("Display Name <noreply@speqify.app>"). DNS for
-   *  SPF/DKIM is configured manually at the Resend dashboard. */
+  /** Resend sender — used only when the Gmail path is not configured. */
   readonly RESEND_FROM?: string;
+  /** Google service-account JSON (the full credentials file) as one string.
+   *  Sends through Gmail API impersonating GMAIL_IMPERSONATE via domain-wide
+   *  delegation. Preferred over Resend when set. */
+  readonly GMAIL_SA_KEY?: string;
+  /** Workspace user the SA impersonates — typically `admin@8cells.com`. */
+  readonly GMAIL_IMPERSONATE?: string;
+  /** Verified sender for Gmail API. Must be a primary or alias-domain address
+   *  of the impersonated user. */
+  readonly GMAIL_FROM?: string;
 }
 
 export interface AppConfig {

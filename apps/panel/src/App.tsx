@@ -384,7 +384,7 @@ function InviteOnlyNote() {
     <Alert kind="warning" title="Beta zamknięta — dostęp na zaproszenie">
       W V1 konta i panele recenzentów tworzy SuperAdmin. Ten ekran jest poglądowy — samodzielna
       rejestracja uruchomi się przy GA. Aby dołączyć, napisz na{" "}
-      <a href="mailto:hello@speqify.app">hello@speqify.app</a>.
+      <a href="mailto:hi@speqify.app">hi@speqify.app</a>.
     </Alert>
   );
 }
