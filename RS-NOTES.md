@@ -1,5 +1,18 @@
 # Review Sessions refactor — branch handoff
 
+> **Update 2026-05-21:** transactional email is no longer sent through Resend.
+> `speqify-api` now uses Gmail API via a shared Workspace service account
+> (`workers-mailer@cells-mail.iam.gserviceaccount.com`) with domain-wide
+> delegation to impersonate `admin@8cells.com`. The From: domain
+> `noreply@speqify.app` is a User Alias Domain of that user. Code lives in
+> `apps/api/src/email/gmail.ts`; the noop fallback is in
+> `apps/api/src/email/noop.ts`. Resend references in §RS-5 / sections below
+> reflect the original decision and are kept as historical context — the
+> graceful-fallback contract (return the magic-link in the response body
+> when no transport is wired) is unchanged.
+
+
+
 **Branch:** `feat/review-sessions` (do not push to `main` until the whole
 series is green; CI is wired to deploy-on-push for main, branch pushes
 are safe)
