@@ -2,7 +2,7 @@ import { DynamicLlmProvider } from "./analysis/providers.js";
 import type { LlmProvider } from "./analysis/types.js";
 import { createApp } from "./app.js";
 import { GmailSender } from "./email/gmail.js";
-import { NoopEmailSender, ResendSender } from "./email/resend.js";
+import { NoopEmailSender } from "./email/noop.js";
 import type { EmailSender } from "./email/types.js";
 import { resolveConfig, type Env } from "./env.js";
 import { decryptJson } from "./lib/crypto.js";
@@ -85,12 +85,7 @@ function buildRuntime(env: Env): Runtime {
           impersonate: env.GMAIL_IMPERSONATE,
           ...(env.GMAIL_FROM ? { from: env.GMAIL_FROM } : {}),
         })
-      : env.RESEND_API_KEY
-        ? new ResendSender({
-            apiKey: env.RESEND_API_KEY,
-            ...(env.RESEND_FROM ? { from: env.RESEND_FROM } : {}),
-          })
-        : new NoopEmailSender();
+      : new NoopEmailSender();
 
   return { repo, mediaStore, transcriber, llm, emailSender };
 }

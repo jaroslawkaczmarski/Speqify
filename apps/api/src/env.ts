@@ -34,13 +34,10 @@ export interface Env {
   readonly LLM_MODEL?: string;
   /** Comma-separated allowed origins for the SA/PO SPA (CORS). */
   readonly PANEL_ORIGINS?: string;
-  /** Resend API key — kept as a fallback while migrating to Gmail API. */
-  readonly RESEND_API_KEY?: string;
-  /** Resend sender — used only when the Gmail path is not configured. */
-  readonly RESEND_FROM?: string;
   /** Google service-account JSON (the full credentials file) as one string.
    *  Sends through Gmail API impersonating GMAIL_IMPERSONATE via domain-wide
-   *  delegation. Preferred over Resend when set. */
+   *  delegation. When absent, the invite flow falls back to the noop sender
+   *  (returns the magic-link to the PO instead of emailing it). */
   readonly GMAIL_SA_KEY?: string;
   /** Workspace user the SA impersonates — typically `admin@8cells.com`. */
   readonly GMAIL_IMPERSONATE?: string;

@@ -1,7 +1,7 @@
 import type { Annotation, Project, Reviewer, ReviewSession, Task } from "@speqify/shared";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
-import { NoopEmailSender } from "../src/email/resend.js";
+import { NoopEmailSender } from "../src/email/noop.js";
 import type { AppConfig } from "../src/env.js";
 import { hashPassword } from "../src/lib/crypto.js";
 import type { LlmProvider } from "../src/analysis/types.js";
