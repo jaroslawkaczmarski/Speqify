@@ -66,8 +66,7 @@ body {
   color: var(--primary);
   background:
     linear-gradient(90deg, rgba(16, 35, 29, 0.035) 1px, transparent 1px),
-    linear-gradient(rgba(16, 35, 29, 0.035) 1px, transparent 1px),
-    var(--neutral);
+    linear-gradient(rgba(16, 35, 29, 0.035) 1px, transparent 1px), var(--neutral);
   background-size: 44px 44px;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -332,7 +331,9 @@ input:focus-visible {
   padding: 0 32px;
   font-size: 1.0625rem;
   border-radius: var(--r-md);
-  box-shadow: 0 6px 0 #08705f, 0 18px 32px rgba(0, 168, 132, 0.24);
+  box-shadow:
+    0 6px 0 #08705f,
+    0 18px 32px rgba(0, 168, 132, 0.24);
 }
 .btn-cta-hero:hover {
   background: var(--accent-hover);
@@ -1015,8 +1016,7 @@ section {
 
 /* Problems */
 .problems {
-  background:
-    linear-gradient(180deg, #fffaf1 0%, var(--neutral) 100%);
+  background: linear-gradient(180deg, #fffaf1 0%, var(--neutral) 100%);
 }
 .problem-grid {
   display: grid;
@@ -1446,8 +1446,7 @@ section {
 .bottom-cta {
   background:
     linear-gradient(90deg, rgba(16, 35, 29, 0.06) 1px, transparent 1px),
-    linear-gradient(rgba(16, 35, 29, 0.06) 1px, transparent 1px),
-    #fffaf1;
+    linear-gradient(rgba(16, 35, 29, 0.06) 1px, transparent 1px), #fffaf1;
   background-size: 36px 36px;
   text-align: center;
   padding: 96px 0;

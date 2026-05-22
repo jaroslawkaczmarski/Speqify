@@ -130,7 +130,11 @@ async function signRS256(pemPrivateKey: string, claims: Record<string, unknown>)
     false,
     ["sign"],
   );
-  const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(signingInput));
+  const sig = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(signingInput),
+  );
   return `${signingInput}.${b64urlEncode(new Uint8Array(sig))}`;
 }
 
