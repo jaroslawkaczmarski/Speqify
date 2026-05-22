@@ -2,8 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { DICT, type Locale } from "./i18n.js";
 
-/* Convergence landing — ported from Speqify.html / Speqify EN.html.
-   PL is the default locale (Polish product); a header switch toggles EN. */
+/* Speqify landing. PL is the default locale (Polish product); a header switch toggles EN. */
 
 const LS_KEY = "speqify.lang";
 function initialLocale(): Locale {
