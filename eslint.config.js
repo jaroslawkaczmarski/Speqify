@@ -8,10 +8,11 @@ export default tseslint.config(
     ignores: [
       "**/dist/**",
       "**/build/**",
-      "**/.open-next/**",
-      "**/.wrangler/**",
+      "**/.output/**",
+      "**/.wxt/**",
       "**/.turbo/**",
       "**/node_modules/**",
+      "**/public/**",
     ],
   },
   js.configs.recommended,

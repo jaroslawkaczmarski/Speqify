@@ -1,0 +1,32 @@
+{
+  "name": "@speqify/extension",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/copy-ort.mjs && node scripts/gen-icons.mjs",
+    "dev": "pnpm assets && wxt",
+    "dev:firefox": "pnpm assets && wxt -b firefox",
+    "build": "pnpm assets && wxt build",
+    "zip": "pnpm assets && wxt zip",
+    "postinstall": "wxt prepare",
+    "typecheck": "wxt prepare && tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@fontsource/geist-mono": "^5.1.0",
+    "@fontsource/geist-sans": "^5.1.0",
+    "@huggingface/transformers": "^3.3.0",
+    "@speqify/core": "workspace:*",
+    "@speqify/ui": "workspace:*",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@wxt-dev/module-react": "^1.1.5",
+    "wxt": "^0.20.0"
+  }
+}

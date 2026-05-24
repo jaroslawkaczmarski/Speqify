@@ -1,15 +1,24 @@
 node_modules/
 dist/
 build/
-.open-next/
-.wrangler/
 .turbo/
 coverage/
 *.log
+
+# WXT extension build artifacts
+.output/
+.wxt/
+*.zip
+
+# Generated at build (copy-ort.mjs / gen-icons.mjs)
+apps/extension/public/ort/
+apps/extension/public/icon/
+
+# Env / secrets
 .env
 .env.*
 !.env.example
-.dev.vars
+
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
@@ -17,18 +26,5 @@ Thumbs.db
 # Local Claude Code / preview config (machine-specific absolute paths)
 .claude/
 
-# Claude Design handoff bundles (extracted prototypes — reference only)
-.design-pkg/
-.design-pkg2/
-
-# transient prod secret material (never commit)
-.prod-secrets.tmp.json
-
-.cf.tmp.mjs
-
-# Generated SDK bundle dropped into the landing public dir for local dev so
-# /sdk/v1/loader.js is served by `pnpm dev`. Built via:
-#   pnpm --filter @speqify/sdk bundle && cp packages/sdk/dist/loader.js \
-#     apps/landing/public/sdk/v1/loader.js
-# In production the loader is served by Workers Static Assets, not this path.
-apps/landing/public/sdk/
+# JetBrains IDE config (machine-specific)
+.idea/

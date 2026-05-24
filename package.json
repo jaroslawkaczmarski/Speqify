@@ -14,7 +14,10 @@
     "test": "turbo run test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "sdk:demo": "node scripts/sdk-demo.mjs"
+    "ext:dev": "pnpm --filter @speqify/extension dev",
+    "ext:build": "pnpm --filter @speqify/extension build",
+    "ext:zip": "pnpm --filter @speqify/extension zip",
+    "landing:dev": "pnpm --filter @speqify/landing dev"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -28,7 +31,9 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "esbuild",
+      "@parcel/watcher",
+      "workerd"
     ]
   }
 }

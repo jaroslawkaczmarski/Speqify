@@ -4,11 +4,15 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "build/**", ".open-next/**"]
+      "outputs": ["dist/**", ".output/**"]
     },
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "zip": {
+      "dependsOn": ["^build"],
+      "outputs": [".output/**"]
     },
     "lint": {},
     "typecheck": {

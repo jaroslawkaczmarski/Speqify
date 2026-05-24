@@ -1,45 +1,66 @@
 # Speqify
 
-Collect requirements directly on your live app — annotate UI, record voice notes, and let
-AI draft structured Jira / GitHub tickets following your project's template.
+Turn rough notes into well-structured tickets — and push them straight to your
+tracker — without leaving the page you're on.
 
-> **Status:** Phase 0 (scaffolding). See [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md)
-> for the full roadmap and [`DESIGN.md`](./DESIGN.md) for the Convergence design system
-> (landing-page authority).
+Speqify is a **browser extension**: open the side panel on any web app, describe
+a bug or feature in plain language, optionally grab a screenshot and the page's
+console / network errors, let AI rewrite it into a structured ticket, then submit
+it to **GitHub Issues, Jira, Linear, or GitLab** in one click.
+
+> **No backend, no accounts.** Your tracker tokens and AI keys live only in your
+> browser (`chrome.storage.local`). Nothing is sent to a Speqify server — there
+> isn't one.
+
+## Why an extension
+
+Trackers (Jira, Linear, GitLab) block direct browser calls via CORS. A browser
+extension with host permissions is exempt from CORS, so it can talk to those APIs
+directly — no proxy server required.
+
+## Pluggable AI
+
+Bring whatever model you want:
+
+- **Cloud, BYO key** — OpenAI, Anthropic (Claude), or Google Gemini.
+- **Local model** — any OpenAI-compatible endpoint (Ollama, LM Studio, Jan,
+  llama.cpp). Fully offline, no key, no cloud.
+- **Chrome built-in AI** — on-device Gemini Nano (optional, where available).
 
 ## Monorepo layout
 
 ```
 apps/
-  landing/   # Marketing site — Convergence design system (Vite + React + Tailwind)
-  panel/     # SuperAdmin + Product Owner app (Vite + React)        [skeleton]
-  api/       # Hono Worker: REST API, ingest, export                [skeleton]
+  extension/   # The browser extension — WXT + React 19 + Tailwind v4 (MV3)
+  landing/     # Marketing site — Vite + React + Tailwind + Motion
 packages/
-  shared/    # Domain types, zod schemas, state machines (single source of truth)
-  db/        # Drizzle schema + D1 migrations                       [skeleton]
-  sdk/       # Overlay SDK (loader + overlay UI)                    [skeleton]
+  core/        # Ticket schema (zod), AI provider abstraction, tracker adapters
 ```
 
 ## Toolchain
 
-- Node `>=22`, pnpm `9.15.0`, Turborepo
-- TypeScript (strict), ESLint (flat config), Prettier, Vitest
-- Hosting: Cloudflare (Workers, D1, R2, Queues, Workflows, AI Gateway)
+- Node `>=22`, pnpm `9.15`, Turborepo
+- TypeScript (strict), ESLint (flat config), Prettier
+- Extension: [WXT](https://wxt.dev) (Vite-native, cross-browser MV3)
 
 ## Common commands
 
 ```bash
 pnpm install          # install all workspaces
-pnpm dev              # run dev tasks (turbo)
-pnpm --filter @speqify/landing dev    # landing dev server
-pnpm build            # build all
-pnpm lint             # lint all
+pnpm ext:dev          # run the extension in dev (loads into Chrome)
+pnpm ext:build        # production extension build (.output/)
+pnpm ext:zip          # zip for the Web Store
+pnpm landing:dev      # landing dev server
 pnpm typecheck        # typecheck all
-pnpm format           # prettier write
+pnpm lint             # lint all
 ```
 
-## Cloudflare resources
+## Loading the extension (dev)
 
-Resource provisioning (D1 / R2 / Queues / Secrets Store) requires `wrangler login` and is
-**not** committed. `wrangler.toml` files contain placeholder bindings — fill IDs after
-creating resources. See `IMPLEMENTATION_PLAN.md` §6 Phase 0.
+```bash
+pnpm ext:dev
+```
+
+WXT launches a Chrome instance with the extension loaded. To load a build
+manually: `chrome://extensions` → enable Developer mode → **Load unpacked** →
+select `apps/extension/.output/chrome-mv3`.

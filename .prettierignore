@@ -1,11 +1,9 @@
 node_modules/
 dist/
 build/
-.open-next/
-.wrangler/
 .turbo/
+.output/
+.wxt/
 coverage/
 pnpm-lock.yaml
 *.md
-# esbuild-generated SDK loader bundle (rebuilt by scripts/sdk-demo.mjs)
-apps/landing/public/speqify-loader.js

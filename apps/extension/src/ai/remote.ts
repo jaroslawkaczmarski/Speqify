@@ -1,0 +1,50 @@
+import type { RemoteAi } from "@/store";
+
+function base(cfg: RemoteAi): string {
+  return cfg.endpoint.trim().replace(/\/$/, "");
+}
+
+function authHeaders(cfg: RemoteAi): Record<string, string> {
+  return cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {};
+}
+
+/** OpenAI-compatible /audio/transcriptions (Whisper). */
+export async function remoteTranscribe(cfg: RemoteAi, audio: Blob, lang?: string): Promise<string> {
+  const model = cfg.sttModel.trim();
+  if (!model) {
+    throw new Error("No transcription model set for this endpoint (audio → text not supported here).");
+  }
+  const ext = audio.type.includes("mp4") ? "mp4" : audio.type.includes("ogg") ? "ogg" : "webm";
+  const form = new FormData();
+  form.append("file", audio, `audio.${ext}`);
+  form.append("model", model);
+  if (lang && lang !== "auto") form.append("language", lang);
+  const res = await fetch(`${base(cfg)}/audio/transcriptions`, {
+    method: "POST",
+    headers: authHeaders(cfg),
+    body: form,
+  });
+  if (!res.ok) throw new Error(`Transcription failed: ${res.status} ${res.statusText}`);
+  const data = (await res.json()) as { text?: string };
+  return data.text ?? "";
+}
+
+/** OpenAI-compatible /chat/completions. */
+export async function remoteChat(cfg: RemoteAi, system: string, user: string): Promise<string> {
+  const res = await fetch(`${base(cfg)}/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...authHeaders(cfg) },
+    body: JSON.stringify({
+      model: cfg.model,
+      temperature: 0.3,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      response_format: { type: "json_object" },
+    }),
+  });
+  if (!res.ok) throw new Error(`AI request failed: ${res.status} ${res.statusText}`);
+  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  return data.choices?.[0]?.message?.content ?? "";
+}

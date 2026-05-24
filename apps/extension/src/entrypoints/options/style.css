@@ -1,0 +1,18 @@
+@import "@speqify/ui/tokens.css";
+
+:root {
+  --sp-font: "Geist Sans", "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sp-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--sp-surface-2);
+  color: var(--sp-text);
+  font-family: var(--sp-font);
+}
