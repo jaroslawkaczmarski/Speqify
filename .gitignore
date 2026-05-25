@@ -24,7 +24,10 @@ Thumbs.db
 *.tsbuildinfo
 
 # Local Claude Code / preview config (machine-specific absolute paths)
-.claude/
+# ...but keep committed, shipped-with-code skills.
+.claude/*
+!.claude/skills/
+.claude/settings.local.json
 
 # JetBrains IDE config (machine-specific)
 .idea/
