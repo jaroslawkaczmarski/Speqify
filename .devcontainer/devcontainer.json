@@ -1,0 +1,45 @@
+{
+  // Dev Container for Speqify (Node 22 · pnpm monorepo: extension + landing + api).
+  //
+  // Develop/build inside a container so dependency code never installs or
+  // executes on your host. Works with rootless Podman — in VS Code set:
+  //   "dev.containers.dockerPath": "podman"
+  // Headless:  devcontainer up --workspace-folder . --docker-path podman
+  "name": "speqify (node 22 · pnpm)",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+
+  // Practical hardening (rootless-Podman friendly).
+  "runArgs": [
+    "--cap-drop=ALL",
+    "--security-opt", "no-new-privileges",
+    "--security-opt", "label=disable"
+  ],
+
+  // Dependency code in a container volume → host holds only your source.
+  "mounts": [
+    "source=speqify-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
+  ],
+
+  // Install inside the container (frozen lockfile; allowed build scripts —
+  // esbuild/workerd/@parcel/watcher — run sandboxed here, never on the host).
+  "postCreateCommand": "sudo chown node:node node_modules && sudo corepack enable && pnpm install --frozen-lockfile",
+
+  // wxt extension dev (3000), landing vite (5173), api wrangler (8787).
+  "forwardPorts": [3000, 5173, 8787],
+
+  "containerEnv": { "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0" },
+  "remoteUser": "node",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode", "bradlc.vscode-tailwindcss"]
+    }
+  }
+
+  // ⚠️ Browser-extension trust boundary: BUILD the extension in the container
+  //    (`pnpm ext:build` → apps/extension/.output/), but LOAD the unpacked
+  //    extension and run the BROWSER on your HOST (chrome://extensions → Load
+  //    unpacked → point at the built .output dir on the mounted workspace).
+  //    The browser is not (and shouldn't be) in the container.
+  // ⚠️ No host-secret mounts.
+}

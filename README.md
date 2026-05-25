@@ -8,6 +8,43 @@ a bug or feature in plain language, optionally grab a screenshot and the page's
 console / network errors, let AI rewrite it into a structured ticket, then submit
 it to **GitHub Issues, Jira, Linear, or GitLab** in one click.
 
+## Run in a container (Dev Container)
+
+Develop without installing npm packages on your host — install/build happen in a
+container, deps live in a volume. Config: [`.devcontainer/devcontainer.json`](./.devcontainer/devcontainer.json).
+
+**Prereqs:** Docker or rootless Podman + the VS Code *Dev Containers* extension
+(or [`@devcontainers/cli`](https://github.com/devcontainers/cli)). Podman:
+`"dev.containers.dockerPath": "podman"` / `--docker-path podman`.
+
+```bash
+devcontainer up --workspace-folder . --docker-path podman   # builds + pnpm install (frozen)
+devcontainer exec --workspace-folder . bash
+
+# inside the container:
+pnpm ext:build    # build the MV3 extension → apps/extension/.output/
+pnpm landing:dev  # landing (vite) → http://localhost:5173
+pnpm dev          # everything (turbo)
+pnpm audit
+```
+
+**Or with `podman compose`** (see [`compose.yaml`](./compose.yaml)):
+```bash
+podman compose run --rm install     # deps (frozen lockfile)
+podman compose run --rm ext-build   # extension → apps/extension/.output/
+podman compose up landing-dev       # landing → http://localhost:5173
+podman compose run --rm build
+podman compose run --rm audit
+```
+
+**Browser-extension boundary:** build the extension *inside* the container, but
+**load the unpacked extension and run the browser on your HOST**
+(`chrome://extensions` → *Load unpacked* → the built `.output/` on the mounted
+workspace). The browser is not in the container — that's intentional.
+
+**Hardening:** `--cap-drop=ALL`, `--security-opt no-new-privileges`, non-root user,
+deps in a named volume (host stays clean), no host secrets mounted.
+
 > **No backend, no accounts.** Your tracker tokens and AI keys live only in your
 > browser (`chrome.storage.local`). Nothing is sent to a Speqify server — there
 > isn't one.

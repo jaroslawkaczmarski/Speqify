@@ -1,0 +1,55 @@
+# Container dev/build for Speqify via `podman compose` (or `docker compose`).
+# Same hardening as .devcontainer; deps in volumes so your host stays clean.
+#   podman compose run --rm install      # pnpm install (frozen)
+#   podman compose run --rm ext-build    # build MV3 extension → apps/extension/.output/
+#   podman compose up landing-dev        # landing (vite) → http://localhost:5173
+#   podman compose run --rm build        # turbo build (everything)
+#   podman compose run --rm audit
+#   podman compose run --rm shell
+#
+# NB: build the extension here, but LOAD it unpacked + run the browser on your HOST
+#     (chrome://extensions → Load unpacked → apps/extension/.output/).
+name: speqify
+
+x-node: &node
+  image: docker.io/library/node:22-bookworm-slim
+  working_dir: /app
+  cap_drop: ["ALL"]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp"]
+  environment:
+    HOME: /tmp
+    COREPACK_HOME: /tmp/.corepack
+    COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    CI: "1"
+  volumes:
+    - .:/app
+    - node_modules:/app/node_modules
+    - pnpm_store:/pnpm-store
+
+services:
+  install:
+    <<: *node
+    command: ["bash", "-lc", "corepack pnpm install --frozen-lockfile --store-dir=/pnpm-store"]
+  build:
+    <<: *node
+    command: ["bash", "-lc", "corepack pnpm build"]
+  ext-build:
+    <<: *node
+    command: ["bash", "-lc", "corepack pnpm ext:build"]
+  landing-dev:
+    <<: *node
+    ports: ["5173:5173"]
+    command: ["bash", "-lc", "corepack pnpm --filter @speqify/landing exec vite --host 0.0.0.0 --port 5173"]
+  audit:
+    <<: *node
+    command: ["bash", "-lc", "corepack pnpm audit || true"]
+  shell:
+    <<: *node
+    stdin_open: true
+    tty: true
+    command: ["bash"]
+
+volumes:
+  node_modules:
+  pnpm_store:
