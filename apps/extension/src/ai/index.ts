@@ -1,12 +1,12 @@
 import { TicketSchema, emptyTicket, extractJson, isLocalEndpoint, isSafeEndpoint, type CaptureContext, type Ticket, type TicketType } from "@speqify/core";
 import type { AiConfig, RemoteEndpoint } from "@/store";
 import { buildDraftSystem, buildDraftUser } from "./prompt";
-import { blobToPcm16k, loadLocal, localGenerate, localLoaded, localTranscribe } from "./local";
+import { blobToPcm16k, loadLocal, localGenerate, localTranscribe } from "./local";
 import { nanoGenerate, nanoUsable, probeNano } from "./chrome-ai";
 import { remoteChat, remoteTranscribe } from "./remote";
 
 export type { LoadProgress } from "./local";
-export { loadLocal, localLoaded } from "./local";
+export { loadLocal } from "./local";
 
 /** A remote endpoint can run once it has a URL + model and either a key or is localhost. */
 function remoteUsable(r: RemoteEndpoint): boolean {
@@ -53,7 +53,7 @@ export async function transcribeAudio(ai: AiConfig, audio: Blob | null): Promise
   // can surface "transcription failed"; "" here means genuinely no speech.
   if (ai.voiceMode === "local") {
     // Speech model only — the drafting model loads at draft time, if local.
-    if (!localLoaded(ai.localTier, true, false)) await loadLocal(ai.localTier, undefined, { needAsr: true, needLlm: false });
+    await loadLocal(ai.localTier, undefined, { needAsr: true, needLlm: false });
     const pcm = await blobToPcm16k(audio);
     return await localTranscribe(pcm, ai.detectedLang);
   }
@@ -77,7 +77,7 @@ export async function draftTicket(
       raw = await nanoGenerate(system, user);
     } else {
       // Drafting model only — don't re-load Whisper here.
-      if (!localLoaded(ai.localTier, false, true)) await loadLocal(ai.localTier, undefined, { needAsr: false, needLlm: true });
+      await loadLocal(ai.localTier, undefined, { needAsr: false, needLlm: true });
       raw = await localGenerate(system, user);
     }
   } else {

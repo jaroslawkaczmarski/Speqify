@@ -23,6 +23,13 @@ All notable changes to Speqify are documented here. The format is based on
 ### Landing
 - Marketing site is now **responsive** (mobile / tablet / desktop).
 
+### Fixes & cleanup
+- The advertised **Alt+Shift+S "Stop & attach"** shortcut now works (it was listed in
+  Settings but had no handler).
+- Removed dead code found in review: `TRACKER_LABELS`, the `IconName` type, the
+  `SPEQIFY_CANCEL_PICK` message type, and the unread `ActiveRecorder.displayStream` field.
+- De-duplicated the icon/logo PNG generators into a shared `scripts/icon-mark.mjs`.
+
 ## [0.1.0] — 2026-05-30
 
 First public (open-source) release.

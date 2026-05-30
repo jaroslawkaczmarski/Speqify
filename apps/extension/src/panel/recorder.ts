@@ -2,8 +2,6 @@ import type { AreaRect } from "@/messaging";
 import type { CaptureDefaults } from "@/store";
 
 export interface ActiveRecorder {
-  /** The raw shared surface stream (kept for teardown). */
-  displayStream: MediaStream;
   /** What's actually being recorded — bind THIS to the preview so the crop shows. */
   previewStream: MediaStream;
   /** Mic frequency analyser for the waveform. Null if mic unavailable/denied. */
@@ -164,7 +162,6 @@ export async function startRecording(opts: StartOptions): Promise<ActiveRecorder
   };
 
   return {
-    displayStream,
     previewStream: useCanvas ? recordStream : displayStream,
     analyser,
     micAvailable: Boolean(micStream),

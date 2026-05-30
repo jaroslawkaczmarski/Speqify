@@ -28,7 +28,6 @@ export type ContentRequest =
   | { type: "SPEQIFY_GET_CONTEXT" }
   | { type: "SPEQIFY_PICK_ELEMENT" }
   | { type: "SPEQIFY_PICK_AREA" }
-  | { type: "SPEQIFY_CANCEL_PICK" }
   /** Begin a capture: clears the step buffer and starts streaming live clicks. */
   | { type: "SPEQIFY_START_CAPTURE"; trackSteps: boolean }
   | { type: "SPEQIFY_END_CAPTURE" };

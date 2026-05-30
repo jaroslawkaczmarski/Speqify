@@ -160,7 +160,7 @@ function Hero() {
           </a>
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 22, marginTop: 22, fontSize: 14, color: "var(--sp-text-3)", flexWrap: "wrap" }}>
-          {["Chrome · Edge · Brave · Arc · Firefox", "Free & open source (MIT)", "No telemetry by default"].map((t) => (
+          {["Chrome · Edge · Brave · Arc · Opera · Firefox", "Free & open source (MIT)", "No telemetry by default"].map((t) => (
             <span key={t} style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <Icons.Check size={14} stroke={2.4} style={{ color: "var(--sp-success)" }} /> {t}
             </span>

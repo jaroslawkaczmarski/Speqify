@@ -160,8 +160,6 @@ export const Icons = {
   ),
 };
 
-export type IconName = keyof typeof Icons;
-
 const markPaths = (
   <g stroke="#fff" strokeWidth="2.2" strokeLinecap="round">
     <line x1="9" y1="16" x2="9" y2="16" />

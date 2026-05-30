@@ -42,7 +42,10 @@ export function Recording({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.altKey && (e.key === "m" || e.key === "M")) {
+      if (e.altKey && e.shiftKey && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        onStop();
+      } else if (e.altKey && (e.key === "m" || e.key === "M")) {
         e.preventDefault();
         toggleMic();
       }

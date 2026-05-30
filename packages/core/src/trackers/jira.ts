@@ -25,6 +25,7 @@ export async function submitJira(config: JiraConfig, input: SubmitInput): Promis
     body: JSON.stringify({
       fields: {
         project: { key: config.projectKey },
+        // Jira's summary field maxes out at 255 chars; trim to stay safely under it.
         summary: input.ticket.title.slice(0, 254),
         issuetype: { name: config.issueType || "Task" },
         description: composeAdf(input.ticket, input.context),

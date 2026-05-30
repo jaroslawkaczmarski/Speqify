@@ -64,10 +64,3 @@ export class TrackerError extends Error {
     this.name = "TrackerError";
   }
 }
-
-export const TRACKER_LABELS: Record<TrackerKind, string> = {
-  github: "GitHub Issues",
-  jira: "Jira",
-  linear: "Linear",
-  gitlab: "GitLab",
-};

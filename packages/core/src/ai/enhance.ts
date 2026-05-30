@@ -70,7 +70,7 @@ export function buildContextDigest(ctx?: CaptureContext): string {
 }
 
 /** One-line, human-readable summary of a recorded interaction step. */
-export function describeStep(s: import("../capture.js").ReproStep): string {
+export function describeStep(s: ReproStep): string {
   switch (s.kind) {
     case "click":
       return `Click ${s.target}${s.text ? ` ("${s.text}")` : ""}`;
