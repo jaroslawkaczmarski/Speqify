@@ -1,6 +1,8 @@
 {
   "name": "@speqify/extension",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Speqify — talk (or type) to your tracker. MV3 browser extension.",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {

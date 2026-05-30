@@ -12,7 +12,7 @@ reproduction steps / screenshot / picked element) is attached. **No backend, no 
 tracker tokens and AI keys live only in `chrome.storage.local`.
 
 **AI is local-first.** The default runs entirely on-device with Transformers.js / ONNX Runtime Web
-(Whisper for speech-to-text + a small Qwen2.5 instruct model for drafting; nothing downloads until
+(Whisper for speech-to-text + a small Qwen3 instruct model — 0.6B/1.7B ONNX — for drafting; nothing downloads until
 the user opts into a tier in Settings). The alternative is a **remote OpenAI-compatible endpoint**
 the user supplies as a URL + key (OpenAI, OpenRouter, Ollama, or any compatible gateway): drafting
 via `/chat/completions`, optional transcription via `/audio/transcriptions`. There is no separate

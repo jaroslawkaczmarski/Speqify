@@ -1,5 +1,12 @@
 {
   "name": "speqify",
+  "version": "0.1.0",
+  "description": "Turn a note — typed or spoken — into a structured issue and ship it to GitHub, Jira, Linear, or GitLab, from a browser extension.",
+  "license": "MIT",
+  "author": "Jarosław Kaczmarski",
+  "repository": { "type": "git", "url": "git+https://github.com/jaroslawkaczmarski/Speqify.git" },
+  "homepage": "https://github.com/jaroslawkaczmarski/Speqify#readme",
+  "bugs": "https://github.com/jaroslawkaczmarski/Speqify/issues",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.15.0",

@@ -130,7 +130,7 @@ function Hero() {
           </a>
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 22, marginTop: 22, fontSize: 14, color: "var(--sp-text-3)", flexWrap: "wrap" }}>
-          {["Chrome · Firefox · Safari · Edge · Arc", "Free & open source (MIT)", "No telemetry by default"].map((t) => (
+          {["Chrome · Edge · Brave · Arc · Firefox", "Free & open source (MIT)", "No telemetry by default"].map((t) => (
             <span key={t} style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <Icons.Check size={14} stroke={2.4} style={{ color: "var(--sp-success)" }} /> {t}
             </span>
@@ -322,9 +322,7 @@ function OpenSourceBand() {
 
 const BROWSERS = [
   { name: "Chrome", c: "#4285F4" },
-  { name: "Firefox", c: "#FF7139" },
-  { name: "Safari", c: "#1B88F4" },
-  { name: "Edge", c: "#0F8BE9" },
+  { name: "Firefox", c: "#FF7139" },  { name: "Edge", c: "#0F8BE9" },
   { name: "Brave", c: "#FB542B" },
   { name: "Arc", c: "#FB5C5C" },
   { name: "Opera", c: "#FF1B2D" },
@@ -417,10 +415,7 @@ function Demo() {
             chart screenshot, repro steps, and acceptance criteria attached.
           </p>
           <div style={{ display: "flex", gap: 12, marginTop: 29 }}>
-            <button className="sp-btn sp-btn-lg" style={{ background: "#fff", color: "#1C1917" }}>
-              <Icons.Play size={14} /> Play 60s demo
-            </button>
-            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="sp-btn sp-btn-lg" style={{ background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.2)", textDecoration: "none" }}>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="sp-btn sp-btn-lg" style={{ background: "#fff", color: "#1C1917", textDecoration: "none" }}>
               View source on GitHub
             </a>
           </div>
@@ -565,7 +560,7 @@ function OpenSource() {
 
 const FAQ = [
   { q: "Do you keep my audio?", a: "No — by default the raw audio never leaves your machine. With local models, transcription happens entirely on-device; the audio is discarded after transcription." },
-  { q: "Which browsers do you support?", a: "Chrome, Edge, Brave, and Arc today. Firefox and Safari are supported via the same cross-browser build." },
+  { q: "Which browsers do you support?", a: "Chromium browsers (Chrome, Edge, Brave, Arc, Opera) today, plus a Firefox build. Safari is planned." },
   { q: "Can I use Speqify on internal apps?", a: "Yes. Speqify works on any page you can open, including localhost, staging environments, and intranet apps behind SSO." },
   { q: "Where do my tracker keys live?", a: "Only in your browser's local storage. There is no Speqify account and no server — nothing leaves except the ticket you create." },
   { q: "Do I need an account?", a: "No. Speqify works straight out of the install. You paste your own tracker API key and everything stays in your browser." },

@@ -959,7 +959,7 @@ function SimpleSection({ id }: { id: Section }) {
           <li>No Speqify account and no Speqify server — there is nothing to sign in to.</li>
           <li>Tracker tokens and AI keys are stored only in your browser's local storage.</li>
           <li>With local models, audio is transcribed on-device and never uploaded.</li>
-          <li>Nothing leaves your browser except the issue you explicitly create.</li>
+          <li>With on-device AI, nothing leaves your browser except the issue you create. With a remote AI endpoint, your recorded audio and page context are sent there to transcribe and draft.</li>
         </ul>
       ),
     },
