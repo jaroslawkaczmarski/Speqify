@@ -9,7 +9,7 @@ interface LanguageModelApi {
     initialPrompts?: { role: "system" | "user" | "assistant"; content: string }[];
     temperature?: number;
     topK?: number;
-  }): Promise<{ prompt(input: string): Promise<string>; destroy?: () => void }>;
+  }): Promise<{ prompt(input: string, options?: { responseConstraint?: unknown }): Promise<string>; destroy?: () => void }>;
 }
 
 function lm(): LanguageModelApi | undefined {
@@ -44,6 +44,22 @@ export function nanoUsable(): boolean {
   return cached === "available";
 }
 
+// Mirrors buildDraftSystem's JSON contract. Passed as the Prompt API's
+// `responseConstraint` so Gemini Nano returns schema-valid JSON instead of prose —
+// closing its one weak spot for this task. Chrome builds without structured-output
+// support ignore the option and fall back to prompt-guided JSON.
+const DRAFT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "description", "type", "labels"],
+  properties: {
+    title: { type: "string" },
+    description: { type: "string" },
+    type: { type: "string", enum: ["bug", "feature", "task", "improvement"] },
+    labels: { type: "array", items: { type: "string" } },
+  },
+};
+
 export async function nanoGenerate(system: string, user: string): Promise<string> {
   const api = lm();
   if (!api) throw new Error("Chrome built-in AI is not available");
@@ -53,7 +69,7 @@ export async function nanoGenerate(system: string, user: string): Promise<string
     topK: 3,
   });
   try {
-    return await session.prompt(user);
+    return await session.prompt(user, { responseConstraint: DRAFT_SCHEMA });
   } finally {
     session.destroy?.();
   }

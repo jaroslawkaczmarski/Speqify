@@ -7,6 +7,21 @@ export default defineConfig({
   // Absolute so it's unambiguous: <ext>/public (where copy-ort.mjs writes the ORT runtime).
   publicDir: resolve(import.meta.dirname, "public"),
   modules: ["@wxt-dev/module-react"],
+  // ORT's wasm is served same-origin from public/ort (copy-ort.mjs) and ORT is pointed
+  // there via env.wasm.wasmPaths. Vite ALSO auto-emits a copy from the `new URL(...)`
+  // reference inside onnxruntime-web — drop that duplicate so we don't ship ~23 MB twice.
+  vite: () => ({
+    plugins: [
+      {
+        name: "speqify-drop-bundled-ort-wasm",
+        generateBundle(_options, bundle) {
+          for (const file of Object.keys(bundle)) {
+            if (/ort-wasm.*\.wasm$/.test(file)) delete (bundle as Record<string, unknown>)[file];
+          }
+        },
+      },
+    ],
+  }),
   manifest: {
     name: "Speqify",
     description:
