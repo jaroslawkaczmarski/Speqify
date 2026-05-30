@@ -1,5 +1,25 @@
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Icons, SpeqifyWordmark, Trackers } from "@speqify/ui";
+
+/** Reactive media query. Inline styles can't use CSS @media, so structural
+ *  breakpoints (grid columns, stacking, nav collapse, hero shot) are driven
+ *  from JS; fluid sizing (font sizes, paddings) uses CSS clamp() in-place. */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(query).matches : false,
+  );
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, [query]);
+  return matches;
+}
+
+const MOBILE = "(max-width: 640px)";
+const TABLET = "(max-width: 1024px)";
 
 const navLinkS: CSSProperties = {
   fontSize: 16,
@@ -42,13 +62,14 @@ export function App() {
 }
 
 function Nav() {
+  const isMobile = useMediaQuery(MOBILE);
   return (
     <nav
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 29,
-        padding: "22px 67px",
+        gap: isMobile ? 14 : 29,
+        padding: isMobile ? "16px 20px" : "22px 67px",
         borderBottom: "1px solid var(--sp-border)",
         background: "rgba(250,250,249,0.85)",
         backdropFilter: "blur(8px)",
@@ -59,20 +80,25 @@ function Nav() {
     >
       <SpeqifyWordmark height={29} />
       <div style={{ flex: 1 }} />
-      {NAV_LINKS.map((l) => (
-        <a key={l.label} href={l.href} style={navLinkS}>
-          {l.label}
-        </a>
-      ))}
-      <a
-        href={GITHUB_URL}
-        target="_blank"
-        rel="noreferrer"
-        style={{ ...navLinkS, display: "inline-flex", alignItems: "center", gap: 7 }}
-      >
-        <Trackers.GitHub size={18} /> GitHub
-      </a>
-      <div style={{ width: 1, height: 22, background: "var(--sp-border)" }} />
+      {!isMobile &&
+        NAV_LINKS.map((l) => (
+          <a key={l.label} href={l.href} style={navLinkS}>
+            {l.label}
+          </a>
+        ))}
+      {!isMobile && (
+        <>
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            style={{ ...navLinkS, display: "inline-flex", alignItems: "center", gap: 7 }}
+          >
+            <Trackers.GitHub size={18} /> GitHub
+          </a>
+          <div style={{ width: 1, height: 22, background: "var(--sp-border)" }} />
+        </>
+      )}
       <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="sp-btn sp-btn-primary sp-btn-sm" style={noUnderline}>
         Install — free <Icons.ChevronR size={14} />
       </a>
@@ -81,8 +107,9 @@ function Nav() {
 }
 
 function Hero() {
+  const isMobile = useMediaQuery(MOBILE);
   return (
-    <section style={{ position: "relative", padding: "106px 67px 77px", textAlign: "center", overflow: "hidden" }}>
+    <section style={{ position: "relative", padding: "clamp(72px, 9vw, 106px) clamp(20px, 5vw, 67px) clamp(56px, 7vw, 77px)", textAlign: "center", overflow: "hidden" }}>
       <div
         style={{
           position: "absolute",
@@ -99,12 +126,15 @@ function Hero() {
           style={{
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "center",
+            flexWrap: "wrap",
             gap: 10,
             padding: "7px 14px",
+            maxWidth: "100%",
             background: "var(--sp-indigo-50)",
             border: "1px solid var(--sp-indigo-100)",
             borderRadius: 1199,
-            fontSize: 14,
+            fontSize: "clamp(12px, 3vw, 14px)",
             fontWeight: 600,
             color: "var(--sp-indigo-700)",
           }}
@@ -112,20 +142,20 @@ function Hero() {
           <Icons.Lock size={14} />
           Open source · No account required · 100% local
         </div>
-        <h1 style={{ fontSize: 77, lineHeight: 1.02, fontWeight: 650, letterSpacing: "-0.025em", margin: "24px auto 19px", maxWidth: 1008 }}>
+        <h1 style={{ fontSize: "clamp(38px, 8.5vw, 77px)", lineHeight: 1.04, fontWeight: 650, letterSpacing: "-0.025em", margin: "24px auto 19px", maxWidth: 1008 }}>
           Talk to your tracker.
           <br />
           <span style={{ color: "var(--sp-indigo-600)" }}>Speqify writes the ticket.</span>
         </h1>
-        <p style={{ fontSize: 22, color: "var(--sp-text-2)", maxWidth: 744, margin: "0 auto", lineHeight: 1.5 }}>
+        <p style={{ fontSize: "clamp(16px, 2.4vw, 22px)", color: "var(--sp-text-2)", maxWidth: 744, margin: "0 auto", lineHeight: 1.5 }}>
           A cross-browser sidebar that captures any element on a page, records your voice, and turns it into a
           structured issue in Jira, GitHub, Linear, or GitLab. No sign-up, no servers — just your own API keys.
         </p>
-        <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 34 }}>
-          <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="sp-btn sp-btn-primary sp-btn-lg" style={noUnderline}>
+        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap: 12, justifyContent: "center", marginTop: 34 }}>
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="sp-btn sp-btn-primary sp-btn-lg" style={{ ...noUnderline, justifyContent: "center" }}>
             Install — it's free <Icons.Arrow size={17} />
           </a>
-          <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="sp-btn sp-btn-secondary sp-btn-lg" style={noUnderline}>
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="sp-btn sp-btn-secondary sp-btn-lg" style={{ ...noUnderline, justifyContent: "center" }}>
             <Trackers.GitHub size={17} /> View source on GitHub
           </a>
         </div>
@@ -138,9 +168,10 @@ function Hero() {
         </div>
       </div>
 
-      {/* hero product shot */}
+      {/* hero product shot — desktop-scale 2-pane mockup; hidden on phones */}
       <div
         style={{
+          display: isMobile ? "none" : "block",
           position: "relative",
           marginTop: 67,
           width: "100%",
@@ -291,7 +322,7 @@ const OSS_SIGNALS = [
 
 function OpenSourceBand() {
   return (
-    <section style={{ padding: "48px 67px 29px", textAlign: "center" }}>
+    <section style={{ padding: "clamp(36px, 6vw, 48px) clamp(20px, 5vw, 67px) 29px", textAlign: "center" }}>
       <div style={{ fontSize: 14, fontWeight: 600, color: "var(--sp-text-3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
         Open source · built in the open
       </div>
@@ -357,7 +388,7 @@ function CrossBrowserStrip() {
 
 function CrossBrowserSection() {
   return (
-    <section style={{ padding: "14px 67px 72px", textAlign: "center" }}>
+    <section style={{ padding: "14px clamp(20px, 5vw, 67px) clamp(48px, 7vw, 72px)", textAlign: "center" }}>
       <div style={{ fontSize: 14, fontWeight: 600, color: "var(--sp-text-3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 17 }}>
         Available on every major browser
       </div>
@@ -376,15 +407,17 @@ const FEATURES = [
 ];
 
 function Features() {
+  const isTablet = useMediaQuery(TABLET);
+  const isMobile = useMediaQuery(MOBILE);
   return (
-    <section id="features" style={{ padding: "72px 67px 96px" }}>
+    <section id="features" style={{ padding: "clamp(56px, 8vw, 72px) clamp(20px, 5vw, 67px) clamp(64px, 9vw, 96px)" }}>
       <div style={{ textAlign: "center", maxWidth: 864, margin: "0 auto 58px" }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--sp-indigo-600)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Features</div>
-        <h2 style={{ fontSize: 48, fontWeight: 650, letterSpacing: "-0.02em", margin: 0 }}>
+        <h2 style={{ fontSize: "clamp(30px, 5vw, 48px)", fontWeight: 650, letterSpacing: "-0.02em", margin: 0 }}>
           The fastest path from “this is broken” to a real ticket
         </h2>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 19, maxWidth: 1368, margin: "0 auto" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: 19, maxWidth: 1368, margin: "0 auto" }}>
         {FEATURES.map((f) => (
           <div key={f.title} className="sp-card" style={{ padding: 26 }}>
             <div style={{ width: 43, height: 43, borderRadius: 11, background: "var(--sp-indigo-50)", color: "var(--sp-indigo-700)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 17 }}>
@@ -400,12 +433,13 @@ function Features() {
 }
 
 function Demo() {
+  const isTablet = useMediaQuery(TABLET);
   return (
-    <section style={{ padding: "96px 67px", background: "#1C1917", color: "#FAFAF9" }}>
-      <div style={{ maxWidth: 1368, margin: "0 auto", display: "grid", gridTemplateColumns: "0.9fr 1.1fr", gap: 67, alignItems: "center" }}>
+    <section style={{ padding: "clamp(64px, 9vw, 96px) clamp(20px, 5vw, 67px)", background: "#1C1917", color: "#FAFAF9" }}>
+      <div style={{ maxWidth: 1368, margin: "0 auto", display: "grid", gridTemplateColumns: isTablet ? "1fr" : "0.9fr 1.1fr", gap: isTablet ? 40 : 67, alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 600, color: "#A5B4FC", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14 }}>See it in motion</div>
-          <h2 style={{ fontSize: 48, fontWeight: 650, letterSpacing: "-0.02em", lineHeight: 1.1, margin: "0 0 19px" }}>
+          <h2 style={{ fontSize: "clamp(30px, 5vw, 48px)", fontWeight: 650, letterSpacing: "-0.02em", lineHeight: 1.1, margin: "0 0 19px" }}>
             60 seconds of voice
             <br />
             becomes a 4-field ticket.
@@ -445,16 +479,17 @@ const INTEGRATIONS = [
 ] as const;
 
 function Integrations() {
+  const isTablet = useMediaQuery(TABLET);
   return (
-    <section id="integrations" style={{ padding: "96px 67px" }}>
+    <section id="integrations" style={{ padding: "clamp(64px, 9vw, 96px) clamp(20px, 5vw, 67px)" }}>
       <div style={{ textAlign: "center", maxWidth: 864, margin: "0 auto 48px" }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--sp-indigo-600)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Integrations</div>
-        <h2 style={{ fontSize: 43, fontWeight: 650, letterSpacing: "-0.02em", margin: 0 }}>Works with the tracker you already use</h2>
+        <h2 style={{ fontSize: "clamp(28px, 4.5vw, 43px)", fontWeight: 650, letterSpacing: "-0.02em", margin: 0 }}>Works with the tracker you already use</h2>
         <p style={{ fontSize: 18, color: "var(--sp-text-3)", marginTop: 14, lineHeight: 1.5 }}>
           Connect once in Settings. Every captured issue goes to your active tracker — switch any time.
         </p>
       </div>
-      <div style={{ maxWidth: 1176, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+      <div style={{ maxWidth: 1176, margin: "0 auto", display: "grid", gridTemplateColumns: isTablet ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 14 }}>
         {INTEGRATIONS.map((t) => {
           const L = Trackers[t.logo];
           return (
@@ -480,13 +515,14 @@ const STEPS = [
 ];
 
 function HowItWorks() {
+  const isTablet = useMediaQuery(TABLET);
   return (
-    <section style={{ padding: "96px 67px", background: "var(--sp-surface-2)" }}>
+    <section style={{ padding: "clamp(64px, 9vw, 96px) clamp(20px, 5vw, 67px)", background: "var(--sp-surface-2)" }}>
       <div style={{ textAlign: "center", maxWidth: 864, margin: "0 auto 48px" }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--sp-indigo-600)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>How it works</div>
-        <h2 style={{ fontSize: 43, fontWeight: 650, letterSpacing: "-0.02em", margin: 0 }}>Four steps. About forty seconds.</h2>
+        <h2 style={{ fontSize: "clamp(28px, 4.5vw, 43px)", fontWeight: 650, letterSpacing: "-0.02em", margin: 0 }}>Four steps. About forty seconds.</h2>
       </div>
-      <div style={{ maxWidth: 1368, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 19 }}>
+      <div style={{ maxWidth: 1368, margin: "0 auto", display: "grid", gridTemplateColumns: isTablet ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 19 }}>
         {STEPS.map((s) => (
           <div key={s.n} className="sp-card" style={{ padding: 26 }}>
             <div style={{ fontFamily: "var(--sp-mono)", fontSize: 14, color: "var(--sp-indigo-600)", fontWeight: 600, marginBottom: 14 }}>{s.n}</div>
@@ -523,19 +559,21 @@ const OSS_CARDS = [
 ];
 
 function OpenSource() {
+  const isTablet = useMediaQuery(TABLET);
+  const isMobile = useMediaQuery(MOBILE);
   return (
-    <section id="open-source" style={{ padding: "96px 67px" }}>
+    <section id="open-source" style={{ padding: "clamp(64px, 9vw, 96px) clamp(20px, 5vw, 67px)" }}>
       <div style={{ textAlign: "center", maxWidth: 864, margin: "0 auto 48px" }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--sp-indigo-600)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
           Open source
         </div>
-        <h2 style={{ fontSize: 43, fontWeight: 650, letterSpacing: "-0.02em", margin: 0 }}>Free, and free to inspect</h2>
+        <h2 style={{ fontSize: "clamp(28px, 4.5vw, 43px)", fontWeight: 650, letterSpacing: "-0.02em", margin: 0 }}>Free, and free to inspect</h2>
         <p style={{ fontSize: 18, color: "var(--sp-text-3)", marginTop: 14, lineHeight: 1.5 }}>
           Speqify has no paid tiers and no catch. There's no backend and no account — you bring your own tracker keys,
           and the AI runs locally or against an endpoint you choose. The whole thing is on GitHub under the MIT license.
         </p>
       </div>
-      <div style={{ maxWidth: 1176, margin: "0 auto 38px", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+      <div style={{ maxWidth: 1176, margin: "0 auto 38px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 14 }}>
         {OSS_CARDS.map((c) => (
           <div key={c.title} className="sp-card" style={{ padding: 26 }}>
             <div style={{ width: 43, height: 43, borderRadius: 11, background: "var(--sp-indigo-50)", color: "var(--sp-indigo-700)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 17 }}>
@@ -546,11 +584,11 @@ function OpenSource() {
           </div>
         ))}
       </div>
-      <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-        <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="sp-btn sp-btn-primary sp-btn-lg" style={noUnderline}>
+      <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap: 12, justifyContent: "center" }}>
+        <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="sp-btn sp-btn-primary sp-btn-lg" style={{ ...noUnderline, justifyContent: "center" }}>
           View on GitHub <Icons.Arrow size={17} />
         </a>
-        <a href={`${GITHUB_URL}#readme`} target="_blank" rel="noreferrer" className="sp-btn sp-btn-secondary sp-btn-lg" style={noUnderline}>
+        <a href={`${GITHUB_URL}#readme`} target="_blank" rel="noreferrer" className="sp-btn sp-btn-secondary sp-btn-lg" style={{ ...noUnderline, justifyContent: "center" }}>
           Read the README
         </a>
       </div>
@@ -570,11 +608,11 @@ const FAQ = [
 
 function Faq() {
   return (
-    <section id="faq" style={{ padding: "96px 67px" }}>
+    <section id="faq" style={{ padding: "clamp(64px, 9vw, 96px) clamp(20px, 5vw, 67px)" }}>
       <div style={{ maxWidth: 912, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 38 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: "var(--sp-indigo-600)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>FAQ</div>
-          <h2 style={{ fontSize: 43, fontWeight: 650, letterSpacing: "-0.02em", margin: 0 }}>Common questions</h2>
+          <h2 style={{ fontSize: "clamp(28px, 4.5vw, 43px)", fontWeight: 650, letterSpacing: "-0.02em", margin: 0 }}>Common questions</h2>
         </div>
         {FAQ.map((f, i) => (
           <details key={i} style={{ borderTop: "1px solid var(--sp-border)", padding: "22px 5px" }}>
@@ -591,20 +629,21 @@ function Faq() {
 }
 
 function Cta() {
+  const isMobile = useMediaQuery(MOBILE);
   return (
-    <section style={{ padding: "72px 67px 120px" }}>
-      <div style={{ maxWidth: 1296, margin: "0 auto", background: "linear-gradient(135deg, var(--sp-indigo-600), var(--sp-indigo-800))", borderRadius: 29, padding: "77px 58px", color: "#fff", textAlign: "center", position: "relative", overflow: "hidden" }}>
+    <section style={{ padding: "clamp(56px, 8vw, 72px) clamp(20px, 5vw, 67px) clamp(80px, 11vw, 120px)" }}>
+      <div style={{ maxWidth: 1296, margin: "0 auto", background: "linear-gradient(135deg, var(--sp-indigo-600), var(--sp-indigo-800))", borderRadius: 29, padding: "clamp(48px, 8vw, 77px) clamp(24px, 5vw, 58px)", color: "#fff", textAlign: "center", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.15), transparent 40%), radial-gradient(circle at 80% 80%, rgba(255,255,255,0.1), transparent 40%)" }} />
         <div style={{ position: "relative" }}>
-          <h2 style={{ fontSize: 53, fontWeight: 650, letterSpacing: "-0.02em", margin: "0 0 14px" }}>Stop typing tickets. Start talking.</h2>
-          <p style={{ fontSize: 20, opacity: 0.85, maxWidth: 648, margin: "0 auto 34px" }}>
+          <h2 style={{ fontSize: "clamp(30px, 6vw, 53px)", fontWeight: 650, letterSpacing: "-0.02em", margin: "0 0 14px" }}>Stop typing tickets. Start talking.</h2>
+          <p style={{ fontSize: "clamp(16px, 2.4vw, 20px)", opacity: 0.85, maxWidth: 648, margin: "0 auto 34px" }}>
             Install Speqify and your next captured bug ships before your coffee gets cold.
           </p>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="sp-btn sp-btn-lg" style={{ background: "#fff", color: "var(--sp-indigo-700)", textDecoration: "none" }}>
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap: 12, justifyContent: "center" }}>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="sp-btn sp-btn-lg" style={{ background: "#fff", color: "var(--sp-indigo-700)", textDecoration: "none", justifyContent: "center" }}>
               Install — it's free <Icons.Arrow size={17} />
             </a>
-            <a href={`${GITHUB_URL}#readme`} target="_blank" rel="noreferrer" className="sp-btn sp-btn-lg" style={{ background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)", textDecoration: "none" }}>
+            <a href={`${GITHUB_URL}#readme`} target="_blank" rel="noreferrer" className="sp-btn sp-btn-lg" style={{ background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)", textDecoration: "none", justifyContent: "center" }}>
               View on GitHub
             </a>
           </div>
@@ -615,12 +654,13 @@ function Cta() {
 }
 
 function Footer() {
+  const isMobile = useMediaQuery(MOBILE);
   return (
-    <footer style={{ padding: "48px 67px 38px", borderTop: "1px solid var(--sp-border)", background: "var(--sp-surface)" }}>
-      <div style={{ maxWidth: 1368, margin: "0 auto", display: "flex", alignItems: "center", gap: 29, flexWrap: "wrap" }}>
+    <footer style={{ padding: "clamp(36px, 6vw, 48px) clamp(20px, 5vw, 67px) 38px", borderTop: "1px solid var(--sp-border)", background: "var(--sp-surface)" }}>
+      <div style={{ maxWidth: 1368, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: isMobile ? "center" : "flex-start", gap: isMobile ? 16 : 29, flexWrap: "wrap", textAlign: "center" }}>
         <SpeqifyWordmark height={22} />
         <span style={{ fontSize: 14, color: "var(--sp-text-3)" }}>© 2026 Speqify · MIT licensed</span>
-        <div style={{ flex: 1 }} />
+        <div style={{ flex: isMobile ? "0 0 100%" : 1 }} />
         {[
           { label: "Product", href: "#features" },
           { label: "Integrations", href: "#integrations" },
