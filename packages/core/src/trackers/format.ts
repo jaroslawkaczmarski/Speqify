@@ -1,9 +1,13 @@
+import { describeStep } from "../ai/enhance.js";
 import type { CaptureContext } from "../capture.js";
 import type { Ticket } from "../ticket.js";
 
 /** Compose a Markdown issue body (GitHub, GitLab, Linear). */
 export function composeMarkdown(ticket: Ticket, context?: CaptureContext): string {
   const parts: string[] = [];
+  // Lead with where it happened — the exact URL of the page being filed about.
+  const url = context?.page.url?.trim();
+  if (url) parts.push(`**Where it happened:** ${url}`);
   if (ticket.description.trim()) parts.push(ticket.description.trim());
 
   if (ticket.stepsToReproduce.length) {
@@ -50,6 +54,11 @@ function technicalMarkdown(context?: CaptureContext): string {
     lines.push("", "**Console**", "```");
     for (const c of consoleErr) lines.push(`[${c.level}] ${c.message}`);
     lines.push("```");
+  }
+  const steps = context.steps ?? [];
+  if (steps.length) {
+    lines.push("", "**Observed steps**");
+    steps.slice(-12).forEach((s, i) => lines.push(`${i + 1}. ${describeStep(s)}`));
   }
   return ["<details><summary>Technical context</summary>", "", ...lines, "</details>"].join("\n");
 }

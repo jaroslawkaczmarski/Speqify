@@ -1,16 +1,16 @@
-import type { RemoteAi } from "@/store";
+import type { RemoteEndpoint } from "@/store";
 
-function base(cfg: RemoteAi): string {
+function base(cfg: RemoteEndpoint): string {
   return cfg.endpoint.trim().replace(/\/$/, "");
 }
 
-function authHeaders(cfg: RemoteAi): Record<string, string> {
+function authHeaders(cfg: RemoteEndpoint): Record<string, string> {
   return cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {};
 }
 
 /** OpenAI-compatible /audio/transcriptions (Whisper). */
-export async function remoteTranscribe(cfg: RemoteAi, audio: Blob, lang?: string): Promise<string> {
-  const model = cfg.sttModel.trim();
+export async function remoteTranscribe(cfg: RemoteEndpoint, audio: Blob, lang?: string): Promise<string> {
+  const model = cfg.model.trim();
   if (!model) {
     throw new Error("No transcription model set for this endpoint (audio → text not supported here).");
   }
@@ -30,7 +30,7 @@ export async function remoteTranscribe(cfg: RemoteAi, audio: Blob, lang?: string
 }
 
 /** OpenAI-compatible /chat/completions. */
-export async function remoteChat(cfg: RemoteAi, system: string, user: string): Promise<string> {
+export async function remoteChat(cfg: RemoteEndpoint, system: string, user: string): Promise<string> {
   const res = await fetch(`${base(cfg)}/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json", ...authHeaders(cfg) },

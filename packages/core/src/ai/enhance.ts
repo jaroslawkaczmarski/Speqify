@@ -1,33 +1,11 @@
-import { TicketSchema, type Ticket } from "../ticket.js";
 import type { CaptureContext } from "../capture.js";
-import { callModel } from "./providers.js";
-import { AiError, type AiSettings } from "./types.js";
+import { AiError } from "./types.js";
 
-const SYSTEM = `You are a senior product engineer who turns rough notes into clear, actionable issue tracker tickets.
-Given a user's raw note and optional technical context captured from the page, produce ONE well-structured ticket.
-
-Rules:
-- Write a concise, specific title (no ticket-type prefix).
-- Write the description in clear Markdown: the problem/request, impact, and relevant context.
-- If it's a defect, fill stepsToReproduce with concrete ordered steps. Otherwise leave it empty.
-- Fill acceptanceCriteria with verifiable, testable bullet points.
-- Classify "type" as one of: bug, feature, task, improvement.
-- Set "priority" (low|medium|high|urgent) only if the note clearly implies urgency; otherwise null.
-- Suggest a few relevant lowercase "labels".
-- Use the captured console/network errors to make the ticket precise, but do NOT dump raw logs into the body.
-- Respond with ONLY a JSON object matching the schema. No prose, no code fences.`;
-
-const SCHEMA_HINT = `JSON schema:
-{
-  "title": string,
-  "description": string (markdown),
-  "type": "bug" | "feature" | "task" | "improvement",
-  "priority": "low" | "medium" | "high" | "urgent" | null,
-  "stepsToReproduce": string[],
-  "acceptanceCriteria": string[],
-  "labels": string[]
-}`;
-
+/**
+ * Build a compact, model-friendly digest of the page context captured during a
+ * recording. The extension's AI layer (local or remote) prepends this to the
+ * spoken note so the model can write a precise ticket without dumping raw logs.
+ */
 export function buildContextDigest(ctx?: CaptureContext): string {
   if (!ctx) return "";
   const lines: string[] = [];
@@ -38,7 +16,9 @@ export function buildContextDigest(ctx?: CaptureContext): string {
     lines.push("JS errors:");
     for (const e of errors) lines.push(`  - ${e.message}`);
   }
-  const consoleErrors = ctx.console.filter((c) => c.level === "error" || c.level === "warn").slice(-8);
+  const consoleErrors = ctx.console
+    .filter((c) => c.level === "error" || c.level === "warn")
+    .slice(-8);
   if (consoleErrors.length) {
     lines.push("Console:");
     for (const c of consoleErrors) lines.push(`  - [${c.level}] ${c.message}`);
@@ -48,50 +28,73 @@ export function buildContextDigest(ctx?: CaptureContext): string {
     lines.push("Failed network requests:");
     for (const n of failed) lines.push(`  - ${n.status} ${n.method} ${n.url}`);
   }
+  const steps = (ctx.steps ?? []).slice(-12);
+  if (steps.length) {
+    lines.push("Reproduction steps (observed):");
+    for (const s of steps) lines.push(`  - ${describeStep(s)}`);
+  }
   return lines.join("\n");
+}
+
+/** One-line, human-readable summary of a recorded interaction step. */
+export function describeStep(s: import("../capture.js").ReproStep): string {
+  switch (s.kind) {
+    case "click":
+      return `Click ${s.target}${s.text ? ` ("${s.text}")` : ""}`;
+    case "input":
+      return `Type into ${s.target}${s.value ? ` ("${s.value}")` : ""}`;
+    case "nav":
+      return `Navigate to ${s.url}`;
+    case "key":
+      return `Press ${s.key}`;
+  }
 }
 
 /** Extract a JSON object from a model reply that may be fenced or padded with prose. */
 export function extractJson(text: string): unknown {
   const trimmed = text.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced?.[1] ?? trimmed;
+  const candidate = (fenced?.[1] ?? trimmed).trim();
+  // Fast path: the whole thing parses.
   try {
     return JSON.parse(candidate);
   } catch {
-    const start = candidate.indexOf("{");
-    const end = candidate.lastIndexOf("}");
-    if (start !== -1 && end > start) {
-      return JSON.parse(candidate.slice(start, end + 1));
+    /* fall through */
+  }
+  // Small models often emit the object then trailing junk (or a second object).
+  // Pull out the FIRST balanced {...} object, ignoring braces inside strings.
+  const obj = firstJsonObject(candidate);
+  if (obj) {
+    try {
+      return JSON.parse(obj);
+    } catch {
+      /* fall through */
     }
-    throw new AiError("AI did not return valid JSON");
   }
+  throw new AiError("AI did not return valid JSON");
 }
 
-export interface EnhanceInput {
-  note: string;
-  context?: CaptureContext;
-  settings: AiSettings;
-}
-
-/** Turn a rough note (+ optional captured context) into a structured Ticket. */
-export async function enhanceTicket({ note, context, settings }: EnhanceInput): Promise<Ticket> {
-  if (!note.trim() && !context) throw new AiError("Nothing to enhance — write a note first.");
-
-  const digest = buildContextDigest(context);
-  const user = [
-    SCHEMA_HINT,
-    "",
-    "User note:",
-    note.trim() || "(no note — infer from the captured context)",
-    digest ? `\nCaptured context:\n${digest}` : "",
-  ].join("\n");
-
-  const raw = await callModel(settings, { system: SYSTEM, user, temperature: 0.3 });
-  const json = extractJson(raw);
-  const parsed = TicketSchema.safeParse(json);
-  if (!parsed.success) {
-    throw new AiError(`AI output did not match the ticket schema: ${parsed.error.message}`);
+/** Return the first complete, brace-balanced JSON object substring, or null. */
+function firstJsonObject(s: string): string | null {
+  const start = s.indexOf("{");
+  if (start === -1) return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') {
+      inStr = true;
+    } else if (c === "{") {
+      depth++;
+    } else if (c === "}") {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
   }
-  return parsed.data;
+  return null;
 }

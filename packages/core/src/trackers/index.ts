@@ -7,6 +7,7 @@ import { TrackerError, type SubmitInput, type SubmitResult, type TrackerConfig }
 export * from "./types.js";
 export { composeMarkdown } from "./format.js";
 export { composeAdf } from "./adf.js";
+export { SCREENSHOT_EMBED } from "./media.js";
 
 /** Submit a ticket to whichever tracker the config selects. */
 export function submitTicket(config: TrackerConfig, input: SubmitInput): Promise<SubmitResult> {

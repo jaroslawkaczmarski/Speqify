@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractJson } from "./ai/enhance.js";
+import { describeStep, extractJson } from "./ai/enhance.js";
 import { composeMarkdown } from "./trackers/format.js";
 import { composeAdf } from "./trackers/adf.js";
+import { SCREENSHOT_EMBED } from "./trackers/media.js";
+import { emptyContext } from "./capture.js";
 import { TicketSchema, type Ticket } from "./ticket.js";
 
 const ticket: Ticket = TicketSchema.parse({
@@ -47,5 +49,37 @@ describe("composeAdf", () => {
     expect(types).toContain("heading");
     expect(types).toContain("orderedList");
     expect(types).toContain("bulletList");
+  });
+});
+
+describe("describeStep", () => {
+  it("summarizes each interaction kind", () => {
+    expect(describeStep({ kind: "click", at: 0, target: "button#go", text: "Go" })).toContain("Click button#go");
+    expect(describeStep({ kind: "input", at: 0, target: "#email", value: "a@b.c" })).toContain("Type into #email");
+    expect(describeStep({ kind: "nav", at: 0, url: "https://x.test/" })).toContain("https://x.test/");
+    expect(describeStep({ kind: "key", at: 0, key: "Enter" })).toContain("Enter");
+  });
+});
+
+describe("composeMarkdown with observed steps", () => {
+  it("includes a reproduction-steps timeline from context", () => {
+    const ctx = emptyContext({ url: "https://x.test/", title: "X", userAgent: "UA", viewport: { w: 1, h: 1, dpr: 1 } });
+    ctx.steps = [
+      { kind: "click", at: 1000, target: "button#go", text: "Go" },
+      { kind: "nav", at: 2000, url: "https://x.test/next" },
+    ];
+    const body = composeMarkdown(ticket, ctx);
+    expect(body.startsWith("**Where it happened:** https://x.test/")).toBe(true);
+    expect(body).toContain("Observed steps");
+    expect(body).toContain("Click button#go");
+  });
+});
+
+describe("SCREENSHOT_EMBED", () => {
+  it("marks GitHub as the only tracker without API image embed", () => {
+    expect(SCREENSHOT_EMBED.github).toBe(false);
+    expect(SCREENSHOT_EMBED.gitlab).toBe(true);
+    expect(SCREENSHOT_EMBED.jira).toBe(true);
+    expect(SCREENSHOT_EMBED.linear).toBe(true);
   });
 });

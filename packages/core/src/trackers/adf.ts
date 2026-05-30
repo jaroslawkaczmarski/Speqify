@@ -1,3 +1,4 @@
+import { describeStep } from "../ai/enhance.js";
 import type { CaptureContext } from "../capture.js";
 import type { Ticket } from "../ticket.js";
 
@@ -7,6 +8,7 @@ interface AdfNode {
   attrs?: Record<string, unknown>;
   content?: AdfNode[];
   text?: string;
+  marks?: { type: string; attrs?: Record<string, unknown> }[];
 }
 
 function text(value: string): AdfNode {
@@ -28,6 +30,18 @@ function codeBlock(value: string): AdfNode {
 /** Build a Jira ADF description document from a Ticket (+ optional context). */
 export function composeAdf(ticket: Ticket, context?: CaptureContext): AdfNode {
   const content: AdfNode[] = [];
+
+  // Lead with where it happened — the exact URL of the page being filed about.
+  const url = context?.page.url?.trim();
+  if (url) {
+    content.push({
+      type: "paragraph",
+      content: [
+        { type: "text", text: "Where it happened: " },
+        { type: "text", text: url, marks: [{ type: "link", attrs: { href: url } }] },
+      ],
+    });
+  }
 
   for (const block of ticket.description.split(/\n{2,}/)) {
     const t = block.trim();
@@ -64,5 +78,10 @@ function technicalText(context?: CaptureContext): string {
     lines.push(`HTTP ${n.status} ${n.method} ${n.url}`);
   for (const c of context.console.filter((x) => x.level === "error").slice(-10))
     lines.push(`console.error: ${c.message}`);
+  const steps = context.steps ?? [];
+  if (steps.length) {
+    lines.push("Observed steps:");
+    steps.slice(-12).forEach((s, i) => lines.push(`  ${i + 1}. ${describeStep(s)}`));
+  }
   return lines.join("\n");
 }

@@ -21,8 +21,10 @@
   --sp-border-2:  #D6D3D1;
   --sp-text:      #1C1917;
   --sp-text-2:    #44403C;
-  --sp-text-3:    #78716C;
-  --sp-text-4:    #A8A29E;
+  /* Muted text darkened for AA contrast on the warm light surfaces
+     (was #78716C / #A8A29E — the latter only hit ~2.5:1 on white). */
+  --sp-text-3:    #57534E;
+  --sp-text-4:    #79716B;
 
   /* State */
   --sp-success: #15803D;
@@ -37,10 +39,10 @@
   --sp-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
 
   /* Radius */
-  --sp-r-sm: 6px;
-  --sp-r:    8px;
-  --sp-r-lg: 12px;
-  --sp-r-xl: 16px;
+  --sp-r-sm: 7px;
+  --sp-r:    10px;
+  --sp-r-lg: 14px;
+  --sp-r-xl: 19px;
 
   /* Shadow */
   --sp-shadow-1: 0 1px 2px rgba(28, 25, 23, 0.06);
@@ -61,10 +63,10 @@
 
 /* Buttons */
 .sp-btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  height: 36px; padding: 0 14px;
+  display: inline-flex; align-items: center; gap: 10px;
+  height: 43px; padding: 0 17px;
   border-radius: var(--sp-r);
-  font-size: 13.5px; font-weight: 550;
+  font-size: 16.2px; font-weight: 550;
   border: 1px solid transparent; cursor: pointer;
   transition: background .12s, border-color .12s, transform .06s;
   white-space: nowrap;
@@ -76,8 +78,8 @@
 .sp-btn-secondary:hover { background: var(--sp-surface-2); }
 .sp-btn-ghost { background: transparent; color: var(--sp-text-2); }
 .sp-btn-ghost:hover { background: var(--sp-surface-2); color: var(--sp-text); }
-.sp-btn-sm { height: 28px; padding: 0 10px; font-size: 12.5px; border-radius: 6px; }
-.sp-btn-lg { height: 44px; padding: 0 20px; font-size: 14.5px; border-radius: 10px; }
+.sp-btn-sm { height: 34px; padding: 0 12px; font-size: 15px; border-radius: 7px; }
+.sp-btn-lg { height: 53px; padding: 0 24px; font-size: 17.4px; border-radius: 12px; }
 .sp-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* Inputs */
@@ -86,8 +88,8 @@
   border: 1px solid var(--sp-border-2);
   background: var(--sp-surface);
   border-radius: var(--sp-r);
-  padding: 10px 12px;
-  font-family: inherit; font-size: 13.5px; color: var(--sp-text);
+  padding: 12px 14px;
+  font-family: inherit; font-size: 16.2px; color: var(--sp-text);
   outline: none;
   transition: border-color .12s, box-shadow .12s;
 }
@@ -99,10 +101,10 @@
 
 /* Chip */
 .sp-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 24px; padding: 0 8px; border-radius: 6px;
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 29px; padding: 0 10px; border-radius: 7px;
   background: var(--sp-surface-2); color: var(--sp-text-2);
-  font-size: 12px; font-weight: 500; border: 1px solid var(--sp-border);
+  font-size: 14.4px; font-weight: 500; border: 1px solid var(--sp-border);
 }
 .sp-chip-indigo { background: var(--sp-indigo-50); color: var(--sp-indigo-700); border-color: var(--sp-indigo-100); }
 .sp-chip-success { background: var(--sp-success-bg); color: var(--sp-success); border-color: #BBF7D0; }
@@ -112,10 +114,10 @@
 /* Kbd */
 .sp-kbd {
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: 18px; height: 18px; padding: 0 5px;
-  border-radius: 4px; background: var(--sp-surface);
+  min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: 5px; background: var(--sp-surface);
   border: 1px solid var(--sp-border-2); border-bottom-width: 2px;
-  font-family: var(--sp-mono); font-size: 10.5px; color: var(--sp-text-2);
+  font-family: var(--sp-mono); font-size: 12.6px; color: var(--sp-text-2);
 }
 
 /* Card */
@@ -128,8 +130,8 @@
 
 /* Scroll */
 .sp-scroll { overflow: auto; }
-.sp-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
-.sp-scroll::-webkit-scrollbar-thumb { background: var(--sp-border-2); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+.sp-scroll::-webkit-scrollbar { width: 12px; height: 12px; }
+.sp-scroll::-webkit-scrollbar-thumb { background: var(--sp-border-2); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
 .sp-scroll::-webkit-scrollbar-thumb:hover { background: var(--sp-text-4); background-clip: padding-box; border: 2px solid transparent; }
 
 /* Animations */
@@ -140,6 +142,14 @@
 @keyframes sp-spin {
   to { transform: rotate(360deg); }
 }
+/* Attention ring — a bold ring that expands outward and fades, drawing the eye to a
+   deep-linked control. Runs several cycles so it's hard to miss. */
+@keyframes sp-attn-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.6); }
+  70%  { box-shadow: 0 0 0 12px rgba(79, 70, 229, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
+}
+.sp-attn { animation: sp-attn-ring 1.4s ease-out 6; }
 
 /* hide native arrow in <details> */
 details summary::-webkit-details-marker { display: none; }

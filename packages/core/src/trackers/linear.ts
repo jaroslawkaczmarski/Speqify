@@ -1,4 +1,5 @@
 import { composeMarkdown } from "./format.js";
+import { dataUrlToBlob, recordingName, screenshotName } from "./media.js";
 import type { Ticket } from "../ticket.js";
 import { TrackerError, type LinearConfig, type SubmitInput, type SubmitResult } from "./types.js";
 
@@ -6,6 +7,13 @@ const MUTATION = `mutation Create($input: IssueCreateInput!) {
   issueCreate(input: $input) {
     success
     issue { id identifier url }
+  }
+}`;
+
+const FILE_UPLOAD = `mutation FileUpload($contentType: String!, $filename: String!, $size: Int!) {
+  fileUpload(contentType: $contentType, filename: $filename, size: $size) {
+    success
+    uploadFile { uploadUrl assetUrl headers { key value } }
   }
 }`;
 
@@ -29,11 +37,23 @@ export async function submitLinear(
   config: LinearConfig,
   input: SubmitInput,
 ): Promise<SubmitResult> {
+  let description = composeMarkdown(input.ticket, input.context);
+  const shot = input.context?.screenshot;
+  if (shot) {
+    const blob = dataUrlToBlob(shot);
+    const assetUrl = await uploadFile(config, blob, screenshotName(blob.type)).catch(() => null);
+    if (assetUrl) description += `\n\n## Screenshot\n![screenshot](${assetUrl})`;
+  }
+  if (input.video) {
+    const assetUrl = await uploadFile(config, input.video, recordingName(input.video.type)).catch(() => null);
+    if (assetUrl) description += `\n\n## Screen recording\n[${recordingName(input.video.type)}](${assetUrl})`;
+  }
+
   const variables: { input: Record<string, unknown> } = {
     input: {
       teamId: config.teamId,
       title: input.ticket.title,
-      description: composeMarkdown(input.ticket, input.context),
+      description,
     },
   };
   const priority = priorityValue(input.ticket);
@@ -60,6 +80,34 @@ export async function submitLinear(
     throw new TrackerError("Linear did not create the issue");
   }
   return { url: issue.url, id: issue.id, key: issue.identifier };
+}
+
+/** Request a signed URL from Linear, PUT the file to it, return the public asset URL. */
+async function uploadFile(config: LinearConfig, blob: Blob, filename: string): Promise<string | null> {
+  const res = await fetch("https://api.linear.app/graphql", {
+    method: "POST",
+    headers: { authorization: config.apiKey, "content-type": "application/json" },
+    body: JSON.stringify({
+      query: FILE_UPLOAD,
+      variables: { contentType: blob.type, filename, size: blob.size },
+    }),
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as {
+    data?: {
+      fileUpload?: {
+        success: boolean;
+        uploadFile?: { uploadUrl: string; assetUrl: string; headers: { key: string; value: string }[] };
+      };
+    };
+  };
+  const file = data.data?.fileUpload?.uploadFile;
+  if (!data.data?.fileUpload?.success || !file) return null;
+
+  const headers: Record<string, string> = { "content-type": blob.type };
+  for (const h of file.headers) headers[h.key] = h.value;
+  const put = await fetch(file.uploadUrl, { method: "PUT", headers, body: blob });
+  return put.ok ? file.assetUrl : null;
 }
 
 async function errorText(res: Response): Promise<string> {

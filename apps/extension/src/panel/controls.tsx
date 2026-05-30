@@ -1,16 +1,18 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
-export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+export function Toggle({ on, onChange, disabled }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <button
-      onClick={() => onChange(!on)}
+      onClick={() => !disabled && onChange(!on)}
+      disabled={disabled}
       style={{
-        width: 38,
-        height: 22,
-        borderRadius: 999,
+        width: 46,
+        height: 26,
+        borderRadius: 1199,
         background: on ? "var(--sp-indigo-600)" : "var(--sp-border-2)",
         border: "none",
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.5 : 1,
         position: "relative",
         transition: "background .15s",
         padding: 0,
@@ -22,9 +24,9 @@ export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) =
           position: "absolute",
           top: 2,
           left: on ? 18 : 2,
-          width: 18,
-          height: 18,
-          borderRadius: 999,
+          width: 22,
+          height: 22,
+          borderRadius: 1199,
           background: "#fff",
           boxShadow: "0 1px 2px rgba(0,0,0,0.18)",
           transition: "left .15s",
@@ -53,20 +55,20 @@ export function ToggleChip({
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 6,
-        padding: "6px 10px",
-        borderRadius: 999,
+        gap: 7,
+        padding: "7px 12px",
+        borderRadius: 1199,
         cursor: "pointer",
         background: on ? (subtle ? "var(--sp-surface-2)" : "var(--sp-indigo-50)") : "transparent",
         border: "1px solid",
         borderColor: on ? (subtle ? "var(--sp-border)" : "var(--sp-indigo-200)") : "var(--sp-border)",
         color: on ? (subtle ? "var(--sp-text-2)" : "var(--sp-indigo-700)") : "var(--sp-text-3)",
-        fontSize: 11.5,
+        fontSize: 14,
         fontWeight: 600,
       }}
     >
       {icon} {label}
-      <span style={{ fontSize: 10, opacity: 0.7, marginLeft: 2 }}>{on ? "on" : "off"}</span>
+      <span style={{ fontSize: 12, opacity: 0.7, marginLeft: 2 }}>{on ? "on" : "off"}</span>
     </button>
   );
 }
@@ -124,7 +126,7 @@ export function RecordingWaveform({
       {Array.from({ length: bars }).map((_, i) => (
         <div
           key={i}
-          style={{ width: 2, height: 3, background: color, opacity: 0.3, borderRadius: 1, transition: "height .06s linear" }}
+          style={{ width: 2, height: 4, background: color, opacity: 0.3, borderRadius: 1, transition: "height .06s linear" }}
         />
       ))}
     </div>

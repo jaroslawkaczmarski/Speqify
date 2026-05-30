@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Icons, Trackers } from "@speqify/ui";
-import type { Ticket, TicketType, TrackerKind } from "@speqify/core";
+import { describeStep, SCREENSHOT_EMBED, type ReproStep, type Ticket, type TicketType, type TrackerKind } from "@speqify/core";
 
 const TYPE_OPTS: { id: TicketType; label: string; color: string; bg: string }[] = [
   { id: "bug", label: "Bug", color: "#DC2626", bg: "#FEE2E2" },
@@ -17,18 +17,18 @@ const LOGO: Record<TrackerKind, (p: { size?: number }) => React.JSX.Element> = {
 
 function TypePicker({ value, onChange }: { value: TicketType; onChange: (v: TicketType) => void }) {
   return (
-    <div style={{ display: "flex", gap: 4, background: "var(--sp-surface-2)", borderRadius: 8, padding: 3, border: "1px solid var(--sp-border)" }}>
+    <div style={{ display: "flex", gap: 5, background: "var(--sp-surface-2)", borderRadius: 10, padding: 4, border: "1px solid var(--sp-border)" }}>
       {TYPE_OPTS.map((o) => (
         <button
           key={o.id}
           onClick={() => onChange(o.id)}
           style={{
             flex: 1,
-            padding: "5px 10px",
-            borderRadius: 5,
+            padding: "6px 12px",
+            borderRadius: 6,
             border: "none",
             cursor: "pointer",
-            fontSize: 11.5,
+            fontSize: 14,
             fontWeight: 600,
             background: value === o.id ? o.bg : "transparent",
             color: value === o.id ? o.color : "var(--sp-text-3)",
@@ -43,9 +43,42 @@ function TypePicker({ value, onChange }: { value: TicketType; onChange: (v: Tick
 
 function FieldLabel({ label, hint }: { label: string; hint?: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--sp-text-3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
-      {hint && <div style={{ fontSize: 10.5, color: "var(--sp-text-4)", marginLeft: 8 }}>{hint}</div>}
+    <div style={{ display: "flex", alignItems: "center", marginBottom: 7 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--sp-text-3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+      {hint && <div style={{ fontSize: 13, color: "var(--sp-text-4)", marginLeft: 10 }}>{hint}</div>}
+    </div>
+  );
+}
+
+function StepsTimeline({ steps }: { steps: ReproStep[] }) {
+  const [open, setOpen] = useState(false);
+  const t0 = steps[0]?.at ?? 0;
+  const rel = (at: number) => {
+    const s = Math.max(0, Math.round((at - t0) / 1000));
+    return `${String(Math.floor(s / 60))}:${String(s % 60).padStart(2, "0")}`;
+  };
+  return (
+    <div style={{ marginBottom: 17 }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+      >
+        <Icons.Bolt size={14} style={{ color: "var(--sp-text-3)" }} />
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sp-text-3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          Reproduction steps ({steps.length})
+        </span>
+        <Icons.Arrow size={14} style={{ color: "var(--sp-text-3)", marginLeft: "auto", transform: open ? "rotate(90deg)" : "none" }} />
+      </button>
+      {open && (
+        <ol style={{ margin: "10px 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 5 }}>
+          {steps.map((s, i) => (
+            <li key={i} style={{ display: "flex", gap: 10, fontSize: 14, color: "var(--sp-text-2)" }}>
+              <span style={{ fontFamily: "var(--sp-mono)", fontSize: 13, color: "var(--sp-text-4)", flexShrink: 0, width: 41 }}>{rel(s.at)}</span>
+              <span style={{ minWidth: 0 }}>{describeStep(s)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
@@ -55,20 +88,30 @@ export function Review({
   onChange,
   onSend,
   onBack,
+  onSaveDraft,
   destination,
   attachment,
   recordingUrl,
+  screenshot,
+  steps,
+  onSettings,
 }: {
   draft: Ticket;
   onChange: (t: Ticket) => void;
   onSend: () => void;
   onBack: () => void;
+  onSaveDraft: () => void;
   destination: { kind: TrackerKind; name: string; sub: string } | null;
   attachment?: { label: string; sub: string };
   recordingUrl?: string | null;
+  screenshot?: string;
+  steps?: ReproStep[];
+  onSettings?: (section?: string) => void;
 }) {
   const [labelDraft, setLabelDraft] = useState("");
   const [showVideo, setShowVideo] = useState(false);
+  const [showShot, setShowShot] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const addLabel = () => {
     const v = labelDraft.trim();
     if (v && !draft.labels.includes(v)) onChange({ ...draft, labels: [...draft.labels, v] });
@@ -79,69 +122,85 @@ export function Review({
     <>
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* attachments */}
-      <div style={{ padding: "14px 16px 0" }}>
+      <div style={{ padding: "17px 19px 0", display: "flex", flexDirection: "column", gap: 12 }}>
         {recordingUrl && (
           <button
             onClick={() => setShowVideo(true)}
-            style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: 10, background: "var(--sp-surface-2)", borderRadius: 10, border: "1px solid var(--sp-border)", cursor: "pointer", textAlign: "left", marginBottom: 10 }}
+            style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: 12, background: "var(--sp-surface-2)", borderRadius: 12, border: "1px solid var(--sp-border)", cursor: "pointer", textAlign: "left" }}
           >
-            <div style={{ width: 56, height: 40, borderRadius: 6, background: "#0E0C0A", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 }}>
-              <Icons.Play size={16} />
+            <div style={{ width: 67, height: 48, borderRadius: 7, background: "#0E0C0A", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 }}>
+              <Icons.Play size={19} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 600 }}>Screen recording</div>
-              <div style={{ fontSize: 10.5, color: "var(--sp-text-3)" }}>Click to replay</div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Screen recording</div>
+              <div style={{ fontSize: 13, color: "var(--sp-text-3)" }}>Click to replay</div>
             </div>
-            <Icons.Play size={14} style={{ color: "var(--sp-text-3)" }} />
+            <Icons.Play size={17} style={{ color: "var(--sp-text-3)" }} />
           </button>
         )}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, background: "var(--sp-surface-2)", borderRadius: 10, border: "1px solid var(--sp-border)" }}>
-          <div style={{ width: 56, height: 40, borderRadius: 6, background: "linear-gradient(180deg,#FFFFFF,#F5F5F4)", border: "1px solid var(--sp-border)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-            <svg width="44" height="28" viewBox="0 0 100 60">
-              <path d="M0 40 L20 35 L40 38 L60 18 L80 14 L100 36 L100 60 L0 60 Z" fill="#A5B4FC" opacity="0.4" />
-              <path d="M0 40 L20 35 L40 38 L60 18 L80 14 L100 36" stroke="#4F46E5" strokeWidth="1.5" fill="none" />
-              <circle cx="60" cy="18" r="2.5" fill="#DC2626" />
-            </svg>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, background: "var(--sp-surface-2)", borderRadius: 12, border: "1px solid var(--sp-border)" }}>
+          <button
+            onClick={() => screenshot && setShowShot(true)}
+            disabled={!screenshot}
+            style={{ width: 67, height: 48, borderRadius: 7, padding: 0, border: "1px solid var(--sp-border)", overflow: "hidden", flexShrink: 0, cursor: screenshot ? "pointer" : "default", background: "linear-gradient(180deg,#FFFFFF,#F5F5F4)" }}
+          >
+            {screenshot ? (
+              <img src={screenshot} alt="screenshot" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              <svg width="44" height="28" viewBox="0 0 100 60">
+                <path d="M0 40 L20 35 L40 38 L60 18 L80 14 L100 36 L100 60 L0 60 Z" fill="#A5B4FC" opacity="0.4" />
+                <path d="M0 40 L20 35 L40 38 L60 18 L80 14 L100 36" stroke="#4F46E5" strokeWidth="1.5" fill="none" />
+              </svg>
+            )}
+          </button>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 600 }}>{attachment?.label ?? "Capture attached"}</div>
-            <div style={{ fontSize: 10.5, color: "var(--sp-text-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {attachment?.sub ?? "Screenshot + context"}
+            <div style={{ fontSize: 14, fontWeight: 600 }}>{attachment?.label ?? "Page context"}</div>
+            <div style={{ fontSize: 13, color: "var(--sp-text-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {attachment?.sub ?? "URL, console & network errors"}
             </div>
           </div>
-          <span className="sp-chip sp-chip-success" style={{ height: 20, fontSize: 10.5 }}>
-            <Icons.Check size={9} stroke={2.4} /> Attached
+          <span className="sp-chip sp-chip-success" style={{ height: 24, fontSize: 13 }}>
+            <Icons.Check size={11} stroke={2.4} /> Included
           </span>
         </div>
+        {screenshot && (
+          <div style={{ fontSize: 13, color: "var(--sp-text-3)", marginTop: -5, paddingLeft: 2 }}>
+            {destination && !SCREENSHOT_EMBED[destination.kind]
+              ? "Screenshot is a local preview — GitHub's API can't attach images."
+              : "Screenshot will be attached to the created issue."}
+          </div>
+        )}
       </div>
 
-      <div className="sp-scroll" style={{ flex: 1, overflowY: "auto", padding: "14px 16px 16px" }}>
-        <div style={{ marginBottom: 14 }}>
+      <div className="sp-scroll" style={{ flex: 1, overflowY: "auto", padding: "17px 19px 19px" }}>
+        <div style={{ marginBottom: 17 }}>
           <FieldLabel label="Issue type" />
           <TypePicker value={(["bug", "task", "feature"].includes(draft.type) ? draft.type : "task") as TicketType} onChange={(type) => onChange({ ...draft, type })} />
         </div>
 
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginBottom: 17 }}>
           <FieldLabel label="Title" />
-          <input value={draft.title} onChange={(e) => onChange({ ...draft, title: e.target.value })} className="sp-input" style={{ fontWeight: 600, fontSize: 14 }} />
+          <input value={draft.title} onChange={(e) => onChange({ ...draft, title: e.target.value })} className="sp-input" style={{ fontWeight: 600, fontSize: 17 }} />
         </div>
 
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginBottom: 17 }}>
           <FieldLabel label="Description" hint="AI-drafted" />
-          <textarea value={draft.description} onChange={(e) => onChange({ ...draft, description: e.target.value })} className="sp-textarea" rows={6} style={{ fontSize: 13, lineHeight: 1.5 }} />
+          <textarea value={draft.description} onChange={(e) => onChange({ ...draft, description: e.target.value })} className="sp-textarea" rows={6} style={{ fontSize: 16, lineHeight: 1.5 }} />
         </div>
 
-        <div style={{ marginBottom: 4 }}>
+        {steps && steps.length > 0 && <StepsTimeline steps={steps} />}
+
+        <div style={{ marginBottom: 5 }}>
           <FieldLabel label="Labels" hint="Optional" />
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 7 }}>
             {draft.labels.map((l, i) => (
-              <span key={i} className="sp-chip sp-chip-indigo" style={{ paddingRight: 4 }}>
+              <span key={i} className="sp-chip sp-chip-indigo" style={{ paddingRight: 5 }}>
                 {l}
                 <button
                   onClick={() => onChange({ ...draft, labels: draft.labels.filter((_, j) => j !== i) })}
                   style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", padding: 0, display: "inline-flex" }}
                 >
-                  <Icons.X size={10} />
+                  <Icons.X size={12} />
                 </button>
               </span>
             ))}
@@ -157,41 +216,54 @@ export function Review({
             }}
             placeholder="Add a label, press Enter"
             className="sp-input"
-            style={{ fontSize: 12, height: 32, padding: "0 10px" }}
+            style={{ fontSize: 14, height: 38, padding: "0 12px" }}
           />
         </div>
       </div>
 
       {/* footer */}
-      <div style={{ borderTop: "1px solid var(--sp-border)", padding: "12px 16px", background: "var(--sp-surface)" }}>
-        <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--sp-text-3)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>Destination</div>
+      <div style={{ borderTop: "1px solid var(--sp-border)", padding: "14px 19px", background: "var(--sp-surface)" }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--sp-text-3)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 7 }}>Destination</div>
         {destination ? (
           (() => {
             const L = LOGO[destination.kind];
             return (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, background: "var(--sp-surface-2)", border: "1px solid var(--sp-border)" }}>
-                <L size={18} />
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, background: "var(--sp-surface-2)", border: "1px solid var(--sp-border)" }}>
+                <L size={22} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{destination.name}</div>
-                  <div style={{ fontSize: 11, color: "var(--sp-text-3)" }}>{destination.sub}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600 }}>{destination.name}</div>
+                  <div style={{ fontSize: 13, color: "var(--sp-text-3)" }}>{destination.sub}</div>
                 </div>
-                <span className="sp-chip sp-chip-success" style={{ height: 20, fontSize: 10.5 }}>
-                  <Icons.Check size={10} stroke={2.4} /> From settings
+                <span className="sp-chip sp-chip-success" style={{ height: 24, fontSize: 13 }}>
+                  <Icons.Check size={12} stroke={2.4} /> From settings
                 </span>
               </div>
             );
           })()
         ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, background: "var(--sp-warn-bg)", border: "1px solid #FDE68A", color: "var(--sp-warn)", fontSize: 12 }}>
-            No tracker connected — add one in Settings to create issues.
+          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, background: "var(--sp-warn-bg)", border: "1px solid #FDE68A", color: "var(--sp-warn)", fontSize: 14 }}>
+            <span>
+              No tracker connected — add one in{" "}
+              <button
+                type="button"
+                onClick={() => onSettings?.("integrations")}
+                style={{ background: "none", border: "none", padding: 0, font: "inherit", color: "inherit", fontWeight: 700, textDecoration: "underline", cursor: "pointer" }}
+              >
+                Settings
+              </button>{" "}
+              to create issues.
+            </span>
           </div>
         )}
-        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-          <button onClick={onBack} className="sp-btn sp-btn-secondary" style={{ flex: 1, justifyContent: "center" }}>
-            <Icons.Trash size={12} /> Discard
+        <button onClick={onSend} disabled={!destination || !draft.title.trim()} className="sp-btn sp-btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>
+          <Icons.Send size={16} /> Create issue
+        </button>
+        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+          <button onClick={onBack} className="sp-btn sp-btn-ghost sp-btn-sm" style={{ flex: 1, justifyContent: "center" }}>
+            <Icons.Trash size={14} /> Discard
           </button>
-          <button onClick={onSend} disabled={!destination || !draft.title.trim()} className="sp-btn sp-btn-primary" style={{ flex: 2, justifyContent: "center" }}>
-            <Icons.Send size={13} /> Create issue
+          <button onClick={onSaveDraft} className="sp-btn sp-btn-secondary sp-btn-sm" style={{ flex: 1, justifyContent: "center" }}>
+            <Icons.Edit size={14} /> Save for later
           </button>
         </div>
       </div>
@@ -200,15 +272,39 @@ export function Review({
     {showVideo && recordingUrl && (
       <div
         onClick={() => setShowVideo(false)}
-        style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}
+        style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}
       >
         <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "100%" }}>
-          <video src={recordingUrl} controls autoPlay style={{ width: "100%", maxHeight: "78vh", borderRadius: 10, background: "#000" }} />
-          <div style={{ display: "flex", gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
-            <button onClick={() => window.open(recordingUrl, "_blank")} className="sp-btn sp-btn-secondary sp-btn-sm">
+          <video ref={videoRef} src={recordingUrl} controls autoPlay style={{ width: "100%", maxHeight: "78vh", borderRadius: 12, background: "#000" }} />
+          <div style={{ display: "flex", gap: 10, marginTop: 10, justifyContent: "flex-end" }}>
+            <button
+              onClick={() => {
+                // Pause the inline preview first — otherwise it keeps playing behind
+                // the newly opened tab and two copies play (with audio) at once.
+                videoRef.current?.pause();
+                window.open(recordingUrl, "_blank");
+              }}
+              className="sp-btn sp-btn-secondary sp-btn-sm"
+            >
               Open large ↗
             </button>
             <button onClick={() => setShowVideo(false)} className="sp-btn sp-btn-primary sp-btn-sm">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {showShot && screenshot && (
+      <div
+        onClick={() => setShowShot(false)}
+        style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}
+      >
+        <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "100%" }}>
+          <img src={screenshot} alt="screenshot" style={{ width: "100%", maxHeight: "78vh", objectFit: "contain", borderRadius: 12, background: "#000" }} />
+          <div style={{ display: "flex", gap: 10, marginTop: 10, justifyContent: "flex-end" }}>
+            <button onClick={() => setShowShot(false)} className="sp-btn sp-btn-primary sp-btn-sm">
               Close
             </button>
           </div>

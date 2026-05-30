@@ -36,6 +36,16 @@ export interface ElementInfo {
   rect?: { x: number; y: number; w: number; h: number };
 }
 
+/**
+ * A single observed user interaction, recorded while "Record reproduction steps"
+ * is on. Timestamps are epoch ms; the UI renders them relative to the first step.
+ */
+export type ReproStep =
+  | { kind: "click"; at: number; target: string; text?: string }
+  | { kind: "input"; at: number; target: string; value?: string }
+  | { kind: "nav"; at: number; url: string }
+  | { kind: "key"; at: number; key: string };
+
 export interface PageInfo {
   url: string;
   title: string;
@@ -49,12 +59,14 @@ export interface CaptureContext {
   network: NetworkEntry[];
   errors: JsErrorEntry[];
   element?: ElementInfo;
+  /** Ordered interaction timeline (when "Record reproduction steps" is on). */
+  steps?: ReproStep[];
   /** PNG/JPEG data URL from chrome.tabs.captureVisibleTab */
   screenshot?: string;
 }
 
 export function emptyContext(page: PageInfo): CaptureContext {
-  return { page, console: [], network: [], errors: [] };
+  return { page, console: [], network: [], errors: [], steps: [] };
 }
 
 /** True when there's anything worth showing/sending. */
@@ -64,6 +76,7 @@ export function hasSignal(ctx: CaptureContext | undefined): boolean {
     ctx.console.length ||
       ctx.network.length ||
       ctx.errors.length ||
+      ctx.steps?.length ||
       ctx.element ||
       ctx.screenshot,
   );

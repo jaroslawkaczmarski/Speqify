@@ -49,6 +49,8 @@ export interface SubmitResult {
 export interface SubmitInput {
   ticket: Ticket;
   context?: CaptureContext;
+  /** The recorded screen+voice webm, attached where the tracker supports uploads. */
+  video?: Blob | null;
 }
 
 export class TrackerError extends Error {

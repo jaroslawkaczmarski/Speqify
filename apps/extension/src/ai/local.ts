@@ -1,5 +1,9 @@
 import { browser } from "#imports";
 import type { LocalTier } from "@/store";
+import type { EngineLoadOpts } from "./engine";
+// `?worker` is Vite's canonical worker import — it bundles local-worker.ts (and
+// its transformers/engine deps) into a separate file and gives us a constructor.
+import LocalWorker from "./local-worker?worker";
 
 /** HF model ids (transformers.js / ONNX, WebGPU-capable). */
 export const TIER_MODELS: Record<LocalTier, { stt: string; llm: string }> = {
@@ -15,52 +19,157 @@ export interface LoadProgress {
   total?: number;
 }
 
-// Lazily imported so @huggingface/transformers (and its wasm) only loads on demand.
-type AnyPipeline = (input: unknown, options?: Record<string, unknown>) => Promise<unknown>;
-
-let asr: AnyPipeline | null = null;
-let gen: AnyPipeline | null = null;
+// ── Worker plumbing ───────────────────────────────────────────────────────
+// Inference runs in a Web Worker so it doesn't freeze the panel. If the worker
+// can't be created/used, we transparently fall back to the same engine on the
+// main thread (older behaviour: works, but stalls the UI).
+let worker: Worker | null = null;
+let workerUsable = typeof Worker !== "undefined";
+let usingWorker = false;
 let loadedTier: LocalTier | null = null;
+let asrLoaded = false;
+let genLoaded = false;
+let seq = 0;
 
-export function localLoaded(tier: LocalTier): boolean {
-  return loadedTier === tier && asr !== null && gen !== null;
+type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void; onProgress?: (p: LoadProgress) => void };
+const pending = new Map<number, Pending>();
+
+function spawnWorker(): Worker | null {
+  try {
+    const w = new LocalWorker();
+    w.onmessage = (e: MessageEvent) => {
+      const m = e.data as { id: number; type: string; progress?: LoadProgress; result?: unknown; error?: string };
+      const p = pending.get(m.id);
+      if (!p) return;
+      if (m.type === "progress") {
+        p.onProgress?.(m.progress as LoadProgress);
+        return;
+      }
+      pending.delete(m.id);
+      if (m.type === "result") p.resolve(m.result);
+      else p.reject(new Error(m.error || "worker error"));
+    };
+    return w;
+  } catch {
+    workerUsable = false;
+    return null;
+  }
 }
 
-let configured = false;
+function callWorker<T>(method: string, payload: unknown, onProgress?: (p: LoadProgress) => void, transfer?: Transferable[]): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const id = ++seq;
+    pending.set(id, { resolve: resolve as (v: unknown) => void, reject, onProgress });
+    worker!.postMessage({ id, method, payload }, transfer ?? []);
+  });
+}
 
-export async function loadLocal(tier: LocalTier, onProgress?: (p: LoadProgress) => void): Promise<void> {
-  if (localLoaded(tier)) return;
-  const transformers = await import("@huggingface/transformers");
-  const { pipeline } = transformers;
+const engine = () => import("./engine");
 
-  if (!configured) {
-    // ONNX Runtime Web's wasm/mjs must come from the extension itself — the MV3
-    // CSP (script-src 'self') blocks importing them from the jsDelivr CDN.
-    const env = transformers.env as unknown as {
-      allowRemoteModels: boolean;
-      backends: { onnx: { wasm: { wasmPaths: string; numThreads: number } } };
-    };
-    env.allowRemoteModels = true;
-    const getURL = browser.runtime.getURL as (path: string) => string;
-    env.backends.onnx.wasm.wasmPaths = getURL("/ort/");
-    env.backends.onnx.wasm.numThreads = 1; // no SharedArrayBuffer in extension pages
-    configured = true;
+// On-device model weights (~0.7 GB) are cached by Transformers.js in the Cache
+// API under the extension origin. That storage is "best-effort" by default, so
+// the browser may EVICT it under disk pressure — the model then silently
+// re-downloads on next use even though chrome.storage still flags it installed
+// (that flag lives in durable storage; the weights don't). Requesting persistent
+// storage exempts the origin from eviction, so a once-downloaded model survives
+// reloads and restarts. `persist()` is a Window-only API and loadLocal always
+// runs on the panel/options page (never in the worker), so it's safe here.
+// Idempotent; never blocks model loading if it fails.
+let persistenceRequested = false;
+async function requestPersistentStorage(): Promise<void> {
+  if (persistenceRequested) return;
+  persistenceRequested = true;
+  try {
+    const sm = navigator.storage;
+    if (!sm?.persist || !sm.persisted || (await sm.persisted())) return;
+    if (!(await sm.persist())) {
+      console.warn("[speqify] Persistent storage denied — the on-device model cache may be evicted by the browser.");
+    }
+  } catch {
+    /* best-effort — never block model loading on this */
+  }
+}
+
+export interface LoadFlags {
+  /** Load Whisper (speech → text). */
+  needAsr?: boolean;
+  /** Load Qwen (text → ticket). */
+  needLlm?: boolean;
+}
+
+export function localLoaded(tier: LocalTier, needAsr: boolean, needLlm: boolean): boolean {
+  return loadedTier === tier && (!needAsr || asrLoaded) && (!needLlm || genLoaded);
+}
+
+export async function loadLocal(
+  tier: LocalTier,
+  onProgress?: (p: LoadProgress) => void,
+  flags: LoadFlags = {},
+): Promise<void> {
+  const needAsr = flags.needAsr ?? true;
+  const needLlm = flags.needLlm ?? true;
+  if (localLoaded(tier, needAsr, needLlm)) return;
+  // Make the model cache durable before downloading ~0.7 GB into it (see above),
+  // so it isn't silently evicted between sessions and re-downloaded on next use.
+  await requestPersistentStorage();
+  if (loadedTier !== tier) {
+    asrLoaded = false;
+    genLoaded = false;
+  }
+  const ortPath = (browser.runtime.getURL as (p: string) => string)("/ort/");
+  const payload: EngineLoadOpts = { tier, models: TIER_MODELS[tier], ortPath, needAsr, needLlm };
+
+  if (workerUsable) {
+    if (!worker) worker = spawnWorker();
+    if (worker) {
+      try {
+        await callWorker<boolean>("load", payload, onProgress);
+        usingWorker = true;
+        loadedTier = tier;
+        if (needAsr) asrLoaded = true;
+        if (needLlm) genLoaded = true;
+        return;
+      } catch {
+        // Worker failed (bundling/runtime) — drop it and use the main thread.
+        workerUsable = false;
+        worker?.terminate();
+        worker = null;
+      }
+    }
   }
 
-  const m = TIER_MODELS[tier];
-  const opts = { dtype: "q4", device: "webgpu", progress_callback: onProgress } as Record<string, unknown>;
-  asr = (await pipeline("automatic-speech-recognition", m.stt, opts)) as unknown as AnyPipeline;
-  gen = (await pipeline("text-generation", m.llm, opts)) as unknown as AnyPipeline;
+  usingWorker = false;
+  const eng = await engine();
+  await eng.engineLoad(payload, (p) => onProgress?.(p as LoadProgress));
   loadedTier = tier;
+  if (needAsr) asrLoaded = true;
+  if (needLlm) genLoaded = true;
+}
+
+export async function localTranscribe(pcm: Float32Array, lang?: string): Promise<string> {
+  if (usingWorker && worker) return callWorker<string>("transcribe", { pcm, lang }, undefined, [pcm.buffer]);
+  return (await engine()).engineTranscribe(pcm, lang);
+}
+
+export async function localGenerate(system: string, user: string): Promise<string> {
+  if (usingWorker && worker) return callWorker<string>("generate", { system, user });
+  return (await engine()).engineGenerate(system, user);
 }
 
 export function unloadLocal(): void {
-  asr = null;
-  gen = null;
   loadedTier = null;
+  asrLoaded = false;
+  genLoaded = false;
+  worker?.terminate();
+  worker = null;
+  usingWorker = false;
+  void engine()
+    .then((e) => e.engineUnload())
+    .catch(() => {});
 }
 
-/** Decode an audio Blob into mono Float32 PCM at 16 kHz (Whisper's expected rate). */
+/** Decode an audio Blob into mono Float32 PCM at 16 kHz (Whisper's expected rate).
+ *  Stays on the main thread — AudioContext isn't available inside a worker. */
 export async function blobToPcm16k(blob: Blob): Promise<Float32Array> {
   const arrayBuffer = await blob.arrayBuffer();
   const AC: typeof AudioContext =
@@ -84,31 +193,4 @@ export async function blobToPcm16k(blob: Blob): Promise<Float32Array> {
   source.start();
   const rendered = await offline.startRendering();
   return rendered.getChannelData(0).slice();
-}
-
-export async function localTranscribe(pcm: Float32Array, lang?: string): Promise<string> {
-  if (!asr) throw new Error("Local STT model is not loaded");
-  const out = (await asr(pcm, {
-    language: lang && lang !== "auto" ? lang : undefined,
-    task: "transcribe",
-    chunk_length_s: 30,
-  })) as { text?: string } | { text?: string }[];
-  return (Array.isArray(out) ? out[0]?.text : out.text) ?? "";
-}
-
-export async function localGenerate(system: string, user: string): Promise<string> {
-  if (!gen) throw new Error("Local model is not loaded");
-  const out = (await gen(
-    [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    { max_new_tokens: 512, do_sample: false },
-  )) as { generated_text?: unknown }[];
-  const g = out[0]?.generated_text;
-  if (Array.isArray(g)) {
-    const last = g[g.length - 1] as { content?: string } | undefined;
-    return last?.content ?? "";
-  }
-  return typeof g === "string" ? g : "";
 }

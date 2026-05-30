@@ -8,56 +8,68 @@ const LOGO: Record<TrackerKind, (p: { size?: number }) => React.JSX.Element> = {
   gitlab: Trackers.GitLab,
 };
 
-export function Transcribing({ step, onCancel }: { step: number; onCancel: () => void }) {
-  const steps = [
-    { label: "Transcribing audio", icon: <Icons.Wave size={14} /> },
-    { label: "Detecting issue type", icon: <Icons.Bug size={14} /> },
-    { label: "Drafting the ticket", icon: <Icons.Sparkles size={14} /> },
-    { label: "Suggesting labels", icon: <Icons.Check size={14} /> },
+export type TranscribePhase = "transcribe" | "draft";
+
+export function Transcribing({ phase, onCancel }: { phase: TranscribePhase; onCancel: () => void }) {
+  const steps: { key: TranscribePhase; label: string; sub: string; icon: React.JSX.Element }[] = [
+    { key: "transcribe", label: "Transcribing your voice note", sub: "Speech → text (skipped if you didn't record audio)", icon: <Icons.Wave size={17} /> },
+    { key: "draft", label: "Drafting the ticket", sub: "Title, description, type & labels from the transcript + page context", icon: <Icons.Sparkles size={17} /> },
   ];
+  const idx = steps.findIndex((s) => s.key === phase);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ flex: 1, padding: 20, display: "flex", flexDirection: "column", justifyContent: "center", gap: 18 }}>
+      <div style={{ flex: 1, padding: 24, display: "flex", flexDirection: "column", justifyContent: "center", gap: 22 }}>
         <div style={{ textAlign: "center" }}>
-        <div style={{ display: "inline-flex", position: "relative", width: 56, height: 56, alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
-          <svg width="56" height="56" viewBox="0 0 56 56" style={{ position: "absolute", animation: "sp-spin 1.4s linear infinite" }}>
-            <circle cx="28" cy="28" r="22" fill="none" stroke="#E0E7FF" strokeWidth="3" />
-            <circle cx="28" cy="28" r="22" fill="none" stroke="#4F46E5" strokeWidth="3" strokeLinecap="round" strokeDasharray="35 200" />
-          </svg>
-          <Icons.Sparkles size={20} style={{ color: "var(--sp-indigo-600)" }} />
+          <div style={{ display: "inline-flex", position: "relative", width: 67, height: 67, alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+            <svg width="56" height="56" viewBox="0 0 56 56" style={{ position: "absolute", animation: "sp-spin 1.4s linear infinite" }}>
+              <circle cx="28" cy="28" r="22" fill="none" stroke="#E0E7FF" strokeWidth="3" />
+              <circle cx="28" cy="28" r="22" fill="none" stroke="#4F46E5" strokeWidth="3" strokeLinecap="round" strokeDasharray="35 200" />
+            </svg>
+            <Icons.Sparkles size={24} style={{ color: "var(--sp-indigo-600)" }} />
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 600 }}>{steps[idx]?.label ?? "Speqifying your note…"}</div>
+          <div style={{ fontSize: 15, color: "var(--sp-text-3)", marginTop: 5 }}>
+            Local models can take a little longer on the first run.
+          </div>
         </div>
-        <div style={{ fontSize: 15, fontWeight: 600 }}>Speqifying your note…</div>
-        <div style={{ fontSize: 12.5, color: "var(--sp-text-3)", marginTop: 4 }}>This takes a few seconds.</div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
-        {steps.map((s, i) => {
-          const done = i < step;
-          const active = i === step;
-          return (
-            <div
-              key={i}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "8px 12px",
-                borderRadius: 8,
-                background: active ? "var(--sp-indigo-50)" : "transparent",
-                border: active ? "1px solid var(--sp-indigo-100)" : "1px solid transparent",
-                color: done ? "var(--sp-success)" : active ? "var(--sp-indigo-700)" : "var(--sp-text-4)",
-              }}
-            >
-              <div style={{ width: 18, height: 18, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: done ? "var(--sp-success-bg)" : active ? "var(--sp-indigo-100)" : "var(--sp-surface-2)" }}>
-                {done ? <Icons.Check size={11} stroke={2.4} /> : s.icon}
+        <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 5 }}>
+          {steps.map((s, i) => {
+            const done = i < idx;
+            const active = i === idx;
+            return (
+              <div
+                key={s.key}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  background: active ? "var(--sp-indigo-50)" : "transparent",
+                  border: active ? "1px solid var(--sp-indigo-100)" : "1px solid transparent",
+                  color: done ? "var(--sp-success)" : active ? "var(--sp-indigo-700)" : "var(--sp-text-4)",
+                }}
+              >
+                <div style={{ width: 22, height: 22, borderRadius: 1199, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: done ? "var(--sp-success-bg)" : active ? "var(--sp-indigo-100)" : "var(--sp-surface-2)" }}>
+                  {done ? <Icons.Check size={13} stroke={2.4} /> : s.icon}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: done || active ? 600 : 500 }}>{s.label}</div>
+                  {active && <div style={{ fontSize: 13, color: "var(--sp-text-3)", marginTop: 1 }}>{s.sub}</div>}
+                </div>
+                {active && (
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginLeft: "auto", flexShrink: 0, animation: "sp-spin 0.9s linear infinite" }}>
+                    <circle cx="8" cy="8" r="6" fill="none" stroke="var(--sp-indigo-100)" strokeWidth="2" />
+                    <circle cx="8" cy="8" r="6" fill="none" stroke="var(--sp-indigo-600)" strokeWidth="2" strokeLinecap="round" strokeDasharray="10 40" />
+                  </svg>
+                )}
               </div>
-              <div style={{ fontSize: 12.5, fontWeight: done || active ? 600 : 500 }}>{s.label}</div>
-              {active && <div style={{ marginLeft: "auto", fontSize: 11, color: "var(--sp-indigo-600)" }}>…</div>}
-            </div>
-          );
-        })}
+            );
+          })}
         </div>
       </div>
-      <div style={{ padding: 12, borderTop: "1px solid var(--sp-border)", background: "var(--sp-surface)" }}>
+      <div style={{ padding: 14, borderTop: "1px solid var(--sp-border)", background: "var(--sp-surface)" }}>
         <button className="sp-btn sp-btn-secondary" style={{ width: "100%", justifyContent: "center" }} onClick={onCancel}>
           Cancel
         </button>
@@ -80,22 +92,22 @@ export function Sending({
   const L = LOGO[kind];
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ flex: 1, padding: 24, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
-        <div style={{ position: "relative", width: 56, height: 56 }}>
+      <div style={{ flex: 1, padding: 29, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 17 }}>
+        <div style={{ position: "relative", width: 67, height: 67 }}>
           <svg width="56" height="56" viewBox="0 0 56 56" style={{ animation: "sp-spin 1.2s linear infinite" }}>
             <circle cx="28" cy="28" r="22" fill="none" stroke="#E0E7FF" strokeWidth="3" />
             <circle cx="28" cy="28" r="22" fill="none" stroke="#4F46E5" strokeWidth="3" strokeLinecap="round" strokeDasharray="55 200" />
           </svg>
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <L size={22} />
+            <L size={26} />
           </div>
         </div>
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>Creating issue in {name}…</div>
-          <div style={{ fontSize: 12.5, color: "var(--sp-text-3)", marginTop: 4 }}>{sub}</div>
+          <div style={{ fontSize: 18, fontWeight: 600 }}>Creating issue in {name}…</div>
+          <div style={{ fontSize: 15, color: "var(--sp-text-3)", marginTop: 5 }}>{sub}</div>
         </div>
       </div>
-      <div style={{ padding: 12, borderTop: "1px solid var(--sp-border)", background: "var(--sp-surface)" }}>
+      <div style={{ padding: 14, borderTop: "1px solid var(--sp-border)", background: "var(--sp-surface)" }}>
         <button className="sp-btn sp-btn-secondary" style={{ width: "100%", justifyContent: "center" }} onClick={onCancel}>
           Cancel
         </button>
@@ -124,40 +136,40 @@ export function Success({
   const L = LOGO[kind];
   const open = () => url && window.open(url, "_blank", "noopener");
   return (
-    <div style={{ padding: 20, display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 14 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 999, background: "var(--sp-success-bg)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--sp-success)" }}>
-          <Icons.Check size={28} stroke={2.4} />
+    <div style={{ padding: 24, display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 17 }}>
+        <div style={{ width: 67, height: 67, borderRadius: 1199, background: "var(--sp-success-bg)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--sp-success)" }}>
+          <Icons.Check size={34} stroke={2.4} />
         </div>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>Issue created</div>
-          <div style={{ fontSize: 12.5, color: "var(--sp-text-3)", marginTop: 4 }}>Sent to {name} · {sub}</div>
+          <div style={{ fontSize: 19, fontWeight: 600 }}>Issue created</div>
+          <div style={{ fontSize: 15, color: "var(--sp-text-3)", marginTop: 5 }}>Sent to {name} · {sub}</div>
         </div>
 
         <button
           onClick={open}
-          style={{ width: "100%", padding: 12, background: "var(--sp-surface-2)", borderRadius: 10, border: "1px solid var(--sp-border)", display: "flex", alignItems: "center", gap: 10, textAlign: "left", cursor: url ? "pointer" : "default" }}
+          style={{ width: "100%", padding: 14, background: "var(--sp-surface-2)", borderRadius: 12, border: "1px solid var(--sp-border)", display: "flex", alignItems: "center", gap: 12, textAlign: "left", cursor: url ? "pointer" : "default" }}
         >
-          <L size={20} />
+          <L size={24} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: "var(--sp-text-3)", fontFamily: "var(--sp-mono)" }}>{issueKey}</div>
-            <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
+            <div style={{ fontSize: 13, color: "var(--sp-text-3)", fontFamily: "var(--sp-mono)" }}>{issueKey}</div>
+            <div style={{ fontSize: 16, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
           </div>
-          <Icons.Arrow size={14} style={{ color: "var(--sp-text-3)" }} />
+          <Icons.Arrow size={17} style={{ color: "var(--sp-text-3)" }} />
         </button>
 
-        <div style={{ display: "flex", gap: 8, width: "100%" }}>
+        <div style={{ display: "flex", gap: 10, width: "100%" }}>
           <button onClick={() => url && navigator.clipboard?.writeText(url)} className="sp-btn sp-btn-secondary" style={{ flex: 1, justifyContent: "center" }}>
-            <Icons.Copy size={13} /> Copy link
+            <Icons.Copy size={16} /> Copy link
           </button>
           <button onClick={open} className="sp-btn sp-btn-secondary" style={{ flex: 1, justifyContent: "center" }}>
-            <Icons.Arrow size={13} /> Open
+            <Icons.Arrow size={16} /> Open
           </button>
         </div>
       </div>
 
       <button onClick={onNew} className="sp-btn sp-btn-primary" style={{ width: "100%", justifyContent: "center" }}>
-        <Icons.Plus size={14} /> Capture another
+        <Icons.Plus size={17} /> Capture another
       </button>
     </div>
   );

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import { browser } from "#imports";
-import type { TrackerConfig, TrackerKind } from "@speqify/core";
+import type { TicketType, TrackerConfig, TrackerKind } from "@speqify/core";
 
 const chromeStorage: StateStorage = {
   getItem: async (name) => {
@@ -30,25 +30,30 @@ const chromeStorage: StateStorage = {
 
 export type AiMode = "local" | "remote";
 
-export interface RemoteAi {
+/** One OpenAI-compatible API endpoint. `model` means the transcription model for
+ *  the Voice config (e.g. whisper-1) and the chat model for the AI/draft config. */
+export interface RemoteEndpoint {
   preset: string;
   endpoint: string;
-  /** Drafting model (text → ticket). */
-  model: string;
-  /** Transcription model (audio → text), via {endpoint}/audio/transcriptions. Empty = no remote STT. */
-  sttModel: string;
   apiKey: string;
+  model: string;
 }
 
 export type LocalTier = "light" | "medium";
 
 export interface AiConfig {
-  mode: AiMode;
-  /** Which local model bundle the user picked. Nothing is downloaded until they opt in. */
+  /** Voice — speech → text (transcription). */
+  voiceMode: AiMode;
+  voiceRemote: RemoteEndpoint;
+  /** AI — text → ticket (drafting). Local prefers Chrome's Gemini Nano, else Qwen. */
+  draftMode: AiMode;
+  draftRemote: RemoteEndpoint;
+  /** Quality tier for whichever models run locally. Nothing downloads until opt-in. */
   localTier: LocalTier;
-  /** True once the chosen tier has been downloaded into the browser. Default: false. */
-  localDownloaded: boolean;
-  remote: RemoteAi;
+  /** True once the tier's Whisper (speech) model is downloaded. */
+  speechDownloaded: boolean;
+  /** True once the tier's Qwen (drafting) model is downloaded. Irrelevant when Nano drafts. */
+  llmDownloaded: boolean;
   /** Behaviour */
   detectedLang: string;
   translateTo: string;
@@ -63,6 +68,18 @@ export interface CaptureDefaults {
   quality: "720" | "1080" | "1440";
 }
 
+/** Per-type description skeletons the model fills from the spoken note. */
+export type TemplateMap = Record<TicketType, string>;
+
+export function defaultTemplates(): TemplateMap {
+  return {
+    bug: "## What happens\n## Expected\n## Steps to reproduce\n## Environment",
+    feature: "## Problem / motivation\n## Proposed solution\n## Acceptance criteria",
+    task: "## Outcome\n## Context\n## Notes",
+    improvement: "## Current behaviour\n## Desired improvement\n## Why it matters",
+  };
+}
+
 interface SettingsState {
   hydrated: boolean;
   onboarded: boolean;
@@ -70,27 +87,76 @@ interface SettingsState {
   tracker: TrackerConfig | null;
   ai: AiConfig;
   capture: CaptureDefaults;
+  templates: TemplateMap;
   setOnboarded: (v: boolean) => void;
   setTracker: (t: TrackerConfig | null) => void;
   setAi: (patch: Partial<AiConfig>) => void;
   setCapture: (patch: Partial<CaptureDefaults>) => void;
+  setTemplate: (type: TicketType, body: string) => void;
+  resetTemplates: () => void;
 }
 
 export function defaultAiConfig(): AiConfig {
   return {
-    mode: "local",
+    voiceMode: "local",
+    voiceRemote: { preset: "openai", endpoint: "https://api.openai.com/v1", apiKey: "", model: "whisper-1" },
+    draftMode: "local",
+    draftRemote: { preset: "openrouter", endpoint: "https://openrouter.ai/api/v1", apiKey: "", model: "anthropic/claude-3.5-haiku" },
     localTier: "light",
-    localDownloaded: false,
-    remote: {
-      preset: "openrouter",
-      endpoint: "https://openrouter.ai/api/v1",
-      model: "anthropic/claude-3.5-haiku",
-      sttModel: "",
-      apiKey: "",
-    },
+    speechDownloaded: false,
+    llmDownloaded: false,
     detectedLang: "auto",
     translateTo: "en",
     autoLabels: true,
+  };
+}
+
+/** Migrate a persisted blob from the old single-mode AiConfig to the split
+ *  Voice/AI shape. Safe to run on already-new state (it no-ops then). */
+function migrateAi(ai: Record<string, unknown> | undefined): AiConfig {
+  const base = defaultAiConfig();
+  if (!ai) return base;
+  // Already the split shape — backfill any missing (nested) fields against defaults
+  // so a partial/intermediate blob can't leave an endpoint undefined at runtime.
+  if (ai.voiceMode !== undefined && ai.draftMode !== undefined) {
+    const a = ai as Partial<AiConfig>;
+    return {
+      ...base,
+      ...a,
+      voiceRemote: { ...base.voiceRemote, ...(a.voiceRemote ?? {}) },
+      draftRemote: { ...base.draftRemote, ...(a.draftRemote ?? {}) },
+    };
+  }
+  const oldRemote = (ai.remote ?? {}) as Record<string, string>;
+  const downloaded = ai.localDownloaded === true;
+  // Keep drafting on the old mode, but only keep voice on "remote" if it had a
+  // transcription model — otherwise use local Whisper so transcription still works.
+  const draftMode: AiMode = ai.mode === "remote" ? "remote" : "local";
+  const voiceMode: AiMode = draftMode === "remote" && (oldRemote.sttModel ?? "").trim() ? "remote" : "local";
+  return {
+    ...base,
+    voiceMode,
+    voiceRemote: {
+      ...base.voiceRemote,
+      // old endpoint/key carried over; transcription model came from sttModel.
+      endpoint: oldRemote.endpoint || base.voiceRemote.endpoint,
+      apiKey: oldRemote.apiKey ?? "",
+      model: oldRemote.sttModel || base.voiceRemote.model,
+    },
+    draftMode,
+    draftRemote: {
+      ...base.draftRemote,
+      preset: oldRemote.preset || base.draftRemote.preset,
+      endpoint: oldRemote.endpoint || base.draftRemote.endpoint,
+      apiKey: oldRemote.apiKey ?? "",
+      model: oldRemote.model || base.draftRemote.model,
+    },
+    localTier: ai.localTier === "medium" ? "medium" : "light",
+    speechDownloaded: downloaded,
+    llmDownloaded: downloaded,
+    detectedLang: typeof ai.detectedLang === "string" ? ai.detectedLang : base.detectedLang,
+    translateTo: typeof ai.translateTo === "string" ? ai.translateTo : base.translateTo,
+    autoLabels: ai.autoLabels !== false,
   };
 }
 
@@ -102,15 +168,26 @@ export const useSettings = create<SettingsState>()(
       tracker: null,
       ai: defaultAiConfig(),
       capture: { source: "area", mic: true, cursor: true, repro: true, quality: "1080" },
+      templates: defaultTemplates(),
       setOnboarded: (onboarded) => set({ onboarded }),
       setTracker: (tracker) => set({ tracker }),
       setAi: (patch) => set((s) => ({ ai: { ...s.ai, ...patch } })),
       setCapture: (patch) => set((s) => ({ capture: { ...s.capture, ...patch } })),
+      setTemplate: (type, body) => set((s) => ({ templates: { ...s.templates, [type]: body } })),
+      resetTemplates: () => set({ templates: defaultTemplates() }),
     }),
     {
       name: "speqify-settings-v2",
       storage: createJSONStorage(() => chromeStorage),
-      partialize: ({ onboarded, tracker, ai, capture }) => ({ onboarded, tracker, ai, capture }),
+      partialize: ({ onboarded, tracker, ai, capture, templates }) => ({ onboarded, tracker, ai, capture, templates }),
+      // New keys (e.g. templates) added after a user first persisted v2 won't be in
+      // their stored blob; merge defaults underneath so they're never undefined.
+      // `ai` is run through migrateAi so an older single-mode blob is reshaped into
+      // the split Voice/AI config rather than overwriting the new defaults wholesale.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<SettingsState> & { ai?: Record<string, unknown> };
+        return { ...current, ...p, ai: migrateAi(p.ai) };
+      },
       onRehydrateStorage: () => () => useSettings.setState({ hydrated: true }),
     },
   ),
