@@ -23,7 +23,9 @@
     "format:check": "prettier --check .",
     "ext:dev": "pnpm --filter @speqify/extension dev",
     "ext:build": "pnpm --filter @speqify/extension build",
+    "ext:build:firefox": "pnpm --filter @speqify/extension build:firefox",
     "ext:zip": "pnpm --filter @speqify/extension zip",
+    "ext:zip:firefox": "pnpm --filter @speqify/extension zip:firefox",
     "landing:dev": "pnpm --filter @speqify/landing dev"
   },
   "devDependencies": {

@@ -10,7 +10,9 @@
     "dev": "pnpm assets && wxt",
     "dev:firefox": "pnpm assets && wxt -b firefox",
     "build": "pnpm assets && wxt build",
+    "build:firefox": "pnpm assets && wxt build -b firefox",
     "zip": "pnpm assets && wxt zip",
+    "zip:firefox": "pnpm assets && wxt zip -b firefox",
     "postinstall": "wxt prepare",
     "typecheck": "wxt prepare && tsc --noEmit",
     "lint": "eslint ."
