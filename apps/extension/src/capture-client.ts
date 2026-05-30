@@ -15,6 +15,38 @@ async function activeTab() {
   return tab;
 }
 
+/** Inject our content scripts into a tab that predates the extension load. */
+async function injectContentScripts(tabId: number): Promise<void> {
+  const scripts = (browser.runtime.getManifest().content_scripts ?? []) as Array<{
+    js?: string[];
+    world?: "MAIN" | "ISOLATED";
+  }>;
+  for (const cs of scripts) {
+    if (!cs.js?.length) continue;
+    try {
+      await browser.scripting.executeScript({
+        target: { tabId },
+        files: cs.js,
+        world: cs.world === "MAIN" ? "MAIN" : "ISOLATED",
+      } as Parameters<typeof browser.scripting.executeScript>[0]);
+    } catch {
+      /* page forbids injection (chrome://, Web Store, PDF viewer, …) */
+    }
+  }
+}
+
+/** Send a message to a tab; if no content script is listening yet (the tab was
+ *  open before the extension loaded/reloaded), inject on demand and retry once. */
+async function sendToTab<T>(tabId: number, msg: ContentRequest): Promise<T> {
+  try {
+    return (await browser.tabs.sendMessage(tabId, msg)) as T;
+  } catch (e) {
+    if (!/Receiving end does not exist|Could not establish connection/i.test(String(e))) throw e;
+    await injectContentScripts(tabId);
+    return (await browser.tabs.sendMessage(tabId, msg)) as T;
+  }
+}
+
 /** Collect console/network/error/step context from the active tab's content script. */
 export async function getContext(): Promise<CaptureContext> {
   const tab = await activeTab();
@@ -26,9 +58,9 @@ export async function getContext(): Promise<CaptureContext> {
   });
   if (!tab?.id) return fallback;
   try {
-    const res = (await browser.tabs.sendMessage(tab.id, {
+    const res = await sendToTab<ContextResponse>(tab.id, {
       type: "SPEQIFY_GET_CONTEXT",
-    } satisfies ContentRequest)) as ContextResponse;
+    } satisfies ContentRequest);
     return {
       page: res.page,
       console: res.console,
@@ -46,7 +78,7 @@ export async function startCapture(trackSteps: boolean): Promise<void> {
   const tab = await activeTab();
   if (!tab?.id) return;
   try {
-    await browser.tabs.sendMessage(tab.id, { type: "SPEQIFY_START_CAPTURE", trackSteps } satisfies ContentRequest);
+    await sendToTab(tab.id, { type: "SPEQIFY_START_CAPTURE", trackSteps } satisfies ContentRequest);
   } catch {
     /* no content script on this page */
   }
@@ -56,7 +88,7 @@ export async function endCapture(): Promise<void> {
   const tab = await activeTab();
   if (!tab?.id) return;
   try {
-    await browser.tabs.sendMessage(tab.id, { type: "SPEQIFY_END_CAPTURE" } satisfies ContentRequest);
+    await sendToTab(tab.id, { type: "SPEQIFY_END_CAPTURE" } satisfies ContentRequest);
   } catch {
     /* ignore */
   }
@@ -76,9 +108,9 @@ export async function pickElement(): Promise<PickResponse | null> {
   const tab = await activeTab();
   if (!tab?.id) return null;
   try {
-    return (await browser.tabs.sendMessage(tab.id, {
+    return await sendToTab<PickResponse>(tab.id, {
       type: "SPEQIFY_PICK_ELEMENT",
-    } satisfies ContentRequest)) as PickResponse;
+    } satisfies ContentRequest);
   } catch {
     return null;
   }
@@ -89,9 +121,9 @@ export async function pickArea(): Promise<AreaResponse | null> {
   const tab = await activeTab();
   if (!tab?.id) return null;
   try {
-    return (await browser.tabs.sendMessage(tab.id, {
+    return await sendToTab<AreaResponse>(tab.id, {
       type: "SPEQIFY_PICK_AREA",
-    } satisfies ContentRequest)) as AreaResponse;
+    } satisfies ContentRequest);
   } catch {
     return null;
   }

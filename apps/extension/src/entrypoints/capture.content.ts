@@ -166,6 +166,13 @@ function toElementInfo(el: Element): ElementInfo {
 
 function pickElement(): Promise<ElementInfo | null> {
   return new Promise((resolve) => {
+    // A transparent veil on top swallows the click so the page can't react
+    // (navigate, open a menu, submit) mid-pick. We read the element *under* the
+    // veil via elementsFromPoint. (Earlier versions used pointer-events:none
+    // overlays and only blocked "click", so page mousedown/links still fired —
+    // that's why element-pick "didn't work" on interactive pages.)
+    const veil = document.createElement("div");
+    veil.style.cssText = "position:fixed;inset:0;z-index:2147483646;cursor:crosshair;background:transparent;";
     const box = document.createElement("div");
     box.style.cssText =
       "position:fixed;z-index:2147483647;pointer-events:none;border:2px solid #6d5efc;background:rgba(109,94,252,.15);border-radius:4px;transition:all .04s ease;";
@@ -173,12 +180,18 @@ function pickElement(): Promise<ElementInfo | null> {
     hint.textContent = "Click an element · Esc to cancel";
     hint.style.cssText =
       "position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#15131f;color:#fff;font:600 12px/1.4 system-ui,sans-serif;padding:6px 12px;border-radius:999px;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.4);";
-    document.documentElement.append(box, hint);
+    document.documentElement.append(veil, box, hint);
+    const ours = new Set<Element>([veil, box, hint]);
+
+    // pointer-events:none elements (box/hint) are skipped by elementsFromPoint;
+    // the veil itself is auto, so filter it out to get the real target underneath.
+    const elementUnder = (x: number, y: number): Element | null =>
+      document.elementsFromPoint(x, y).find((el) => !ours.has(el)) ?? null;
 
     let current: Element | null = null;
     const onMove = (e: MouseEvent) => {
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      if (!el || el === box || el === hint) return;
+      const el = elementUnder(e.clientX, e.clientY);
+      if (!el) return;
       current = el;
       const r = el.getBoundingClientRect();
       box.style.left = `${r.left}px`;
@@ -186,28 +199,37 @@ function pickElement(): Promise<ElementInfo | null> {
       box.style.width = `${r.width}px`;
       box.style.height = `${r.height}px`;
     };
+    const swallow = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const swallowed = ["mousedown", "mouseup", "pointerdown", "pointerup", "contextmenu"];
     const cleanup = () => {
-      document.removeEventListener("mousemove", onMove, true);
-      document.removeEventListener("click", onClick, true);
+      veil.removeEventListener("mousemove", onMove);
+      veil.removeEventListener("click", onClick, true);
+      for (const t of swallowed) veil.removeEventListener(t, swallow, true);
       document.removeEventListener("keydown", onKey, true);
+      veil.remove();
       box.remove();
       hint.remove();
     };
     const onClick = (e: MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const el = current;
+      const el = current ?? elementUnder(e.clientX, e.clientY);
       cleanup();
       resolve(el ? toElementInfo(el) : null);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        e.preventDefault();
         cleanup();
         resolve(null);
       }
     };
-    document.addEventListener("mousemove", onMove, true);
-    document.addEventListener("click", onClick, true);
+    veil.addEventListener("mousemove", onMove);
+    veil.addEventListener("click", onClick, true);
+    for (const t of swallowed) veil.addEventListener(t, swallow, true);
     document.addEventListener("keydown", onKey, true);
   });
 }
