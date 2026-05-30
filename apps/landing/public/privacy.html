@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Speqify — Privacy Policy</title>
+    <meta
+      name="description"
+      content="Speqify has no backend, no accounts, and no telemetry. Your data stays in your browser and is sent only to the services you configure yourself."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      :root {
+        --indigo: #4f46e5;
+        --text: #1c1917;
+        --text-2: #44403c;
+        --text-3: #78716c;
+        --bg: #fafaf9;
+        --border: #e7e5e4;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        line-height: 1.6;
+      }
+      main { max-width: 760px; margin: 0 auto; padding: clamp(32px, 6vw, 72px) clamp(20px, 5vw, 32px); }
+      a { color: var(--indigo); }
+      h1 { font-size: clamp(28px, 5vw, 40px); letter-spacing: -0.02em; margin: 0 0 4px; }
+      h2 { font-size: clamp(20px, 3vw, 24px); letter-spacing: -0.01em; margin: 40px 0 8px; }
+      .updated { color: var(--text-3); font-size: 14px; margin: 0 0 28px; }
+      p, li { color: var(--text-2); }
+      ul { padding-left: 22px; }
+      li { margin: 6px 0; }
+      .lead { font-size: 18px; color: var(--text); }
+      .tldr { background: #eef2ff; border: 1px solid #e0e7ff; border-radius: 14px; padding: 18px 22px; }
+      .tldr ul { margin: 0; }
+      footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--text-3); font-size: 14px; }
+      code { font-family: ui-monospace, "SF Mono", Menlo, monospace; background: #f5f5f4; padding: 1px 5px; border-radius: 5px; font-size: 0.9em; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated: 2026-05-30</p>
+
+      <p class="lead">
+        Speqify is a browser extension that turns a note — typed or spoken — into a
+        structured issue and submits it to your issue tracker.
+        <strong>Speqify has no backend and no user accounts.</strong> We do not operate any
+        servers, we do not collect analytics or telemetry, and
+        <strong>none of your data is ever sent to us</strong> — there is nothing to send it to.
+      </p>
+
+      <div class="tldr">
+        <strong>The short version</strong>
+        <ul>
+          <li>No Speqify servers, no accounts, no telemetry by default.</li>
+          <li>Your settings, tracker tokens, and AI keys are stored <strong>only in your browser</strong>.</li>
+          <li>The only data that leaves your browser goes <strong>directly to services you configure yourself</strong> — your issue tracker, and (optionally) an AI endpoint you choose.</li>
+          <li>The microphone is used <strong>only</strong> when you turn dictation on; audio is transcribed and then discarded.</li>
+        </ul>
+      </div>
+
+      <h2>What Speqify stores, and where</h2>
+      <p>All of the following is stored locally on your device and never transmitted to us:</p>
+      <ul>
+        <li><strong>Settings</strong> (selected tracker, AI configuration, capture defaults, editable ticket templates) — in the browser's extension storage (<code>chrome.storage.local</code>).</li>
+        <li><strong>Tracker tokens and AI API keys</strong> that you enter — in the browser's extension storage. They are used only to authenticate the requests you trigger.</li>
+        <li><strong>Drafts</strong>, including any screen recording you pause — in the browser's IndexedDB. These stay on your device until you submit or delete the draft.</li>
+      </ul>
+      <p>Uninstalling the extension removes this local data.</p>
+
+      <h2>What Speqify accesses</h2>
+      <ul>
+        <li><strong>The page you are on</strong>, when you start a capture: the URL and title, an optional screenshot or screen recording, console and network errors, and a reproduction-step timeline (clicks, inputs, scrolls, navigation). This is assembled into the issue you are creating and is shown to you before anything is sent.</li>
+        <li><strong>The microphone</strong>, only if you enable dictation. Audio is transcribed (on-device by default) and then discarded — Speqify does not store or upload raw audio.</li>
+      </ul>
+
+      <h2>The only data that leaves your browser</h2>
+      <p>Speqify sends data only to the third-party services <strong>you</strong> explicitly configure, and only when you act:</p>
+      <ul>
+        <li><strong>Your issue tracker</strong> — Jira, GitHub, Linear, or GitLab (including self-hosted instances at a domain you provide). When you click to create an issue, Speqify sends the ticket content (and, where supported, the screenshot/recording) to that tracker's API using the token you provided. Your use of that tracker is governed by <strong>its</strong> privacy policy.</li>
+        <li><strong>An AI endpoint you choose (optional).</strong> By default, transcription and drafting run <strong>entirely on your device</strong> (Whisper + a small Qwen model via WebGPU/WASM). If you instead configure a remote OpenAI-compatible endpoint (e.g. OpenAI, OpenRouter, Ollama), the text/audio needed for drafting or transcription is sent to <strong>that</strong> endpoint with your key. Captured context is redacted (query strings stripped, common token shapes scrubbed) before it is sent or embedded.</li>
+      </ul>
+      <p>On-device AI models are downloaded from a public model host (Hugging Face) only after you opt into a model tier in Settings. Speqify is not a party to any of these transfers beyond initiating the request you asked for in your browser; it receives no copy of the data.</p>
+
+      <h2>Permissions</h2>
+      <ul>
+        <li><strong>Host access (<code>&lt;all_urls&gt;</code>)</strong> lets the capture script run on any page you choose to file an issue from, and lets Speqify call your tracker/AI APIs directly (browsers otherwise block these cross-origin calls via CORS). It is <strong>not</strong> used to monitor your browsing — no browsing history or page data is collected or transmitted to us.</li>
+        <li><strong>Side panel / tabs / scripting / storage</strong> are used to show the Speqify UI, read the current tab for context, inject the on-demand capture script, and persist your settings locally.</li>
+      </ul>
+
+      <h2>Children</h2>
+      <p>Speqify is a developer tool and is not directed to children under 13.</p>
+
+      <h2>Changes</h2>
+      <p>If this policy changes, the "Last updated" date above will change. Material changes will be noted in the extension's changelog.</p>
+
+      <h2>Contact</h2>
+      <p>Questions or requests: open an issue at <a href="https://github.com/jaroslawkaczmarski/Speqify/issues">github.com/jaroslawkaczmarski/Speqify/issues</a>.</p>
+
+      <footer>
+        Speqify is open source under the MIT license — you can read exactly what it does in the source code.
+      </footer>
+    </main>
+  </body>
+</html>

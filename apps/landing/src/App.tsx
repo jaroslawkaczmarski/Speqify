@@ -666,6 +666,7 @@ function Footer() {
           { label: "Integrations", href: "#integrations" },
           { label: "Open source", href: "#open-source" },
           { label: "FAQ", href: "#faq" },
+          { label: "Privacy", href: "/privacy.html" },
           { label: "GitHub", href: GITHUB_URL },
         ].map((l) => (
           <a
