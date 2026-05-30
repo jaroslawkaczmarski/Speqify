@@ -47,6 +47,8 @@ export function describeStep(s: import("../capture.js").ReproStep): string {
       return `Navigate to ${s.url}`;
     case "key":
       return `Press ${s.key}`;
+    case "scroll":
+      return `Scroll to ${s.y}px`;
   }
 }
 

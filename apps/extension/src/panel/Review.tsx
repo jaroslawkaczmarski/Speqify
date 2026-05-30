@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import { Icons, Trackers } from "@speqify/ui";
-import { describeStep, SCREENSHOT_EMBED, type ReproStep, type Ticket, type TicketType, type TrackerKind } from "@speqify/core";
+import { describeStep, SCREENSHOT_EMBED, type CaptureContext, type Ticket, type TicketType, type TrackerKind } from "@speqify/core";
+
+export type IncludeFlags = { errors: boolean; network: boolean; steps: boolean };
 
 const TYPE_OPTS: { id: TicketType; label: string; color: string; bg: string }[] = [
   { id: "bug", label: "Bug", color: "#DC2626", bg: "#FEE2E2" },
@@ -50,34 +52,74 @@ function FieldLabel({ label, hint }: { label: string; hint?: string }) {
   );
 }
 
-function StepsTimeline({ steps }: { steps: ReproStep[] }) {
+/** Captured technical context (console/JS errors, failed requests, repro steps),
+ *  shown read-only with per-group include toggles. The issue body already embeds
+ *  these via composeMarkdown/composeAdf; unchecking filters a group out before submit. */
+function CapturedContext({ ctx, include, onInclude }: { ctx: CaptureContext; include: IncludeFlags; onInclude: (i: IncludeFlags) => void }) {
   const [open, setOpen] = useState(false);
+  const consoleErrs = ctx.console.filter((c) => c.level === "error" || c.level === "warn");
+  const failed = ctx.network.filter((n) => !n.ok);
+  const steps = ctx.steps ?? [];
+  const errCount = consoleErrs.length + ctx.errors.length;
+  if (!errCount && !failed.length && !steps.length) return null;
   const t0 = steps[0]?.at ?? 0;
   const rel = (at: number) => {
     const s = Math.max(0, Math.round((at - t0) / 1000));
-    return `${String(Math.floor(s / 60))}:${String(s % 60).padStart(2, "0")}`;
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   };
+  const chk = (on: boolean, set: (v: boolean) => void, label: string, n: number) => (
+    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer", padding: "3px 0" }}>
+      <input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} />
+      <span>{label} <span style={{ color: "var(--sp-text-4)" }}>({n})</span></span>
+    </label>
+  );
   return (
-    <div style={{ marginBottom: 17 }}>
+    <div style={{ marginBottom: 17, border: "1px solid var(--sp-border)", borderRadius: 10, padding: "10px 12px", background: "var(--sp-surface)" }}>
       <button
         onClick={() => setOpen((o) => !o)}
         style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", background: "none", border: "none", cursor: "pointer", padding: 0 }}
       >
-        <Icons.Bolt size={14} style={{ color: "var(--sp-text-3)" }} />
-        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sp-text-3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-          Reproduction steps ({steps.length})
-        </span>
+        <Icons.Bug size={14} style={{ color: "var(--sp-text-3)" }} />
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sp-text-3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Captured context</span>
         <Icons.Arrow size={14} style={{ color: "var(--sp-text-3)", marginLeft: "auto", transform: open ? "rotate(90deg)" : "none" }} />
       </button>
+      <div style={{ marginTop: 6 }}>
+        {errCount > 0 && chk(include.errors, (v) => onInclude({ ...include, errors: v }), "Console & JS errors", errCount)}
+        {failed.length > 0 && chk(include.network, (v) => onInclude({ ...include, network: v }), "Failed requests", failed.length)}
+        {steps.length > 0 && chk(include.steps, (v) => onInclude({ ...include, steps: v }), "Reproduction steps", steps.length)}
+      </div>
       {open && (
-        <ol style={{ margin: "10px 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 5 }}>
-          {steps.map((s, i) => (
-            <li key={i} style={{ display: "flex", gap: 10, fontSize: 14, color: "var(--sp-text-2)" }}>
-              <span style={{ fontFamily: "var(--sp-mono)", fontSize: 13, color: "var(--sp-text-4)", flexShrink: 0, width: 41 }}>{rel(s.at)}</span>
-              <span style={{ minWidth: 0 }}>{describeStep(s)}</span>
-            </li>
-          ))}
-        </ol>
+        <div style={{ marginTop: 8, fontFamily: "var(--sp-mono)", fontSize: 12.5, lineHeight: 1.5, color: "var(--sp-text-2)", display: "flex", flexDirection: "column", gap: 8, maxHeight: 220, overflowY: "auto" }}>
+          {include.errors && errCount > 0 && (
+            <div>
+              {ctx.errors.slice(-8).map((e, i) => (
+                <div key={`je${i}`} style={{ color: "var(--sp-danger)" }}>⚠ {e.message}</div>
+              ))}
+              {consoleErrs.slice(-8).map((c, i) => (
+                <div key={`c${i}`} style={{ color: c.level === "error" ? "var(--sp-danger)" : "var(--sp-warn)" }}>[{c.level}] {c.message}</div>
+              ))}
+            </div>
+          )}
+          {include.network && failed.length > 0 && (
+            <div>
+              {failed.slice(-8).map((n, i) => (
+                <div key={`n${i}`}>
+                  {n.status} {n.method} {n.url}
+                </div>
+              ))}
+            </div>
+          )}
+          {include.steps && steps.length > 0 && (
+            <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 3 }}>
+              {steps.map((s, i) => (
+                <li key={`s${i}`} style={{ display: "flex", gap: 8 }}>
+                  <span style={{ color: "var(--sp-text-4)", width: 38, flexShrink: 0 }}>{rel(s.at)}</span>
+                  <span>{describeStep(s)}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
       )}
     </div>
   );
@@ -92,8 +134,9 @@ export function Review({
   destination,
   attachment,
   recordingUrl,
-  screenshot,
-  steps,
+  context,
+  include,
+  onInclude,
   onSettings,
 }: {
   draft: Ticket;
@@ -104,10 +147,12 @@ export function Review({
   destination: { kind: TrackerKind; name: string; sub: string } | null;
   attachment?: { label: string; sub: string };
   recordingUrl?: string | null;
-  screenshot?: string;
-  steps?: ReproStep[];
+  context?: CaptureContext;
+  include: IncludeFlags;
+  onInclude: (i: IncludeFlags) => void;
   onSettings?: (section?: string) => void;
 }) {
+  const screenshot = context?.screenshot;
   const [labelDraft, setLabelDraft] = useState("");
   const [showVideo, setShowVideo] = useState(false);
   const [showShot, setShowShot] = useState(false);
@@ -188,7 +233,7 @@ export function Review({
           <textarea value={draft.description} onChange={(e) => onChange({ ...draft, description: e.target.value })} className="sp-textarea" rows={6} style={{ fontSize: 16, lineHeight: 1.5 }} />
         </div>
 
-        {steps && steps.length > 0 && <StepsTimeline steps={steps} />}
+        {context && <CapturedContext ctx={context} include={include} onInclude={onInclude} />}
 
         <div style={{ marginBottom: 5 }}>
           <FieldLabel label="Labels" hint="Optional" />

@@ -94,6 +94,7 @@ export function App() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<DraftRecord[]>([]);
   const [armedCrop, setArmedCrop] = useState<CropRegion | null>(null);
+  const [include, setInclude] = useState({ errors: true, network: true, steps: true });
   const sendCancelled = useRef(false);
   const flowCancelled = useRef(false);
   const recorderRef = useRef<ActiveRecorder | null>(null);
@@ -339,7 +340,17 @@ export function App() {
     setState("sending");
     setError(null);
     try {
-      const res = await submitTicket(tracker, { ticket: draft, context });
+      // Honor the Review include toggles — drop unchecked groups from the issue body.
+      const ctx = context
+        ? {
+            ...context,
+            errors: include.errors ? context.errors : [],
+            console: include.errors ? context.console : [],
+            network: include.network ? context.network : [],
+            steps: include.steps ? context.steps : [],
+          }
+        : undefined;
+      const res = await submitTicket(tracker, { ticket: draft, context: ctx });
       if (sendCancelled.current) return;
       // A resumed draft has now shipped — drop it from the drafts list.
       if (draftIdRef.current) {
@@ -381,6 +392,7 @@ export function App() {
     setResult(null);
     setError(null);
     setDraft(emptyTicket());
+    setInclude({ errors: true, network: true, steps: true });
   };
 
   const onDiscard = () => {
@@ -559,8 +571,9 @@ export function App() {
                 destination={dest}
                 onSettings={openSettings}
                 recordingUrl={videoUrl}
-                steps={context?.steps}
-                screenshot={context?.screenshot}
+                context={context}
+                include={include}
+                onInclude={setInclude}
                 attachment={context ? { label: `Capture · ${hostOf(context.page.url)}`, sub: context.page.url || "Screenshot + context" } : undefined}
               />
             </>

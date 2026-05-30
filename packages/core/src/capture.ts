@@ -44,7 +44,8 @@ export type ReproStep =
   | { kind: "click"; at: number; target: string; text?: string }
   | { kind: "input"; at: number; target: string; value?: string }
   | { kind: "nav"; at: number; url: string }
-  | { kind: "key"; at: number; key: string };
+  | { kind: "key"; at: number; key: string }
+  | { kind: "scroll"; at: number; y: number };
 
 export interface PageInfo {
   url: string;

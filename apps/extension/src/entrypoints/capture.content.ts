@@ -87,11 +87,23 @@ export default defineContentScript({
       push(stepBuf, { kind: "nav", at: Date.now(), url: location.href });
     };
 
+    // Scroll fires in bursts; throttle to a periodic marker so the timeline shows
+    // roughly where the user scrolled without flooding the buffer.
+    let lastScrollAt = 0;
+    const onScroll = () => {
+      if (!capturing || !trackSteps) return;
+      const now = Date.now();
+      if (now - lastScrollAt < 450) return;
+      lastScrollAt = now;
+      push(stepBuf, { kind: "scroll", at: now, y: Math.round(window.scrollY) });
+    };
+
     document.addEventListener("click", onClick, true);
     document.addEventListener("change", onChange, true);
     document.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("popstate", onNav);
     window.addEventListener("hashchange", onNav);
+    window.addEventListener("scroll", onScroll, { passive: true });
 
     browser.runtime.onMessage.addListener(
       (msg: ContentRequest, _sender, sendResponse: (r: unknown) => void) => {
