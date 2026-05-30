@@ -1,5 +1,5 @@
 import { composeMarkdown } from "./format.js";
-import { dataUrlToBlob, recordingName, screenshotName } from "./media.js";
+import { dataUrlToBlob, errorText, recordingName, screenshotName } from "./media.js";
 import { isSafeEndpoint } from "../redact.js";
 import { TrackerError, type GitlabConfig, type SubmitInput, type SubmitResult } from "./types.js";
 
@@ -59,9 +59,4 @@ async function uploadFile(base: string, config: GitlabConfig, blob: Blob, filena
   if (!res.ok) return null;
   const data = (await res.json()) as { markdown?: string };
   return data.markdown ?? null;
-}
-
-async function errorText(res: Response): Promise<string> {
-  const body = await res.text().catch(() => "");
-  return `${res.status} ${res.statusText}${body ? ` — ${body.slice(0, 300)}` : ""}`;
 }

@@ -1,5 +1,5 @@
 import { composeMarkdown } from "./format.js";
-import { dataUrlToBlob, recordingName, screenshotName } from "./media.js";
+import { dataUrlToBlob, errorText, recordingName, screenshotName } from "./media.js";
 import type { Ticket } from "../ticket.js";
 import { TrackerError, type LinearConfig, type SubmitInput, type SubmitResult } from "./types.js";
 
@@ -111,9 +111,4 @@ async function uploadFile(config: LinearConfig, blob: Blob, filename: string): P
   for (const h of file.headers) headers[h.key] = h.value;
   const put = await fetch(file.uploadUrl, { method: "PUT", headers, body: blob });
   return put.ok ? file.assetUrl : null;
-}
-
-async function errorText(res: Response): Promise<string> {
-  const body = await res.text().catch(() => "");
-  return `${res.status} ${res.statusText}${body ? ` — ${body.slice(0, 300)}` : ""}`;
 }

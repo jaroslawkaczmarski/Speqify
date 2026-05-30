@@ -1,4 +1,4 @@
-import { isSafeEndpoint } from "@speqify/core";
+import { extFromMime, isSafeEndpoint } from "@speqify/core";
 import type { RemoteEndpoint } from "@/store";
 
 function base(cfg: RemoteEndpoint): string {
@@ -19,7 +19,7 @@ export async function remoteTranscribe(cfg: RemoteEndpoint, audio: Blob, lang?: 
   if (!model) {
     throw new Error("No transcription model set for this endpoint (audio → text not supported here).");
   }
-  const ext = audio.type.includes("mp4") ? "mp4" : audio.type.includes("ogg") ? "ogg" : "webm";
+  const ext = extFromMime(audio.type, "webm");
   const form = new FormData();
   form.append("file", audio, `audio.${ext}`);
   form.append("model", model);

@@ -1,5 +1,5 @@
 import { composeAdf } from "./adf.js";
-import { dataUrlToBlob, recordingName, screenshotName } from "./media.js";
+import { dataUrlToBlob, errorText, recordingName, screenshotName } from "./media.js";
 import { TrackerError, type JiraConfig, type SubmitInput, type SubmitResult } from "./types.js";
 
 function hostOf(site: string): string {
@@ -69,9 +69,4 @@ async function attachFile(host: string, auth: string, key: string, blob: Blob, f
   } catch {
     return false;
   }
-}
-
-async function errorText(res: Response): Promise<string> {
-  const body = await res.text().catch(() => "");
-  return `${res.status} ${res.statusText}${body ? ` — ${body.slice(0, 300)}` : ""}`;
 }

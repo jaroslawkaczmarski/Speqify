@@ -2,7 +2,7 @@ import { TicketSchema, emptyTicket, extractJson, isLocalEndpoint, isSafeEndpoint
 import type { AiConfig, RemoteEndpoint } from "@/store";
 import { buildDraftSystem, buildDraftUser } from "./prompt";
 import { blobToPcm16k, loadLocal, localGenerate, localLoaded, localTranscribe } from "./local";
-import { nanoGenerate, nanoUsable } from "./chrome-ai";
+import { nanoGenerate, nanoUsable, probeNano } from "./chrome-ai";
 import { remoteChat, remoteTranscribe } from "./remote";
 
 export type { LoadProgress } from "./local";
@@ -72,7 +72,7 @@ export async function draftTicket(
   const user = buildDraftUser(transcript, context, opts);
   let raw: string;
   if (ai.draftMode === "local") {
-    if (nanoUsable()) {
+    if (nanoUsable() || (await probeNano()) === "available") {
       // Chrome's on-device Gemini Nano — fast, off-thread, no Qwen download.
       raw = await nanoGenerate(system, user);
     } else {

@@ -36,10 +36,29 @@ export function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
+/** Map a MIME type to a file extension; `fallback` when unrecognized. */
+export function extFromMime(mime: string, fallback: string): string {
+  const m = mime.toLowerCase();
+  if (m.includes("png")) return "png";
+  if (m.includes("jpeg") || m.includes("jpg")) return "jpg";
+  if (m.includes("mp4")) return "mp4";
+  if (m.includes("webm")) return "webm";
+  if (m.includes("ogg")) return "ogg";
+  if (m.includes("wav")) return "wav";
+  if (m.includes("mpeg") || m.includes("mp3")) return "mp3";
+  return fallback;
+}
+
 export function screenshotName(mime: string): string {
-  return `speqify-screenshot.${mime.includes("png") ? "png" : "jpg"}`;
+  return `speqify-screenshot.${extFromMime(mime, "jpg")}`;
 }
 
 export function recordingName(mime: string): string {
-  return `speqify-recording.${mime.includes("mp4") ? "mp4" : "webm"}`;
+  return `speqify-recording.${extFromMime(mime, "webm")}`;
+}
+
+/** Format a failed fetch Response into a concise tracker-error message. */
+export async function errorText(res: Response): Promise<string> {
+  const body = await res.text().catch(() => "");
+  return `${res.status} ${res.statusText}${body ? ` — ${body.slice(0, 300)}` : ""}`;
 }
