@@ -11,6 +11,7 @@ export async function submitGitlab(
   if (!isSafeEndpoint(base)) {
     throw new TrackerError(`Refusing to send your token to a non-HTTPS GitLab URL: ${base}`);
   }
+  const warnings: string[] = [];
   let description = composeMarkdown(input.ticket, input.context);
 
   // Upload the screenshot + recording first, then reference them in the description.
@@ -19,10 +20,12 @@ export async function submitGitlab(
     const blob = dataUrlToBlob(shot);
     const md = await uploadFile(base, config, blob, screenshotName(blob.type)).catch(() => null);
     if (md) description += `\n\n## Screenshot\n${md}`;
+    else warnings.push("Screenshot upload failed.");
   }
   if (input.video) {
     const md = await uploadFile(base, config, input.video, recordingName(input.video.type)).catch(() => null);
     if (md) description += `\n\n## Screen recording\n${md}`;
+    else warnings.push("Screen-recording upload failed.");
   }
 
   const res = await fetch(
@@ -41,7 +44,7 @@ export async function submitGitlab(
     throw new TrackerError(`GitLab rejected the issue: ${await errorText(res)}`, res.status);
   }
   const data = (await res.json()) as { id: number; iid: number; web_url: string };
-  return { url: data.web_url, id: String(data.id), key: `#${data.iid}` };
+  return { url: data.web_url, id: String(data.id), key: `#${data.iid}`, attachmentWarnings: warnings.length ? warnings : undefined };
 }
 
 /** Upload a file to the project; returns the markdown snippet GitLab gives back. */

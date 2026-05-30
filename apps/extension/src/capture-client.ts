@@ -131,11 +131,14 @@ export async function pickArea(): Promise<AreaResponse | null> {
 
 /** Capture a screenshot of the active tab via the background worker. */
 export async function captureScreenshot(): Promise<string | null> {
-  const win = await browser.windows.getCurrent();
-  if (win.id == null) return null;
+  // Use the SAME tab the context comes from (active tab of the last-focused window),
+  // not whichever window the side panel is docked in — otherwise a multi-window
+  // setup screenshots a different tab than the one we captured context for.
+  const tab = await activeTab();
+  if (tab?.windowId == null) return null;
   const res = (await browser.runtime.sendMessage({
     type: "SPEQIFY_SCREENSHOT",
-    windowId: win.id,
+    windowId: tab.windowId,
   } satisfies BackgroundRequest)) as ScreenshotResponse;
   return "dataUrl" in res ? res.dataUrl : null;
 }

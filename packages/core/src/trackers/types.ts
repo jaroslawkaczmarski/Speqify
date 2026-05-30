@@ -44,6 +44,8 @@ export interface SubmitResult {
   id: string;
   /** Human key where applicable (e.g. "PROJ-123", "#42"). */
   key?: string;
+  /** Non-fatal warnings — e.g. a screenshot/recording upload failed after the issue was created. */
+  attachmentWarnings?: string[];
 }
 
 export interface SubmitInput {

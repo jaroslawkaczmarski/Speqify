@@ -170,6 +170,7 @@ export function Success({
   issueKey,
   url,
   title,
+  warnings,
   onNew,
 }: {
   kind: TrackerKind;
@@ -178,6 +179,7 @@ export function Success({
   issueKey: string;
   url: string;
   title: string;
+  warnings?: string[];
   onNew: () => void;
 }) {
   const L = LOGO[kind];
@@ -192,6 +194,11 @@ export function Success({
           <div style={{ fontSize: 19, fontWeight: 600 }}>Issue created</div>
           <div style={{ fontSize: 15, color: "var(--sp-text-3)", marginTop: 5 }}>Sent to {name} · {sub}</div>
         </div>
+        {warnings && warnings.length > 0 && (
+          <div style={{ width: "100%", padding: "10px 12px", borderRadius: 10, background: "var(--sp-warn-bg)", border: "1px solid #FDE68A", color: "var(--sp-warn)", fontSize: 13, lineHeight: 1.5 }}>
+            {warnings.join(" ")} The capture was kept in your drafts.
+          </div>
+        )}
 
         <button
           onClick={open}

@@ -145,7 +145,7 @@ export async function startRecording(opts: StartOptions): Promise<ActiveRecorder
   mr.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
   };
-  mr.start();
+  mr.start(1000); // 1s timeslice so an instant stop still flushes a final chunk
 
   // User clicked the browser's "Stop sharing".
   displayStream.getVideoTracks()[0]?.addEventListener("ended", () => onEnded?.());
@@ -217,11 +217,15 @@ export async function startRecording(opts: StartOptions): Promise<ActiveRecorder
     let cropPx = { x: 0, y: 0, w: vw, h: vh };
     if (crop) {
       const r: AreaRect = crop.rect;
+      // Clamp w/h to the space REMAINING from x/y, not the full frame — otherwise a
+      // region near the right/bottom edge makes the drawImage source rect overflow.
+      const x = Math.max(0, Math.round(r.x * sx));
+      const y = Math.max(0, Math.round(r.y * sy));
       cropPx = {
-        x: Math.max(0, Math.round(r.x * sx)),
-        y: Math.max(0, Math.round(r.y * sy)),
-        w: Math.min(vw, Math.round(r.w * sx)),
-        h: Math.min(vh, Math.round(r.h * sy)),
+        x,
+        y,
+        w: Math.min(vw - x, Math.round(r.w * sx)),
+        h: Math.min(vh - y, Math.round(r.h * sy)),
       };
     }
     const canvas = document.createElement("canvas");
@@ -308,7 +312,7 @@ export async function recordVoiceNote(): Promise<VoiceNote> {
   mr.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
   };
-  mr.start();
+  mr.start(1000); // 1s timeslice so an instant stop still flushes a final chunk
 
   const cleanup = () => {
     micStream.getTracks().forEach((t) => t.stop());

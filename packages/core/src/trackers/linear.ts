@@ -37,16 +37,19 @@ export async function submitLinear(
   config: LinearConfig,
   input: SubmitInput,
 ): Promise<SubmitResult> {
+  const warnings: string[] = [];
   let description = composeMarkdown(input.ticket, input.context);
   const shot = input.context?.screenshot;
   if (shot) {
     const blob = dataUrlToBlob(shot);
     const assetUrl = await uploadFile(config, blob, screenshotName(blob.type)).catch(() => null);
     if (assetUrl) description += `\n\n## Screenshot\n![screenshot](${assetUrl})`;
+    else warnings.push("Screenshot upload failed.");
   }
   if (input.video) {
     const assetUrl = await uploadFile(config, input.video, recordingName(input.video.type)).catch(() => null);
     if (assetUrl) description += `\n\n## Screen recording\n[${recordingName(input.video.type)}](${assetUrl})`;
+    else warnings.push("Screen-recording upload failed.");
   }
 
   const variables: { input: Record<string, unknown> } = {
@@ -79,7 +82,7 @@ export async function submitLinear(
   if (!data.data?.issueCreate?.success || !issue) {
     throw new TrackerError("Linear did not create the issue");
   }
-  return { url: issue.url, id: issue.id, key: issue.identifier };
+  return { url: issue.url, id: issue.id, key: issue.identifier, attachmentWarnings: warnings.length ? warnings : undefined };
 }
 
 /** Request a signed URL from Linear, PUT the file to it, return the public asset URL. */

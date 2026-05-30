@@ -172,9 +172,13 @@ export function App() {
   };
 
   const onStop = async () => {
-    flowCancelled.current = false;
-    const blob = recorderRef.current ? await recorderRef.current.stop() : null;
+    // Null the ref synchronously so a manual Stop racing the track-"ended" handler
+    // can't pass the guard twice and run the whole draft/endCapture flow twice.
+    const rec = recorderRef.current;
     recorderRef.current = null;
+    if (!rec) return;
+    flowCancelled.current = false;
+    const blob = await rec.stop();
     setAnalyser(null);
     setDisplayStream(null);
     setRecording(blob);
@@ -278,7 +282,7 @@ export function App() {
       setMicAvailable(rec.micAvailable);
       recordedAudioRef.current = rec.micAvailable;
       setState("recording");
-      void startCapture(capture.repro);
+      await startCapture(capture.repro); // await so capturing=true before frames roll (don't drop early clicks)
       // No still for recordings — the video is the evidence (and a screenshot would
       // just duplicate the first frame).
     } catch (e) {
@@ -352,12 +356,13 @@ export function App() {
       const video = includeVideo && VIDEO_UPLOAD[tracker.kind] ? videoBlobRef.current : null;
       const res = await submitTicket(tracker, { ticket: draft, context: ctx, video });
       if (sendCancelled.current) return;
-      // A resumed draft has now shipped — drop it from the drafts list.
-      if (draftIdRef.current) {
+      // If an attachment failed, KEEP the draft — it holds the only copy of the recording.
+      const keepDraft = Boolean(res.attachmentWarnings?.length && video);
+      if (draftIdRef.current && !keepDraft) {
         await deleteDraft(draftIdRef.current).catch(() => {});
         draftIdRef.current = null;
-        refreshDrafts();
       }
+      refreshDrafts();
       setResult(res);
       setState("success");
     } catch (e) {
@@ -584,7 +589,7 @@ export function App() {
           )}
           {state === "sending" && dest && <Sending kind={dest.kind} name={dest.name} sub={dest.sub} onCancel={onSendingCancel} />}
           {state === "success" && dest && result && (
-            <Success kind={dest.kind} name={dest.name} sub={dest.sub} issueKey={result.key ?? result.id} url={result.url} title={draft.title} onNew={resetFlow} />
+            <Success kind={dest.kind} name={dest.name} sub={dest.sub} issueKey={result.key ?? result.id} url={result.url} title={draft.title} warnings={result.attachmentWarnings} onNew={resetFlow} />
           )}
         </div>
       )}

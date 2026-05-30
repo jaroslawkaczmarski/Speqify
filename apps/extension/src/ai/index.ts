@@ -49,18 +49,15 @@ export async function transcribeAudio(ai: AiConfig, audio: Blob | null): Promise
   // Never trigger a model download here — only transcribe once the user has opted in
   // (local Voice model downloaded, or a remote Voice endpoint configured).
   if (!transcribeReady(ai)) return "";
-  try {
-    if (ai.voiceMode === "local") {
-      // Speech model only — the drafting model loads at draft time, if local.
-      if (!localLoaded(ai.localTier, true, false)) await loadLocal(ai.localTier, undefined, { needAsr: true, needLlm: false });
-      const pcm = await blobToPcm16k(audio);
-      return await localTranscribe(pcm, ai.detectedLang);
-    }
-    return await remoteTranscribe(ai.voiceRemote, audio, ai.detectedLang);
-  } catch (err) {
-    console.warn("[speqify] transcription failed", err);
-    return "";
+  // Let real failures (worker hang, 401, decode error) throw so draftFromAudio's catch
+  // can surface "transcription failed"; "" here means genuinely no speech.
+  if (ai.voiceMode === "local") {
+    // Speech model only — the drafting model loads at draft time, if local.
+    if (!localLoaded(ai.localTier, true, false)) await loadLocal(ai.localTier, undefined, { needAsr: true, needLlm: false });
+    const pcm = await blobToPcm16k(audio);
+    return await localTranscribe(pcm, ai.detectedLang);
   }
+  return await remoteTranscribe(ai.voiceRemote, audio, ai.detectedLang);
 }
 
 /** Turn a transcript (+ context) into a structured ticket via the configured AI model. */

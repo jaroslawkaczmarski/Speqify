@@ -8,6 +8,7 @@ const TYPE_OPTS: { id: TicketType; label: string; color: string; bg: string }[] 
   { id: "bug", label: "Bug", color: "#DC2626", bg: "#FEE2E2" },
   { id: "task", label: "Task", color: "#0369A1", bg: "#E0F2FE" },
   { id: "feature", label: "Feature", color: "#7C3AED", bg: "#EDE9FE" },
+  { id: "improvement", label: "Improve", color: "#047857", bg: "#D1FAE5" },
 ];
 
 const LOGO: Record<TrackerKind, (p: { size?: number }) => React.JSX.Element> = {
@@ -238,7 +239,7 @@ export function Review({
       <div className="sp-scroll" style={{ flex: 1, overflowY: "auto", padding: "17px 19px 19px" }}>
         <div style={{ marginBottom: 17 }}>
           <FieldLabel label="Issue type" />
-          <TypePicker value={(["bug", "task", "feature"].includes(draft.type) ? draft.type : "task") as TicketType} onChange={(type) => onChange({ ...draft, type })} />
+          <TypePicker value={(["bug", "task", "feature", "improvement"].includes(draft.type) ? draft.type : "task") as TicketType} onChange={(type) => onChange({ ...draft, type })} />
         </div>
 
         <div style={{ marginBottom: 17 }}>
