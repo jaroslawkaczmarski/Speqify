@@ -6,7 +6,7 @@ import { nanoGenerate, nanoUsable } from "./chrome-ai";
 import { remoteChat, remoteTranscribe } from "./remote";
 
 export type { LoadProgress } from "./local";
-export { loadLocal, localLoaded, unloadLocal } from "./local";
+export { loadLocal, localLoaded } from "./local";
 
 /** A remote endpoint can run once it has a URL + model and either a key or is localhost. */
 function remoteUsable(r: RemoteEndpoint): boolean {

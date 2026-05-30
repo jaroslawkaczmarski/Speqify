@@ -61,14 +61,6 @@ export async function listDrafts(): Promise<DraftRecord[]> {
   return all.sort((a, b) => b.createdAt - a.createdAt);
 }
 
-export async function getDraft(id: string): Promise<DraftRecord | undefined> {
-  return tx<DraftRecord | undefined>("readonly", (s) => s.get(id) as IDBRequest<DraftRecord | undefined>);
-}
-
 export async function deleteDraft(id: string): Promise<void> {
   await tx("readwrite", (s) => s.delete(id));
-}
-
-export async function countDrafts(): Promise<number> {
-  return tx<number>("readonly", (s) => s.count());
 }

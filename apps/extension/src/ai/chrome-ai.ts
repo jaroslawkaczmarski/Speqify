@@ -35,10 +35,6 @@ export async function probeNano(): Promise<NanoStatus> {
   return cached;
 }
 
-export function nanoStatus(): NanoStatus | null {
-  return cached;
-}
-
 /** Ready to draft right now (no further download needed). */
 export function nanoUsable(): boolean {
   return cached === "available";

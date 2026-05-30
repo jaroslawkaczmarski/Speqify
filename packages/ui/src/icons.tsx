@@ -60,46 +60,12 @@ export const Icons = {
     <Icon {...p} d={<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none" />} />
   ),
   Play: (p: IconProps) => <Icon {...p} d="M7 5l12 7-12 7V5z" fill="currentColor" stroke={0} />,
-  Pause: (p: IconProps) => (
-    <Icon
-      {...p}
-      d={
-        <>
-          <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none" />
-          <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none" />
-        </>
-      }
-    />
-  ),
   Send: (p: IconProps) => <Icon {...p} d="M5 12l14-7-5 16-3-7-6-2z" />,
   Check: (p: IconProps) => <Icon {...p} d="M4 12l5 5L20 6" />,
-  CheckCircle: (p: IconProps) => (
-    <Icon
-      {...p}
-      d={
-        <>
-          <circle cx="12" cy="12" r="9" />
-          <path d="M8 12l3 3 5-6" />
-        </>
-      }
-    />
-  ),
   Plus: (p: IconProps) => <Icon {...p} d="M12 5v14M5 12h14" />,
   X: (p: IconProps) => <Icon {...p} d="M6 6l12 12M6 18L18 6" />,
-  Chevron: (p: IconProps) => <Icon {...p} d="M6 9l6 6 6-6" />,
   ChevronR: (p: IconProps) => <Icon {...p} d="M9 6l6 6-6 6" />,
   Arrow: (p: IconProps) => <Icon {...p} d="M5 12h14M13 6l6 6-6 6" />,
-  Search: (p: IconProps) => (
-    <Icon
-      {...p}
-      d={
-        <>
-          <circle cx="11" cy="11" r="7" />
-          <path d="M20 20l-3.5-3.5" />
-        </>
-      }
-    />
-  ),
   Cog: (p: IconProps) => (
     <Icon
       {...p}
@@ -162,12 +128,6 @@ export const Icons = {
           <path d="M8 11V8a4 4 0 1 1 8 0v3" />
         </>
       }
-    />
-  ),
-  Loader: (p: IconProps) => (
-    <Icon
-      {...p}
-      d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"
     />
   ),
   Crop: (p: IconProps) => <Icon {...p} d="M6 2v16h16M2 6h16v16" />,

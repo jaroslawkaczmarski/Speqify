@@ -26,17 +26,3 @@ export function submitTicket(config: TrackerConfig, input: SubmitInput): Promise
     }
   }
 }
-
-/** A short, human label for a configured tracker (used in the UI dropdown). */
-export function describeTracker(config: TrackerConfig): string {
-  switch (config.kind) {
-    case "github":
-      return `GitHub · ${config.owner}/${config.repo}`;
-    case "jira":
-      return `Jira · ${config.projectKey}`;
-    case "linear":
-      return `Linear · ${config.teamId}`;
-    case "gitlab":
-      return `GitLab · ${config.projectId}`;
-  }
-}

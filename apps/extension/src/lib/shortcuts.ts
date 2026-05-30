@@ -6,7 +6,7 @@ function detectMac(): boolean {
   return /mac/i.test(platform);
 }
 
-export const isMac = detectMac();
+const isMac = detectMac();
 
 /** Modifier glyphs/words per platform. `mod` = Cmd on macOS, Ctrl elsewhere. */
 export const KEYS = isMac

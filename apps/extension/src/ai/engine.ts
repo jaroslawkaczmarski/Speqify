@@ -22,10 +22,6 @@ export interface EngineLoadOpts {
   needLlm: boolean;
 }
 
-export function engineLoaded(tier: string, needAsr: boolean, needLlm: boolean): boolean {
-  return loadedTier === tier && (!needAsr || asr !== null) && (!needLlm || gen !== null);
-}
-
 export async function engineLoad(opts: EngineLoadOpts, onProgress?: (p: unknown) => void): Promise<void> {
   const { pipeline } = transformers;
   if (!configured) {
@@ -92,10 +88,4 @@ export async function engineGenerate(system: string, user: string): Promise<stri
   }
   // Strip any residual reasoning block so JSON extraction sees only the answer.
   return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-}
-
-export function engineUnload(): void {
-  asr = null;
-  gen = null;
-  loadedTier = null;
 }

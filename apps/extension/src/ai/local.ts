@@ -156,18 +156,6 @@ export async function localGenerate(system: string, user: string): Promise<strin
   return (await engine()).engineGenerate(system, user);
 }
 
-export function unloadLocal(): void {
-  loadedTier = null;
-  asrLoaded = false;
-  genLoaded = false;
-  worker?.terminate();
-  worker = null;
-  usingWorker = false;
-  void engine()
-    .then((e) => e.engineUnload())
-    .catch(() => {});
-}
-
 /** Decode an audio Blob into mono Float32 PCM at 16 kHz (Whisper's expected rate).
  *  Stays on the main thread — AudioContext isn't available inside a worker. */
 export async function blobToPcm16k(blob: Blob): Promise<Float32Array> {

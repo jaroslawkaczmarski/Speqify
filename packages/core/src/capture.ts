@@ -67,16 +67,3 @@ export interface CaptureContext {
 export function emptyContext(page: PageInfo): CaptureContext {
   return { page, console: [], network: [], errors: [], steps: [] };
 }
-
-/** True when there's anything worth showing/sending. */
-export function hasSignal(ctx: CaptureContext | undefined): boolean {
-  if (!ctx) return false;
-  return Boolean(
-    ctx.console.length ||
-      ctx.network.length ||
-      ctx.errors.length ||
-      ctx.steps?.length ||
-      ctx.element ||
-      ctx.screenshot,
-  );
-}
