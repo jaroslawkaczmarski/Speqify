@@ -178,8 +178,17 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: "speqify-settings-v2",
+      version: 1,
       storage: createJSONStorage(() => chromeStorage),
       partialize: ({ onboarded, tracker, ai, capture, templates }) => ({ onboarded, tracker, ai, capture, templates }),
+      // v0→v1: the on-device drafting model changed (Qwen2.5 → Qwen3), so a stored
+      // "downloaded" flag no longer matches a cached model — clear it so Settings
+      // prompts a fresh download instead of silently re-fetching at first draft.
+      migrate: (persisted, version) => {
+        const p = (persisted ?? {}) as { ai?: Record<string, unknown> };
+        if (version < 1 && p.ai) p.ai.llmDownloaded = false;
+        return p as unknown as SettingsState;
+      },
       // New keys (e.g. templates) added after a user first persisted v2 won't be in
       // their stored blob; merge defaults underneath so they're never undefined.
       // `ai` is run through migrateAi so an older single-mode blob is reshaped into

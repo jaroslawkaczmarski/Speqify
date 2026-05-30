@@ -7,8 +7,8 @@ import LocalWorker from "./local-worker?worker";
 
 /** HF model ids (transformers.js / ONNX, WebGPU-capable). */
 export const TIER_MODELS: Record<LocalTier, { stt: string; llm: string }> = {
-  light: { stt: "onnx-community/whisper-tiny", llm: "onnx-community/Qwen2.5-0.5B-Instruct" },
-  medium: { stt: "onnx-community/whisper-base", llm: "onnx-community/Qwen2.5-1.5B-Instruct" },
+  light: { stt: "onnx-community/whisper-tiny", llm: "onnx-community/Qwen3-0.6B-ONNX" },
+  medium: { stt: "onnx-community/whisper-base", llm: "onnx-community/Qwen3-1.7B-ONNX" },
 };
 
 export interface LoadProgress {

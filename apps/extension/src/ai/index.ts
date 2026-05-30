@@ -1,7 +1,7 @@
 import { TicketSchema, emptyTicket, extractJson, type CaptureContext, type Ticket, type TicketType } from "@speqify/core";
 import type { AiConfig, RemoteEndpoint } from "@/store";
 import { buildDraftSystem, buildDraftUser } from "./prompt";
-import { blobToPcm16k, loadLocal, localGenerate, localLoaded, localTranscribe, type LoadProgress } from "./local";
+import { blobToPcm16k, loadLocal, localGenerate, localLoaded, localTranscribe } from "./local";
 import { nanoGenerate, nanoUsable } from "./chrome-ai";
 import { remoteChat, remoteTranscribe } from "./remote";
 

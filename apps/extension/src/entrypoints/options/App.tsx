@@ -365,8 +365,8 @@ const LOCAL_TIERS: {
   memory: string;
   desc: string;
 }[] = [
-  { id: "light", name: "Fast", whisper: "Whisper tiny", qwen: "Qwen2.5 0.5B", speechSize: "~0.1 GB", llmSize: "~0.6 GB", memory: "~1 GB RAM", desc: "Runs on most laptops." },
-  { id: "medium", name: "Accurate", whisper: "Whisper base", qwen: "Qwen2.5 1.5B", speechSize: "~0.2 GB", llmSize: "~1.4 GB", memory: "~2.5 GB RAM · WebGPU recommended", desc: "Sharper drafts & multilingual." },
+  { id: "light", name: "Fast", whisper: "Whisper tiny", qwen: "Qwen3 0.6B", speechSize: "~0.1 GB", llmSize: "~0.5 GB", memory: "~1 GB RAM", desc: "Runs on most laptops." },
+  { id: "medium", name: "Accurate", whisper: "Whisper base", qwen: "Qwen3 1.7B", speechSize: "~0.2 GB", llmSize: "~1.3 GB", memory: "~2.5 GB RAM · WebGPU recommended", desc: "Sharper drafts & multilingual." },
 ];
 
 // Remote presets per role. Voice needs an /audio/transcriptions-capable endpoint
