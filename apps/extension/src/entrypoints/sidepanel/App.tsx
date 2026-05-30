@@ -12,7 +12,7 @@ import { trackerDisplay, useSettings } from "@/store";
 import { captureScreenshot, endCapture, getContext, onLiveClick, pickArea, pickElement, startCapture } from "@/capture-client";
 import { aiReady, aiReason, draftReady, draftTicket, transcribeAudio } from "@/ai";
 import { probeNano } from "@/ai/chrome-ai";
-import { startRecording, CaptureCancelled, type ActiveRecorder, type CropRegion } from "@/panel/recorder";
+import { startRecording, recordVoiceNote, CaptureCancelled, type ActiveRecorder, type CropRegion, type VoiceNote as VoiceNoteHandle } from "@/panel/recorder";
 import { deleteDraft, listDrafts, newDraftId, saveDraft, type DraftRecord } from "@/panel/drafts-db";
 import { Shell, type PanelView } from "@/panel/Shell";
 import { Onboarding } from "@/panel/Onboarding";
@@ -21,9 +21,9 @@ import { Recording } from "@/panel/Recording";
 import { Review } from "@/panel/Review";
 import { Drafts } from "@/panel/Drafts";
 import { ArmedConfirm } from "@/panel/ArmedConfirm";
-import { Sending, Success, Transcribing, type TranscribePhase } from "@/panel/FlowStates";
+import { Sending, Success, Transcribing, VoiceNote, type TranscribePhase } from "@/panel/FlowStates";
 
-type FlowState = "idle" | "armed" | "recording" | "transcribing" | "review" | "sending" | "success";
+type FlowState = "idle" | "armed" | "recording" | "voicenote" | "transcribing" | "review" | "sending" | "success";
 
 function hostOf(url: string | undefined): string {
   if (!url) return "the page";
@@ -45,6 +45,30 @@ function stubDraft(ctx?: CaptureContext, transcript?: string): Ticket {
     description: note ?? "",
     labels: [],
   };
+}
+
+/** Crop a captured screenshot data URL to a picked region (CSS px → image px). */
+async function cropDataUrl(dataUrl: string, crop: CropRegion): Promise<string> {
+  const img = new Image();
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("screenshot failed to load"));
+    img.src = dataUrl;
+  });
+  const sx = img.naturalWidth / Math.max(1, crop.viewport.w);
+  const sy = img.naturalHeight / Math.max(1, crop.viewport.h);
+  const x = Math.max(0, Math.round(crop.rect.x * sx));
+  const y = Math.max(0, Math.round(crop.rect.y * sy));
+  const w = Math.min(img.naturalWidth - x, Math.round(crop.rect.w * sx));
+  const h = Math.min(img.naturalHeight - y, Math.round(crop.rect.h * sy));
+  if (w <= 0 || h <= 0) return dataUrl;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const c = canvas.getContext("2d");
+  if (!c) return dataUrl;
+  c.drawImage(img, x, y, w, h, 0, 0, w, h);
+  return canvas.toDataURL("image/jpeg", 0.85);
 }
 
 export function App() {
@@ -79,6 +103,8 @@ export function App() {
   const transcriptRef = useRef("");
   const draftIdRef = useRef<string | null>(null);
   const pickedElementRef = useRef<ElementInfo | null>(null);
+  const voiceNoteRef = useRef<VoiceNoteHandle | null>(null);
+  const recordedAudioRef = useRef(false);
 
   const dest = trackerDisplay(tracker);
   const inFlow = state !== "idle";
@@ -93,7 +119,7 @@ export function App() {
 
   // recording timer
   useEffect(() => {
-    if (state !== "recording") return;
+    if (state !== "recording" && state !== "voicenote") return;
     setElapsed(0);
     const id = setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => clearInterval(id);
@@ -102,6 +128,8 @@ export function App() {
   const stopMedia = () => {
     recorderRef.current?.cancel();
     recorderRef.current = null;
+    voiceNoteRef.current?.cancel();
+    voiceNoteRef.current = null;
     setAnalyser(null);
     setDisplayStream(null);
     void endCapture();
@@ -115,32 +143,17 @@ export function App() {
     setVideoUrl(url);
   };
 
-  const onStop = async () => {
-    flowCancelled.current = false;
-    const blob = recorderRef.current ? await recorderRef.current.stop() : null;
-    recorderRef.current = null;
-    setAnalyser(null);
-    setDisplayStream(null);
-    setRecording(blob);
+  // Transcribe (if there's audio) → AI-draft (if there's speech) → review. The model
+  // never sees the video — only the transcript + page context — so with no speech we
+  // fall back to an editable stub rather than letting it hallucinate.
+  const draftFromAudio = async (blob: Blob | null, ctx: CaptureContext) => {
     setPhase("transcribe");
     setState("transcribing");
     try {
-      // Pull context now (steps/console/network accumulated over the recording);
-      // merge the screenshot taken when recording started and any picked element.
-      const ctx: CaptureContext = {
-        ...(await getContext()),
-        element: pickedElementRef.current ?? undefined,
-        screenshot: shotRef.current ?? undefined,
-      };
-      void endCapture();
-      setContext(ctx);
       const transcript = await transcribeAudio(ai, blob);
       transcriptRef.current = transcript;
       if (flowCancelled.current) return;
       setPhase("draft");
-      // Only let the model write the ticket when there's an actual voice note to
-      // work from. With no speech it would hallucinate (it never sees the video —
-      // only the transcript + page context), so fall back to an editable stub.
       const hasSpeech = transcript.trim().length > 0;
       const d =
         draftReady(ai) && hasSpeech ? await draftTicket(ai, transcript, ctx, templates) : stubDraft(ctx, transcript);
@@ -150,9 +163,82 @@ export function App() {
     } catch (e) {
       if (flowCancelled.current) return;
       setError(e instanceof Error ? e.message : String(e));
-      setDraft(stubDraft(context, transcriptRef.current));
+      setDraft(stubDraft(ctx, transcriptRef.current));
       setState("review");
     }
+  };
+
+  const onStop = async () => {
+    flowCancelled.current = false;
+    const blob = recorderRef.current ? await recorderRef.current.stop() : null;
+    recorderRef.current = null;
+    setAnalyser(null);
+    setDisplayStream(null);
+    setRecording(blob);
+    // Pull context now (steps/console/network accumulated over the recording);
+    // merge any picked element + the start-of-recording screenshot (if any).
+    const ctx: CaptureContext = {
+      ...(await getContext()),
+      element: pickedElementRef.current ?? undefined,
+      screenshot: shotRef.current ?? undefined,
+    };
+    void endCapture();
+    setContext(ctx);
+    // No voiceover (mic off/denied) → skip transcription, straight to the form.
+    if (!recordedAudioRef.current) {
+      setDraft(stubDraft(ctx));
+      setState("review");
+      return;
+    }
+    await draftFromAudio(blob, ctx);
+  };
+
+  /** Screenshot flow: capture a still (+ optional crop) + context, then either the
+   *  editable form (mic off) or a voice note → AI draft (mic on). */
+  const captureStill = async (crop: CropRegion | null) => {
+    setError(null);
+    flowCancelled.current = false;
+    recordedAudioRef.current = false;
+    try {
+      await startCapture(false); // refresh console/network buffers; no steps for a still
+      const shot = await captureScreenshot();
+      const cropped = shot && crop ? await cropDataUrl(shot, crop) : shot;
+      shotRef.current = cropped;
+      const ctx: CaptureContext = {
+        ...(await getContext()),
+        element: pickedElementRef.current ?? undefined,
+        screenshot: cropped ?? undefined,
+      };
+      void endCapture();
+      setContext(ctx);
+      if (capture.mic) {
+        try {
+          const vn = await recordVoiceNote();
+          voiceNoteRef.current = vn;
+          recordedAudioRef.current = true;
+          setAnalyser(vn.analyser);
+          setState("voicenote");
+          return;
+        } catch {
+          /* mic denied/unavailable — fall through to the editable form */
+        }
+      }
+      setDraft(stubDraft(ctx));
+      setState("review");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setDraft(stubDraft());
+      setState("review");
+    }
+  };
+
+  const onVoiceNoteStop = async () => {
+    flowCancelled.current = false;
+    const vn = voiceNoteRef.current;
+    voiceNoteRef.current = null;
+    setAnalyser(null);
+    const blob = vn ? await vn.stop() : null;
+    await draftFromAudio(blob, context ?? (await getContext()));
   };
 
   /** Resolve a crop region for area/element sources (null = user cancelled). */
@@ -187,6 +273,7 @@ export function App() {
       setDisplayStream(rec.previewStream);
       setAnalyser(rec.analyser);
       setMicAvailable(rec.micAvailable);
+      recordedAudioRef.current = rec.micAvailable;
       setState("recording");
       void startCapture(capture.repro);
       // Snapshot the starting state of the page.
@@ -207,6 +294,13 @@ export function App() {
     draftIdRef.current = null;
     pickedElementRef.current = null;
     const needsCrop = capture.source === "area" || capture.source === "element";
+    if (capture.mode === "screenshot") {
+      // No getDisplayMedia gesture to preserve — pick the region (if any), then shoot.
+      const crop = needsCrop ? await resolveCropRect() : null;
+      if (needsCrop && !crop) return; // cancelled the picker
+      void captureStill(crop);
+      return;
+    }
     if (needsCrop) {
       // Pick the region on the page first, then re-arm: getDisplayMedia needs a
       // fresh gesture, which the page-overlay picker would otherwise consume.
@@ -279,6 +373,7 @@ export function App() {
     shotRef.current = null;
     transcriptRef.current = "";
     pickedElementRef.current = null;
+    recordedAudioRef.current = false;
     setArmedCrop(null);
     setVideoUrl(null);
     setState("idle");
@@ -440,6 +535,9 @@ export function App() {
               onCancel={onCancel}
               onMicChange={(on) => recorderRef.current?.setMicEnabled(on)}
             />
+          )}
+          {state === "voicenote" && (
+            <VoiceNote time={`${mm}:${ss}`} analyser={analyser} onStop={onVoiceNoteStop} onCancel={onCancel} />
           )}
           {state === "transcribing" && <Transcribing phase={phase} onCancel={onCancel} />}
           {state === "review" && (

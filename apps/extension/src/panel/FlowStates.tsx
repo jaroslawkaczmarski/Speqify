@@ -1,5 +1,6 @@
 import { Icons, Trackers } from "@speqify/ui";
 import type { TrackerKind } from "@speqify/core";
+import { RecordingWaveform } from "./controls";
 
 const LOGO: Record<TrackerKind, (p: { size?: number }) => React.JSX.Element> = {
   github: Trackers.GitHub,
@@ -72,6 +73,52 @@ export function Transcribing({ phase, onCancel }: { phase: TranscribePhase; onCa
       <div style={{ padding: 14, borderTop: "1px solid var(--sp-border)", background: "var(--sp-surface)" }}>
         <button className="sp-btn sp-btn-secondary" style={{ width: "100%", justifyContent: "center" }} onClick={onCancel}>
           Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Recording a mic-only voice note (the Screenshot flow's "dictate" input). */
+export function VoiceNote({
+  time,
+  analyser,
+  onStop,
+  onCancel,
+}: {
+  time: string;
+  analyser?: AnalyserNode | null;
+  onStop: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ background: "#1C1917", color: "#fff", padding: "17px 19px", display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ width: 12, height: 12, borderRadius: 1199, background: "#DC2626", animation: "sp-pulse 1.2s infinite" }} />
+        <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: "0.04em" }}>REC</span>
+        <span style={{ fontFamily: "var(--sp-mono)", fontSize: 17, fontWeight: 600, marginLeft: 5 }}>{time}</span>
+        <div style={{ flex: 1 }} />
+        <span className="sp-chip" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", height: 24, fontSize: 13 }}>
+          <Icons.Mic size={11} /> Voice note
+        </span>
+      </div>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: 20, padding: 24 }}>
+        <div style={{ width: 72, height: 72, borderRadius: 1199, background: "var(--sp-danger-bg)", color: "var(--sp-danger)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icons.Mic size={32} />
+        </div>
+        <div style={{ width: "100%", maxWidth: 320 }}>
+          <RecordingWaveform active analyser={analyser} color="#DC2626" />
+        </div>
+        <div style={{ textAlign: "center", fontSize: 15, color: "var(--sp-text-3)", lineHeight: 1.5 }}>
+          Describe the issue out loud — we'll transcribe it and draft the ticket when you stop.
+        </div>
+      </div>
+      <div style={{ padding: 14, borderTop: "1px solid var(--sp-border)", background: "var(--sp-surface)", display: "flex", gap: 10 }}>
+        <button onClick={onCancel} className="sp-btn sp-btn-secondary" style={{ flex: 1, justifyContent: "center" }}>
+          <Icons.X size={14} /> Discard
+        </button>
+        <button onClick={onStop} className="sp-btn sp-btn-primary" style={{ flex: 2, justifyContent: "center", background: "#DC2626" }}>
+          <Icons.Stop size={14} /> Stop &amp; draft
         </button>
       </div>
     </div>

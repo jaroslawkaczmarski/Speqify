@@ -123,6 +123,35 @@ const navBtnS: CSSProperties = {
   flexShrink: 0,
 };
 
+function TypeBtn({ icon, label, desc, sel, onClick }: { icon: ReactNode; label: string; desc: string; sel: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        gap: 5,
+        padding: "12px 14px",
+        borderRadius: 12,
+        cursor: "pointer",
+        textAlign: "left",
+        background: sel ? "var(--sp-indigo-50)" : "var(--sp-surface)",
+        border: `1px solid ${sel ? "var(--sp-indigo-300)" : "var(--sp-border)"}`,
+        boxShadow: sel ? "0 0 0 3px var(--sp-indigo-100)" : "none",
+        transition: "all .12s",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ color: sel ? "var(--sp-indigo-700)" : "var(--sp-text-2)", display: "inline-flex" }}>{icon}</span>
+        <span style={{ fontSize: 15, fontWeight: 650 }}>{label}</span>
+      </div>
+      <span style={{ fontSize: 13, color: "var(--sp-text-3)" }}>{desc}</span>
+    </button>
+  );
+}
+
 export function SourcePicker({
   onStart,
   onCancel,
@@ -142,6 +171,12 @@ export function SourcePicker({
 }) {
   const { capture, setCapture } = useSettings();
   const setSource = (source: Source) => setCapture({ source });
+  const isRec = capture.mode === "recording";
+  const setMode = (mode: CaptureDefaults["mode"]) => {
+    // Screenshots target the current tab/area/element, never a desktop window.
+    if (mode === "screenshot" && capture.source === "window") setCapture({ mode, source: "tab" });
+    else setCapture({ mode });
+  };
   const micPerm = useMicPermission();
   // Chrome can't prompt for the mic from the side panel, so "prompt"/"denied" both
   // mean unusable here. "unknown" (no Permissions API) → don't lock, let it try.
@@ -152,9 +187,11 @@ export function SourcePicker({
       <div className="sp-scroll" style={{ flex: 1, overflowY: "auto", padding: 19 }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 17 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 19, fontWeight: 650, letterSpacing: "-0.01em" }}>What do you want to record?</div>
+            <div style={{ fontSize: 19, fontWeight: 650, letterSpacing: "-0.01em" }}>What do you want to capture?</div>
             <div style={{ fontSize: 15, color: "var(--sp-text-3)", marginTop: 5 }}>
-              Pick a source, choose your options, then start the recording.
+              {isRec
+                ? "Pick a source, choose your options, then start the recording."
+                : "Snap a screenshot, then describe the issue — or dictate it."}
             </div>
           </div>
           <button onClick={onDrafts} title="Drafts" style={{ ...navBtnS, position: "relative" }}>
@@ -208,14 +245,22 @@ export function SourcePicker({
           </button>
         )}
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <SourceOption sel={capture.source === "area"} onClick={() => setSource("area")} icon={<Icons.Crop size={22} />} label="Custom area" desc="Drag a region of this tab; the recording is cropped to it." badge="recommended" />
-          <SourceOption sel={capture.source === "element"} onClick={() => setSource("element")} icon={<Icons.Crosshair size={22} />} label="Element" desc="Click a DOM element to crop the recording to it." />
-          <SourceOption sel={capture.source === "tab"} onClick={() => setSource("tab")} icon={<Icons.Image size={22} />} label="Current tab" desc="The whole browser tab. Click rings drawn when cursor highlight is on." />
-          <SourceOption sel={capture.source === "window"} onClick={() => setSource("window")} icon={<Icons.Layers size={22} />} label="Window or screen" desc="Anything on your desktop — for cross-app bug demos." />
+        <div style={{ display: "flex", gap: 10 }}>
+          <TypeBtn sel={!isRec} onClick={() => setMode("screenshot")} icon={<Icons.Image size={18} />} label="Screenshot" desc="One still frame" />
+          <TypeBtn sel={isRec} onClick={() => setMode("recording")} icon={<div style={{ width: 12, height: 12, borderRadius: 1199, background: "#DC2626" }} />} label="Recording" desc="Screen video + steps" />
         </div>
 
-        {(capture.source === "area" || capture.source === "element") && (
+        <SectionLabel>{isRec ? "Record from" : "Screenshot of"}</SectionLabel>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <SourceOption sel={capture.source === "area"} onClick={() => setSource("area")} icon={<Icons.Crop size={22} />} label="Custom area" desc={isRec ? "Drag a region of this tab; the recording is cropped to it." : "Drag a region of this tab to crop the screenshot."} badge="recommended" />
+          <SourceOption sel={capture.source === "element"} onClick={() => setSource("element")} icon={<Icons.Crosshair size={22} />} label="Element" desc={isRec ? "Click a DOM element to crop the recording to it." : "Click a DOM element to crop the screenshot to it."} />
+          <SourceOption sel={capture.source === "tab"} onClick={() => setSource("tab")} icon={<Icons.Image size={22} />} label="Current tab" desc={isRec ? "The whole browser tab. Click rings drawn when cursor highlight is on." : "The whole visible browser tab."} />
+          {isRec && (
+            <SourceOption sel={capture.source === "window"} onClick={() => setSource("window")} icon={<Icons.Layers size={22} />} label="Window or screen" desc="Anything on your desktop — for cross-app bug demos." />
+          )}
+        </div>
+
+        {isRec && (capture.source === "area" || capture.source === "element") && (
           <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "var(--sp-indigo-50)", border: "1px solid var(--sp-indigo-100)", color: "var(--sp-indigo-700)", fontSize: 14, lineHeight: 1.45 }}>
             In the share prompt, choose <b>This tab</b> — the crop lines up with the page you're on.
           </div>
@@ -226,9 +271,9 @@ export function SourcePicker({
           <label style={{ ...rowS, cursor: micUsable ? undefined : "default" }}>
             <Icons.Mic size={17} style={{ color: micUsable ? "var(--sp-text-3)" : "var(--sp-text-4)" }} />
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: micUsable ? undefined : "var(--sp-text-3)" }}>Record voice over</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: micUsable ? undefined : "var(--sp-text-3)" }}>{isRec ? "Record voice over" : "Dictate the description"}</div>
               {micUsable ? (
-                <div style={{ fontSize: 13, color: "var(--sp-text-3)" }}>Narrate while you reproduce. Transcribed automatically.</div>
+                <div style={{ fontSize: 13, color: "var(--sp-text-3)" }}>{isRec ? "Narrate while you reproduce. Transcribed automatically." : "Off: you fill the form. On: record a voice note → AI drafts it."}</div>
               ) : (
                 <div style={{ fontSize: 13, color: "#B45309" }}>
                   Microphone access not granted.{" "}
@@ -247,53 +292,69 @@ export function SourcePicker({
             </div>
             <Toggle on={micUsable && capture.mic} onChange={(mic) => setCapture({ mic })} disabled={!micUsable} />
           </label>
-          <label style={{ ...rowS, borderTop: "1px solid var(--sp-border)" }}>
-            <Icons.Crosshair size={17} style={{ color: "var(--sp-text-3)" }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>Highlight cursor</div>
-              <div style={{ fontSize: 13, color: "var(--sp-text-3)" }}>Adds a ring around clicks for clarity.</div>
+          {isRec && (
+            <label style={{ ...rowS, borderTop: "1px solid var(--sp-border)" }}>
+              <Icons.Crosshair size={17} style={{ color: "var(--sp-text-3)" }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>Highlight cursor</div>
+                <div style={{ fontSize: 13, color: "var(--sp-text-3)" }}>Adds a ring around clicks for clarity.</div>
+              </div>
+              <Toggle on={capture.cursor} onChange={(cursor) => setCapture({ cursor })} />
+            </label>
+          )}
+          {isRec && (
+            <div style={{ ...rowS, borderTop: "1px solid var(--sp-border)" }}>
+              <Icons.Globe size={17} style={{ color: "var(--sp-text-3)" }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>Quality</div>
+                <div style={{ fontSize: 13, color: "var(--sp-text-3)" }}>1080p, 30 fps · ~3 MB per minute</div>
+              </div>
+              <select
+                className="sp-input"
+                style={{ width: 115, height: 34, padding: "0 7px", fontSize: 13 }}
+                value={capture.quality}
+                onChange={(e) => setCapture({ quality: e.target.value as CaptureDefaults["quality"] })}
+              >
+                <option value="720">720p</option>
+                <option value="1080">1080p</option>
+                <option value="1440">1440p</option>
+              </select>
             </div>
-            <Toggle on={capture.cursor} onChange={(cursor) => setCapture({ cursor })} />
-          </label>
-          <div style={{ ...rowS, borderTop: "1px solid var(--sp-border)" }}>
-            <Icons.Globe size={17} style={{ color: "var(--sp-text-3)" }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>Quality</div>
-              <div style={{ fontSize: 13, color: "var(--sp-text-3)" }}>1080p, 30 fps · ~3 MB per minute</div>
-            </div>
-            <select
-              className="sp-input"
-              style={{ width: 115, height: 34, padding: "0 7px", fontSize: 13 }}
-              value={capture.quality}
-              onChange={(e) => setCapture({ quality: e.target.value as CaptureDefaults["quality"] })}
-            >
-              <option value="720">720p</option>
-              <option value="1080">1080p</option>
-              <option value="1440">1440p</option>
-            </select>
-          </div>
+          )}
         </div>
 
-        <SectionLabel>Add-ons</SectionLabel>
-        <div style={{ background: "var(--sp-surface)", border: "1px solid var(--sp-border)", borderRadius: 12, padding: "5px 14px" }}>
-          <label style={rowS}>
-            <Icons.Bolt size={17} style={{ color: capture.repro ? "#7C3AED" : "var(--sp-text-3)" }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                <span style={{ fontSize: 15, fontWeight: 600 }}>Record reproduction steps</span>
-                <span className="sp-chip" style={{ height: 19, fontSize: 11, padding: "0 6px" }}>Default on</span>
-              </div>
-              <div style={{ fontSize: 13, color: "var(--sp-text-3)" }}>Captures every click, input & URL change as a replayable timeline.</div>
+        {isRec && (
+          <>
+            <SectionLabel>Add-ons</SectionLabel>
+            <div style={{ background: "var(--sp-surface)", border: "1px solid var(--sp-border)", borderRadius: 12, padding: "5px 14px" }}>
+              <label style={rowS}>
+                <Icons.Bolt size={17} style={{ color: capture.repro ? "#7C3AED" : "var(--sp-text-3)" }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                    <span style={{ fontSize: 15, fontWeight: 600 }}>Record reproduction steps</span>
+                    <span className="sp-chip" style={{ height: 19, fontSize: 11, padding: "0 6px" }}>Default on</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--sp-text-3)" }}>Captures every click, input & URL change as a replayable timeline.</div>
+                </div>
+                <Toggle on={capture.repro} onChange={(repro) => setCapture({ repro })} />
+              </label>
             </div>
-            <Toggle on={capture.repro} onChange={(repro) => setCapture({ repro })} />
-          </label>
-        </div>
+          </>
+        )}
       </div>
 
       <div style={{ padding: 14, borderTop: "1px solid var(--sp-border)", display: "flex", gap: 10, background: "var(--sp-surface)" }}>
         <button onClick={onCancel} className="sp-btn sp-btn-secondary" style={{ flex: 1, justifyContent: "center" }}>Cancel</button>
         <button onClick={onStart} className="sp-btn sp-btn-primary" style={{ flex: 2, justifyContent: "center" }}>
-          <div style={{ width: 10, height: 10, borderRadius: 1199, background: "#fff" }} /> Start recording
+          {isRec ? (
+            <>
+              <div style={{ width: 10, height: 10, borderRadius: 1199, background: "#fff" }} /> Start recording
+            </>
+          ) : (
+            <>
+              <Icons.Image size={16} /> Take screenshot
+            </>
+          )}
         </button>
       </div>
     </div>

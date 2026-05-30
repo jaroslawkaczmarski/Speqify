@@ -61,6 +61,8 @@ export interface AiConfig {
 }
 
 export interface CaptureDefaults {
+  /** Still screenshot vs screen recording — the top-level capture type. */
+  mode: "screenshot" | "recording";
   source: "area" | "element" | "tab" | "window";
   mic: boolean;
   cursor: boolean;
@@ -167,7 +169,7 @@ export const useSettings = create<SettingsState>()(
       onboarded: false,
       tracker: null,
       ai: defaultAiConfig(),
-      capture: { source: "area", mic: true, cursor: true, repro: true, quality: "1080" },
+      capture: { mode: "recording", source: "area", mic: true, cursor: true, repro: true, quality: "1080" },
       templates: defaultTemplates(),
       setOnboarded: (onboarded) => set({ onboarded }),
       setTracker: (tracker) => set({ tracker }),
@@ -195,7 +197,9 @@ export const useSettings = create<SettingsState>()(
       // the split Voice/AI config rather than overwriting the new defaults wholesale.
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & { ai?: Record<string, unknown> };
-        return { ...current, ...p, ai: migrateAi(p.ai) };
+        // Underlay capture defaults so a field added after a user first persisted
+        // (e.g. `mode`) is never undefined.
+        return { ...current, ...p, ai: migrateAi(p.ai), capture: { ...current.capture, ...(p.capture ?? {}) } };
       },
       onRehydrateStorage: () => () => useSettings.setState({ hydrated: true }),
     },

@@ -267,3 +267,75 @@ export async function startRecording(opts: StartOptions): Promise<ActiveRecorder
     return stream;
   }
 }
+
+export interface VoiceNote {
+  /** Mic frequency analyser for the waveform (null if it couldn't be built). */
+  analyser: AnalyserNode | null;
+  /** Returns the recorded audio webm, or null if nothing was captured. */
+  stop: () => Promise<Blob | null>;
+  cancel: () => void;
+}
+
+/**
+ * Record a mic-only voice note — used by the Screenshot flow, where there's no
+ * screen capture but the user still wants to dictate. Mirrors the mic + analyser
+ * setup in startRecording() without getDisplayMedia. Throws if the mic is denied.
+ */
+export async function recordVoiceNote(): Promise<VoiceNote> {
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    throw new Error("Audio recording isn't supported in this browser.");
+  }
+  const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+  let audioCtx: AudioContext | null = null;
+  let analyser: AnalyserNode | null = null;
+  try {
+    const AC: typeof AudioContext =
+      window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    audioCtx = new AC();
+    const node = audioCtx.createAnalyser();
+    node.fftSize = 128;
+    node.smoothingTimeConstant = 0.7;
+    audioCtx.createMediaStreamSource(micStream).connect(node);
+    analyser = node;
+  } catch {
+    analyser = null;
+  }
+
+  const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+  const chunks: BlobPart[] = [];
+  const mr = new MediaRecorder(micStream, { mimeType: mime });
+  mr.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  };
+  mr.start();
+
+  const cleanup = () => {
+    micStream.getTracks().forEach((t) => t.stop());
+    void audioCtx?.close();
+  };
+
+  return {
+    analyser,
+    stop: () =>
+      new Promise<Blob | null>((resolve) => {
+        mr.onstop = () => {
+          cleanup();
+          resolve(chunks.length ? new Blob(chunks, { type: mime }) : null);
+        };
+        if (mr.state !== "inactive") mr.stop();
+        else {
+          cleanup();
+          resolve(null);
+        }
+      }),
+    cancel: () => {
+      try {
+        if (mr.state !== "inactive") mr.stop();
+      } catch {
+        /* ignore */
+      }
+      cleanup();
+    },
+  };
+}
