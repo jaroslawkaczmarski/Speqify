@@ -1,4 +1,4 @@
-import { TicketSchema, emptyTicket, extractJson, type CaptureContext, type Ticket, type TicketType } from "@speqify/core";
+import { TicketSchema, emptyTicket, extractJson, isLocalEndpoint, isSafeEndpoint, type CaptureContext, type Ticket, type TicketType } from "@speqify/core";
 import type { AiConfig, RemoteEndpoint } from "@/store";
 import { buildDraftSystem, buildDraftUser } from "./prompt";
 import { blobToPcm16k, loadLocal, localGenerate, localLoaded, localTranscribe } from "./local";
@@ -10,7 +10,9 @@ export { loadLocal, localLoaded, unloadLocal } from "./local";
 
 /** A remote endpoint can run once it has a URL + model and either a key or is localhost. */
 function remoteUsable(r: RemoteEndpoint): boolean {
-  return Boolean(r.endpoint.trim() && r.model.trim() && (r.apiKey.trim() || /localhost|127\.0\.0\.1/.test(r.endpoint)));
+  if (!r.endpoint.trim() || !r.model.trim() || !isSafeEndpoint(r.endpoint)) return false;
+  // A key is required unless talking to a local model server (localhost).
+  return Boolean(r.apiKey.trim() || isLocalEndpoint(r.endpoint));
 }
 
 /** Can the configured Voice model turn the recording into text? */

@@ -19,7 +19,8 @@ export default defineContentScript({
 function install() {
   const post = (msg: CaptureMessage) => {
     try {
-      window.postMessage(msg, "*");
+      // Pin to our own origin so co-resident page/extension scripts can't eavesdrop.
+      window.postMessage(msg, window.location.origin);
     } catch {
       /* ignore serialization failures */
     }
@@ -80,10 +81,12 @@ function install() {
   });
 
   const recordNet = (method: string, url: string, status: number) => {
+    // Drop the query string/fragment before buffering — they often carry tokens.
+    const safeUrl = url.replace(/[?#].*$/, "").slice(0, 500);
     post({
       source: CAPTURE_SOURCE,
       kind: "network",
-      entry: { method: method.toUpperCase(), url: url.slice(0, 500), status, ok: status >= 200 && status < 400, at: Date.now() },
+      entry: { method: method.toUpperCase(), url: safeUrl, status, ok: status >= 200 && status < 400, at: Date.now() },
     });
   };
 

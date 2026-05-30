@@ -1,7 +1,12 @@
+import { isSafeEndpoint } from "@speqify/core";
 import type { RemoteEndpoint } from "@/store";
 
 function base(cfg: RemoteEndpoint): string {
-  return cfg.endpoint.trim().replace(/\/$/, "");
+  const url = cfg.endpoint.trim().replace(/\/$/, "");
+  if (!isSafeEndpoint(url)) {
+    throw new Error(`Refusing to send your API key to a non-HTTPS endpoint: ${url || "(empty)"}`);
+  }
+  return url;
 }
 
 function authHeaders(cfg: RemoteEndpoint): Record<string, string> {

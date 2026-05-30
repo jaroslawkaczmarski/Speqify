@@ -70,7 +70,14 @@ export default defineContentScript({
       if (!capturing || !trackSteps) return;
       const el = e.target as (HTMLInputElement | HTMLTextAreaElement) & { type?: string };
       if (!el || !("value" in el)) return;
-      const isSecret = el.type === "password";
+      // Never record likely-sensitive fields verbatim. type="password" can be flipped
+      // to "text" by show-password toggles, so also key off autocomplete + name/id hints.
+      const ac = (el.getAttribute("autocomplete") || "").toLowerCase();
+      const hint = `${el.getAttribute("name") || ""} ${el.id || ""}`.toLowerCase();
+      const isSecret =
+        el.type === "password" ||
+        /(current-password|new-password|one-time-code|cc-number|cc-csc|cc-exp)/.test(ac) ||
+        /pass|secret|token|otp|cvv|cvc|card|ssn|pin/.test(hint);
       const value = isSecret ? "•••" : String(el.value ?? "").slice(0, 60);
       push(stepBuf, { kind: "input", at: Date.now(), target: cssPath(el), value: value || undefined });
     };
@@ -171,7 +178,6 @@ function toElementInfo(el: Element): ElementInfo {
   const r = el.getBoundingClientRect();
   return {
     selector: cssPath(el),
-    html: el.outerHTML.slice(0, 2000),
     rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
   };
 }

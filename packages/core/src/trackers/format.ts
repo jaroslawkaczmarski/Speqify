@@ -1,4 +1,5 @@
-import { describeStep } from "../ai/enhance.js";
+import { describeStep, selectContextHighlights } from "../ai/enhance.js";
+import { redactUrl } from "../redact.js";
 import type { CaptureContext } from "../capture.js";
 import type { Ticket } from "../ticket.js";
 
@@ -7,7 +8,7 @@ export function composeMarkdown(ticket: Ticket, context?: CaptureContext): strin
   const parts: string[] = [];
   // Lead with where it happened — the exact URL of the page being filed about.
   const url = context?.page.url?.trim();
-  if (url) parts.push(`**Where it happened:** ${url}`);
+  if (url) parts.push(`**Where it happened:** ${redactUrl(url)}`);
   if (ticket.description.trim()) parts.push(ticket.description.trim());
 
   if (ticket.stepsToReproduce.length) {
@@ -30,35 +31,30 @@ export function composeMarkdown(ticket: Ticket, context?: CaptureContext): strin
 
 function technicalMarkdown(context?: CaptureContext): string {
   if (!context) return "";
+  const h = selectContextHighlights(context);
   const lines: string[] = [];
-  lines.push(`- **URL:** ${context.page.url}`);
+  lines.push(`- **URL:** ${h.pageUrl}`);
   lines.push(`- **User agent:** ${context.page.userAgent}`);
-  if (context.element) lines.push(`- **Element:** \`${context.element.selector}\``);
+  if (h.element) lines.push(`- **Element:** \`${h.element}\``);
 
-  const errors = context.errors.slice(-10);
-  if (errors.length) {
+  if (h.jsErrors.length) {
     lines.push("", "**JS errors**", "```");
-    for (const e of errors) lines.push(e.stack ? `${e.message}\n${e.stack}` : e.message);
+    for (const e of h.jsErrors) lines.push(e.stack ? `${e.message}\n${e.stack}` : e.message);
     lines.push("```");
   }
-  const failed = context.network.filter((n) => !n.ok).slice(-10);
-  if (failed.length) {
+  if (h.failedRequests.length) {
     lines.push("", "**Failed requests**", "```");
-    for (const n of failed) lines.push(`${n.status} ${n.method} ${n.url}`);
+    for (const n of h.failedRequests) lines.push(`${n.status} ${n.method} ${n.url}`);
     lines.push("```");
   }
-  const consoleErr = context.console
-    .filter((c) => c.level === "error" || c.level === "warn")
-    .slice(-10);
-  if (consoleErr.length) {
+  if (h.consoleErrors.length) {
     lines.push("", "**Console**", "```");
-    for (const c of consoleErr) lines.push(`[${c.level}] ${c.message}`);
+    for (const c of h.consoleErrors) lines.push(`[${c.level}] ${c.message}`);
     lines.push("```");
   }
-  const steps = context.steps ?? [];
-  if (steps.length) {
+  if (h.steps.length) {
     lines.push("", "**Observed steps**");
-    steps.slice(-12).forEach((s, i) => lines.push(`${i + 1}. ${describeStep(s)}`));
+    h.steps.forEach((s, i) => lines.push(`${i + 1}. ${describeStep(s)}`));
   }
   return ["<details><summary>Technical context</summary>", "", ...lines, "</details>"].join("\n");
 }

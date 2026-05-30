@@ -1,5 +1,6 @@
 import { composeMarkdown } from "./format.js";
 import { dataUrlToBlob, recordingName, screenshotName } from "./media.js";
+import { isSafeEndpoint } from "../redact.js";
 import { TrackerError, type GitlabConfig, type SubmitInput, type SubmitResult } from "./types.js";
 
 export async function submitGitlab(
@@ -7,6 +8,9 @@ export async function submitGitlab(
   input: SubmitInput,
 ): Promise<SubmitResult> {
   const base = (config.baseUrl?.trim() || "https://gitlab.com").replace(/\/$/, "");
+  if (!isSafeEndpoint(base)) {
+    throw new TrackerError(`Refusing to send your token to a non-HTTPS GitLab URL: ${base}`);
+  }
   let description = composeMarkdown(input.ticket, input.context);
 
   // Upload the screenshot + recording first, then reference them in the description.

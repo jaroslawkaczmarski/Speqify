@@ -1,5 +1,44 @@
-import type { CaptureContext } from "../capture.js";
+import type { CaptureContext, ConsoleLevel, ReproStep } from "../capture.js";
+import { redactUrl, scrubSecrets } from "../redact.js";
 import { AiError } from "./types.js";
+
+/** Max entries kept per group when summarizing captured context (one shared cap). */
+const CONTEXT_CAP = 10;
+
+export interface ContextHighlights {
+  /** Page URL with query/fragment stripped. */
+  pageUrl: string;
+  element?: string;
+  jsErrors: { message: string; stack?: string }[];
+  consoleErrors: { level: ConsoleLevel; message: string }[];
+  failedRequests: { status: number; method: string; url: string }[];
+  steps: ReproStep[];
+}
+
+/**
+ * Single source of truth for which captured context to surface, WITH redaction
+ * (URL query strings stripped, token shapes scrubbed) and one shared cap + rule.
+ * Used by the AI digest and every tracker formatter so they never diverge.
+ */
+export function selectContextHighlights(ctx: CaptureContext): ContextHighlights {
+  return {
+    pageUrl: redactUrl(ctx.page.url),
+    element: ctx.element?.selector,
+    jsErrors: ctx.errors.slice(-CONTEXT_CAP).map((e) => ({
+      message: scrubSecrets(e.message),
+      stack: e.stack ? scrubSecrets(e.stack) : undefined,
+    })),
+    consoleErrors: ctx.console
+      .filter((c) => c.level === "error" || c.level === "warn")
+      .slice(-CONTEXT_CAP)
+      .map((c) => ({ level: c.level, message: scrubSecrets(c.message) })),
+    failedRequests: ctx.network
+      .filter((n) => !n.ok)
+      .slice(-CONTEXT_CAP)
+      .map((n) => ({ status: n.status, method: n.method, url: redactUrl(n.url) })),
+    steps: (ctx.steps ?? []).slice(-CONTEXT_CAP),
+  };
+}
 
 /**
  * Build a compact, model-friendly digest of the page context captured during a
@@ -8,30 +47,24 @@ import { AiError } from "./types.js";
  */
 export function buildContextDigest(ctx?: CaptureContext): string {
   if (!ctx) return "";
-  const lines: string[] = [];
-  lines.push(`Page: ${ctx.page.title || "(untitled)"} — ${ctx.page.url}`);
-  if (ctx.element) lines.push(`Selected element: ${ctx.element.selector}`);
-  const errors = ctx.errors.slice(-8);
-  if (errors.length) {
+  const h = selectContextHighlights(ctx);
+  const lines: string[] = [`Page: ${ctx.page.title || "(untitled)"} — ${h.pageUrl}`];
+  if (h.element) lines.push(`Selected element: ${h.element}`);
+  if (h.jsErrors.length) {
     lines.push("JS errors:");
-    for (const e of errors) lines.push(`  - ${e.message}`);
+    for (const e of h.jsErrors) lines.push(`  - ${e.message}`);
   }
-  const consoleErrors = ctx.console
-    .filter((c) => c.level === "error" || c.level === "warn")
-    .slice(-8);
-  if (consoleErrors.length) {
+  if (h.consoleErrors.length) {
     lines.push("Console:");
-    for (const c of consoleErrors) lines.push(`  - [${c.level}] ${c.message}`);
+    for (const c of h.consoleErrors) lines.push(`  - [${c.level}] ${c.message}`);
   }
-  const failed = ctx.network.filter((n) => !n.ok).slice(-8);
-  if (failed.length) {
+  if (h.failedRequests.length) {
     lines.push("Failed network requests:");
-    for (const n of failed) lines.push(`  - ${n.status} ${n.method} ${n.url}`);
+    for (const n of h.failedRequests) lines.push(`  - ${n.status} ${n.method} ${n.url}`);
   }
-  const steps = (ctx.steps ?? []).slice(-12);
-  if (steps.length) {
+  if (h.steps.length) {
     lines.push("Reproduction steps (observed):");
-    for (const s of steps) lines.push(`  - ${describeStep(s)}`);
+    for (const s of h.steps) lines.push(`  - ${describeStep(s)}`);
   }
   return lines.join("\n");
 }

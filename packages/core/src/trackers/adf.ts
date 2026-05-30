@@ -1,4 +1,5 @@
-import { describeStep } from "../ai/enhance.js";
+import { describeStep, selectContextHighlights } from "../ai/enhance.js";
+import { redactUrl } from "../redact.js";
 import type { CaptureContext } from "../capture.js";
 import type { Ticket } from "../ticket.js";
 
@@ -34,11 +35,12 @@ export function composeAdf(ticket: Ticket, context?: CaptureContext): AdfNode {
   // Lead with where it happened — the exact URL of the page being filed about.
   const url = context?.page.url?.trim();
   if (url) {
+    const safe = redactUrl(url);
     content.push({
       type: "paragraph",
       content: [
         { type: "text", text: "Where it happened: " },
-        { type: "text", text: url, marks: [{ type: "link", attrs: { href: url } }] },
+        { type: "text", text: safe, marks: [{ type: "link", attrs: { href: safe } }] },
       ],
     });
   }
@@ -71,17 +73,15 @@ export function composeAdf(ticket: Ticket, context?: CaptureContext): AdfNode {
 
 function technicalText(context?: CaptureContext): string {
   if (!context) return "";
-  const lines: string[] = [`URL: ${context.page.url}`, `UA: ${context.page.userAgent}`];
-  if (context.element) lines.push(`Element: ${context.element.selector}`);
-  for (const e of context.errors.slice(-10)) lines.push(`JS error: ${e.message}`);
-  for (const n of context.network.filter((x) => !x.ok).slice(-10))
-    lines.push(`HTTP ${n.status} ${n.method} ${n.url}`);
-  for (const c of context.console.filter((x) => x.level === "error").slice(-10))
-    lines.push(`console.error: ${c.message}`);
-  const steps = context.steps ?? [];
-  if (steps.length) {
+  const h = selectContextHighlights(context);
+  const lines: string[] = [`URL: ${h.pageUrl}`, `UA: ${context.page.userAgent}`];
+  if (h.element) lines.push(`Element: ${h.element}`);
+  for (const e of h.jsErrors) lines.push(`JS error: ${e.message}`);
+  for (const n of h.failedRequests) lines.push(`HTTP ${n.status} ${n.method} ${n.url}`);
+  for (const c of h.consoleErrors) lines.push(`console.${c.level}: ${c.message}`);
+  if (h.steps.length) {
     lines.push("Observed steps:");
-    steps.slice(-12).forEach((s, i) => lines.push(`  ${i + 1}. ${describeStep(s)}`));
+    h.steps.forEach((s, i) => lines.push(`  ${i + 1}. ${describeStep(s)}`));
   }
   return lines.join("\n");
 }

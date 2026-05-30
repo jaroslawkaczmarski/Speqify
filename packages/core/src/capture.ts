@@ -31,8 +31,6 @@ export interface JsErrorEntry {
 
 export interface ElementInfo {
   selector: string;
-  /** outerHTML, truncated */
-  html: string;
   rect?: { x: number; y: number; w: number; h: number };
 }
 
