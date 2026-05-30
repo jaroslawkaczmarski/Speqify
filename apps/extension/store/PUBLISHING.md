@@ -9,8 +9,9 @@ verbatim to Chrome).
 > - **Chrome, Edge, Brave, Arc** → the **`chrome`** build (`chrome-mv3`). Brave & Arc install
 >   from the Chrome Web Store; Edge has its own store.
 > - **Firefox** → the **`firefox`** build (`firefox-mv3`), submitted to AMO.
-> - **Opera** → ⚠️ not shippable yet (needs a Chromium build that emits `sidebar_action`
->   instead of `side_panel`; Opera has no `chrome.sidePanel`). See the bottom of this file.
+> - **Opera** → the **`opera`** build (`opera-mv3`) — Chromium that emits `sidebar_action`
+>   instead of `side_panel` (Opera has no `chrome.sidePanel`). Manifest verified; confirm the
+>   panel opens in a real Opera before publishing (see §6).
 > - **Safari** → requires macOS + Xcode (blocked on a Linux host). Out of scope here.
 
 ---
@@ -57,7 +58,8 @@ All builds run in the hardened container; the host stays clean (see the repo REA
 podman compose -f compose.yaml run --rm shell bash -lc '
   corepack enable pnpm
   pnpm --filter @speqify/extension zip          # → Chrome / Edge / Brave / Arc
-  pnpm --filter @speqify/extension zip:firefox  # → Firefox (+ sources zip)
+  pnpm --filter @speqify/extension zip:firefox  # → Firefox / AMO (+ sources zip)
+  pnpm --filter @speqify/extension zip:opera    # → Opera (sidebar_action)
 '
 ```
 
@@ -67,7 +69,8 @@ Artifacts land in `apps/extension/.output/`:
 |---|---|
 | `speqifyextension-<ver>-chrome.zip` | Chrome Web Store, Edge Add-ons (same zip) |
 | `speqifyextension-<ver>-firefox.zip` | Firefox / AMO |
-| `speqifyextension-<ver>-sources.zip` | AMO source upload (see §5 caveat) |
+| `speqifyextension-<ver>-opera.zip` | Opera Add-ons |
+| `speqifyextension-<ver>-sources.zip` | AMO source upload (whole monorepo; see §5) |
 
 **Always verify before uploading** (must be green):
 
@@ -86,6 +89,8 @@ podman compose -f compose.yaml run --rm shell bash -lc '
 - Firefox: `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** → pick
   `apps/extension/.output/firefox-mv3/manifest.json`. The panel opens in the **sidebar**
   (left); Alt+S toggles it.
+- Opera: `opera://extensions` → **Developer mode** → **Load unpacked** →
+  `apps/extension/.output/opera-mv3`. The panel opens in Opera's **sidebar**.
 
 ---
 
@@ -143,15 +148,12 @@ The **same `chrome.zip`** is used. Full field-by-field walkthrough is in
 6. Listing details (summary, description, category, screenshots) + submit. Review can take
    days.
 
-> **⚠️ Source-upload caveat (pnpm monorepo).** `wxt zip -b firefox` emits a `sources.zip`,
-> but WXT's `zip.downloadPackages` can't pack pnpm `link:` workspace deps
-> (`@speqify/core`, `@speqify/ui`), so that sources zip alone is **not** reproducible by an
-> AMO reviewer. Before an AMO submission, do one of:
-> - set `zip.sourcesRoot` in `wxt.config.ts` to the **monorepo root** (with excludes for
->   `node_modules`, `.output`, `dist`, `.git`) so the sources zip contains the whole repo; or
-> - upload a zip/tarball of the repo with a README: `pnpm install` then
->   `pnpm --filter @speqify/extension zip:firefox`, Node ≥22, pnpm 9.15, and confirm the
->   rebuilt `firefox.zip` matches.
+> **Source upload (pnpm monorepo) — handled.** `wxt.config.ts` sets `zip.sourcesRoot` to the
+> monorepo root, so `sources.zip` bundles the whole repo (incl. `packages/core`,
+> `packages/ui`, and `pnpm-lock.yaml`) and **excludes** `node_modules`/`.output`/`dist`.
+> A reviewer reproduces with `pnpm install` then
+> `pnpm --filter @speqify/extension zip:firefox` (Node ≥22, pnpm 9.15). Just upload
+> `speqifyextension-<ver>-sources.zip` alongside the extension.
 
 ### Self-distribution (no public listing)
 Sign an unlisted XPI you host yourself (needs AMO API creds from the Developer Hub):
@@ -172,14 +174,27 @@ podman compose -f compose.yaml run --rm shell bash -lc '
 
 ---
 
-## 6. Opera Add-ons — ⚠️ not ready
+## 6. Opera Add-ons
 
-Opera does **not** implement `chrome.sidePanel`; it uses its own `sidebarAction`. The
-current `chrome.zip` installs in Opera but the panel never opens, and the Firefox gecko
-build isn't a Chromium package Opera accepts. **To ship Opera, first add a Chromium build
-variant that emits `sidebar_action`** (WXT only special-cases that for `-b firefox`, so it
-needs manual per-target manifest work), then submit at
-<https://addons.opera.com/developer/>. Tracked as a follow-up.
+Opera does **not** implement `chrome.sidePanel` — it uses its own `sidebarAction`. So Opera
+gets a dedicated build: `zip:opera` produces a Chromium MV3 package where a
+`build:manifestGenerated` hook (in `wxt.config.ts`) drops `side_panel` + the `sidePanel`
+permission and adds `sidebar_action: { default_panel: "sidepanel.html" }`.
+
+> **⚠️ Verify in a real Opera first.** The generated manifest is correct, but the sidebar
+> opening was not runtime-tested here (no Opera on the build host). Load `.output/opera-mv3`
+> unpacked in Opera and confirm the panel opens from the sidebar before publishing.
+
+### First publish
+1. Build `zip:opera` (§2).
+2. <https://addons.opera.com/developer/> → **Add new extension** → upload
+   `speqifyextension-<ver>-opera.zip`.
+3. Listing fields mirror the Edge kit (description, screenshots, **Privacy policy URL**,
+   category). Opera reviews submissions.
+
+### Update
+1. Bump version (§1), rebuild `zip:opera` (§2).
+2. Opera dashboard → the extension → upload the new `opera.zip` → submit.
 
 ---
 

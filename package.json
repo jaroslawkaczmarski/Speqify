@@ -24,8 +24,10 @@
     "ext:dev": "pnpm --filter @speqify/extension dev",
     "ext:build": "pnpm --filter @speqify/extension build",
     "ext:build:firefox": "pnpm --filter @speqify/extension build:firefox",
+    "ext:build:opera": "pnpm --filter @speqify/extension build:opera",
     "ext:zip": "pnpm --filter @speqify/extension zip",
     "ext:zip:firefox": "pnpm --filter @speqify/extension zip:firefox",
+    "ext:zip:opera": "pnpm --filter @speqify/extension zip:opera",
     "landing:dev": "pnpm --filter @speqify/landing dev"
   },
   "devDependencies": {

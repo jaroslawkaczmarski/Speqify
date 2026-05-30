@@ -11,8 +11,10 @@
     "dev:firefox": "pnpm assets && wxt -b firefox",
     "build": "pnpm assets && wxt build",
     "build:firefox": "pnpm assets && wxt build -b firefox",
+    "build:opera": "pnpm assets && wxt build -b opera",
     "zip": "pnpm assets && wxt zip",
     "zip:firefox": "pnpm assets && wxt zip -b firefox",
+    "zip:opera": "pnpm assets && wxt zip -b opera",
     "postinstall": "wxt prepare",
     "typecheck": "wxt prepare && tsc --noEmit",
     "lint": "eslint ."

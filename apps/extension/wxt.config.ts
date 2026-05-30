@@ -10,11 +10,21 @@ export default defineConfig({
   // Force MV3 on every target. WXT defaults Firefox/Safari to MV2, but our CSP,
   // host permissions, and background design assume MV3.
   manifestVersion: 3,
-  // NOTE (AMO submission only): `wxt zip -b firefox` emits the extension zip + a sources
-  // zip. WXT's `zip.downloadPackages` can't pack pnpm `link:` workspace deps
-  // (@speqify/core, @speqify/ui), so to give AMO a reproducible source bundle, set
-  // `zip.sourcesRoot` to the monorepo root (with excludes) or submit the repo with build
-  // instructions. Left unset here so `zip:firefox` stays green for local/test builds.
+  // Firefox/AMO needs a reproducible source bundle. Root the sources zip at the monorepo
+  // so the workspace deps (@speqify/core, @speqify/ui) and pnpm-lock.yaml are included
+  // (WXT's `downloadPackages` can't pack pnpm `link:` deps). Reviewer repro:
+  //   pnpm install && pnpm --filter @speqify/extension zip:firefox
+  zip: {
+    sourcesRoot: resolve(import.meta.dirname, "../.."),
+    excludeSources: [
+      "**/node_modules/**",
+      "**/.output/**",
+      "**/dist/**",
+      "**/.turbo/**",
+      "**/.wxt/**",
+      "**/.git/**",
+    ],
+  },
   // ORT's wasm is served same-origin from public/ort (copy-ort.mjs) and ORT is pointed
   // there via env.wasm.wasmPaths. Vite ALSO auto-emits a copy from the `new URL(...)`
   // reference inside onnxruntime-web — drop that duplicate so we don't ship ~23 MB twice.
@@ -69,9 +79,20 @@ export default defineConfig({
     };
   },
   hooks: {
-    // Open the full Settings surface in its own tab (it's a wide, desktop layout).
-    "build:manifestGenerated": (_wxt, manifest) => {
+    "build:manifestGenerated": (wxt, manifest) => {
+      // Open the full Settings surface in its own tab (it's a wide, desktop layout).
       if (manifest.options_ui) manifest.options_ui.open_in_tab = true;
+
+      // Opera is Chromium but has no `chrome.sidePanel` — it uses `sidebar_action`
+      // (like Firefox). Rewrite the Chrome side-panel manifest into Opera's form.
+      if (wxt.config.browser === "opera") {
+        const m = manifest as Record<string, unknown>;
+        delete m.side_panel;
+        if (Array.isArray(manifest.permissions)) {
+          manifest.permissions = manifest.permissions.filter((p) => p !== "sidePanel");
+        }
+        m.sidebar_action = { default_panel: "sidepanel.html", default_title: "Speqify" };
+      }
     },
   },
 });

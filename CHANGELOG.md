@@ -4,6 +4,25 @@ All notable changes to Speqify are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims for
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Cross-browser & distribution
+- **Firefox build (MV3):** dedicated `build:firefox`/`zip:firefox` — drops the Chromium-only
+  `sidePanel` permission, adds `browser_specific_settings.gecko` (id + `strict_min_version`
+  128.0), and opens the panel via Firefox's `sidebar_action` (Alt+S = `_execute_sidebar_action`).
+- **Opera build:** `build:opera`/`zip:opera` — a Chromium build that emits `sidebar_action`
+  instead of `side_panel` (Opera has no `chrome.sidePanel`).
+- Forced **Manifest V3** on every target (WXT defaulted Firefox/Opera to MV2).
+- Reproducible **AMO source bundle** (`zip.sourcesRoot` = monorepo root).
+
+### Docs & assets
+- **Privacy policy** — `PRIVACY.md` + a public `/privacy.html` page, linked from the landing footer.
+- **Store kit** under `apps/extension/store/`: `PUBLISHING.md` (build + per-store publish/update
+  steps), `edge-addons-listing.md`, a 300×300 logo, promo tiles, and 1280×800 screenshots.
+
+### Landing
+- Marketing site is now **responsive** (mobile / tablet / desktop).
+
 ## [0.1.0] — 2026-05-30
 
 First public (open-source) release.
