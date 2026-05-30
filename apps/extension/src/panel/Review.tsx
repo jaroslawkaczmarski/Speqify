@@ -134,6 +134,9 @@ export function Review({
   destination,
   attachment,
   recordingUrl,
+  videoSupported,
+  includeVideo,
+  onIncludeVideo,
   context,
   include,
   onInclude,
@@ -147,6 +150,9 @@ export function Review({
   destination: { kind: TrackerKind; name: string; sub: string } | null;
   attachment?: { label: string; sub: string };
   recordingUrl?: string | null;
+  videoSupported?: boolean;
+  includeVideo?: boolean;
+  onIncludeVideo?: (v: boolean) => void;
   context?: CaptureContext;
   include: IncludeFlags;
   onInclude: (i: IncludeFlags) => void;
@@ -169,19 +175,31 @@ export function Review({
       {/* attachments */}
       <div style={{ padding: "17px 19px 0", display: "flex", flexDirection: "column", gap: 12 }}>
         {recordingUrl && (
-          <button
-            onClick={() => setShowVideo(true)}
-            style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: 12, background: "var(--sp-surface-2)", borderRadius: 12, border: "1px solid var(--sp-border)", cursor: "pointer", textAlign: "left" }}
-          >
-            <div style={{ width: 67, height: 48, borderRadius: 7, background: "#0E0C0A", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 }}>
-              <Icons.Play size={19} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Screen recording</div>
-              <div style={{ fontSize: 13, color: "var(--sp-text-3)" }}>Click to replay</div>
-            </div>
-            <Icons.Play size={17} style={{ color: "var(--sp-text-3)" }} />
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <button
+              onClick={() => setShowVideo(true)}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: 12, background: "var(--sp-surface-2)", borderRadius: 12, border: "1px solid var(--sp-border)", cursor: "pointer", textAlign: "left" }}
+            >
+              <div style={{ width: 67, height: 48, borderRadius: 7, background: "#0E0C0A", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 }}>
+                <Icons.Play size={19} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>Screen recording</div>
+                <div style={{ fontSize: 13, color: "var(--sp-text-3)" }}>Click to replay</div>
+              </div>
+              <Icons.Play size={17} style={{ color: "var(--sp-text-3)" }} />
+            </button>
+            {videoSupported ? (
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--sp-text-2)", cursor: "pointer", paddingLeft: 2 }}>
+                <input type="checkbox" checked={includeVideo ?? true} onChange={(e) => onIncludeVideo?.(e.target.checked)} />
+                <span>Attach the recording to the issue</span>
+              </label>
+            ) : (
+              <div style={{ fontSize: 13, color: "var(--sp-text-3)", paddingLeft: 2 }}>
+                Kept in your local draft — {destination?.name ?? "this tracker"} can't host video uploads.
+              </div>
+            )}
+          </div>
         )}
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, background: "var(--sp-surface-2)", borderRadius: 12, border: "1px solid var(--sp-border)" }}>
           <button

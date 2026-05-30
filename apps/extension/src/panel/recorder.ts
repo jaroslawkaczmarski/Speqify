@@ -299,7 +299,7 @@ export async function recordVoiceNote(): Promise<VoiceNote> {
     audioCtx.createMediaStreamSource(micStream).connect(node);
     analyser = node;
   } catch {
-    analyser = null;
+    /* no waveform — analyser stays null */
   }
 
   const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";

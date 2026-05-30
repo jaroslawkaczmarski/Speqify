@@ -3,6 +3,7 @@ import { browser } from "#imports";
 import {
   emptyTicket,
   submitTicket,
+  VIDEO_UPLOAD,
   type CaptureContext,
   type ElementInfo,
   type SubmitResult,
@@ -95,6 +96,7 @@ export function App() {
   const [drafts, setDrafts] = useState<DraftRecord[]>([]);
   const [armedCrop, setArmedCrop] = useState<CropRegion | null>(null);
   const [include, setInclude] = useState({ errors: true, network: true, steps: true });
+  const [includeVideo, setIncludeVideo] = useState(true);
   const sendCancelled = useRef(false);
   const flowCancelled = useRef(false);
   const recorderRef = useRef<ActiveRecorder | null>(null);
@@ -277,12 +279,8 @@ export function App() {
       recordedAudioRef.current = rec.micAvailable;
       setState("recording");
       void startCapture(capture.repro);
-      // Snapshot the starting state of the page.
-      void captureScreenshot()
-        .then((shot) => {
-          shotRef.current = shot;
-        })
-        .catch(() => {});
+      // No still for recordings — the video is the evidence (and a screenshot would
+      // just duplicate the first frame).
     } catch (e) {
       void endCapture();
       if (!(e instanceof CaptureCancelled)) setError(e instanceof Error ? e.message : String(e));
@@ -350,7 +348,9 @@ export function App() {
             steps: include.steps ? context.steps : [],
           }
         : undefined;
-      const res = await submitTicket(tracker, { ticket: draft, context: ctx });
+      // Attach the recording only when kept (checkbox) and the tracker can host it.
+      const video = includeVideo && VIDEO_UPLOAD[tracker.kind] ? videoBlobRef.current : null;
+      const res = await submitTicket(tracker, { ticket: draft, context: ctx, video });
       if (sendCancelled.current) return;
       // A resumed draft has now shipped — drop it from the drafts list.
       if (draftIdRef.current) {
@@ -393,6 +393,7 @@ export function App() {
     setError(null);
     setDraft(emptyTicket());
     setInclude({ errors: true, network: true, steps: true });
+    setIncludeVideo(true);
   };
 
   const onDiscard = () => {
@@ -571,6 +572,9 @@ export function App() {
                 destination={dest}
                 onSettings={openSettings}
                 recordingUrl={videoUrl}
+                videoSupported={dest ? VIDEO_UPLOAD[dest.kind] : false}
+                includeVideo={includeVideo}
+                onIncludeVideo={setIncludeVideo}
                 context={context}
                 include={include}
                 onInclude={setInclude}

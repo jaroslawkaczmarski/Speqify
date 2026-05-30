@@ -12,6 +12,18 @@ export const SCREENSHOT_EMBED: Record<TrackerKind, boolean> = {
   linear: true,
 };
 
+/**
+ * Which trackers can host an uploaded screen recording (webm). Same constraint as
+ * screenshots — GitHub's REST API has no PAT-authorized upload, so a recording
+ * stays a local draft artifact there.
+ */
+export const VIDEO_UPLOAD: Record<TrackerKind, boolean> = {
+  github: false,
+  gitlab: true,
+  jira: true,
+  linear: true,
+};
+
 /** Decode a `data:` URL (e.g. chrome.tabs.captureVisibleTab output) into a Blob. */
 export function dataUrlToBlob(dataUrl: string): Blob {
   const comma = dataUrl.indexOf(",");
