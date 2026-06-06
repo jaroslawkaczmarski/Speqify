@@ -1,9 +1,12 @@
 import React from "react";
-import { createRoot } from "react-dom/client";
+import { hydrateRoot } from "react-dom/client";
 import { App } from "./App";
 import "./index.css";
 
-createRoot(document.getElementById("root")!).render(
+// The HTML is prerendered at build time (see prerender.mjs / entry-server.tsx),
+// so hydrate the existing markup instead of rendering from an empty root.
+hydrateRoot(
+  document.getElementById("root")!,
   <React.StrictMode>
     <App />
   </React.StrictMode>,

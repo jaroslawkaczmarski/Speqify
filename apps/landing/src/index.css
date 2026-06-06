@@ -1,5 +1,20 @@
 @import "@speqify/ui/tokens.css";
 
+/* self-hosted fonts — Geist + Geist Mono · latin · VARIABLE: one woff2 per family
+   covers the weight axis (Geist 400-700, Mono 400-600), replacing the eight
+   per-weight static files (256 KB -> 64 KB). Files in public/fonts. */
+@font-face{font-family:'Geist';font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/geist-var-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'Geist Mono';font-style:normal;font-weight:400 600;font-display:swap;src:url(/fonts/geist-mono-var-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+/* metric-matched fallback (capsize) — system Arial scaled to Geist's box, so
+   font-display:swap causes no layout shift (CLS). */
+@font-face{font-family:'Geist Fallback';src:local('Arial'),local('ArialMT');ascent-override:95.9379%;descent-override:28.1609%;line-gap-override:0%;size-adjust:104.7553%;}
+
+/* Slot the metric-matched fallback into the shared --sp-font (overrides the
+   value from @speqify/ui tokens.css; landing-only, the extension is untouched). */
+:root {
+  --sp-font: "Geist", "Geist Fallback", "Inter", -apple-system, system-ui, sans-serif;
+}
+
 html,
 body {
   margin: 0;
@@ -11,4 +26,25 @@ body {
 
 html {
   scroll-behavior: smooth;
+}
+
+/* Skip-to-content link (WCAG 2.4.1 Bypass Blocks) — visually hidden until it
+   receives keyboard focus, then slides into the top-left corner. */
+.sp-skip {
+  position: absolute;
+  left: 12px;
+  top: -72px;
+  z-index: 50;
+  padding: 10px 18px;
+  border-radius: var(--sp-r, 10px);
+  background: var(--sp-text);
+  color: var(--sp-bg);
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+.sp-skip:focus {
+  top: 12px;
+  outline: 3px solid var(--sp-indigo-500);
+  outline-offset: 2px;
 }
