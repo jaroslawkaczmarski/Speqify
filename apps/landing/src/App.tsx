@@ -45,17 +45,22 @@ export function App() {
       className="sp"
       style={{ width: "100%", minHeight: "100%", background: "var(--sp-bg)", color: "var(--sp-text)" }}
     >
+      <a href="#main" className="sp-skip">
+        Skip to content
+      </a>
       <Nav />
-      <Hero />
-      <OpenSourceBand />
-      <CrossBrowserSection />
-      <Features />
-      <Demo />
-      <Integrations />
-      <HowItWorks />
-      <OpenSource />
-      <Faq />
-      <Cta />
+      <main id="main">
+        <Hero />
+        <OpenSourceBand />
+        <CrossBrowserSection />
+        <Features />
+        <Demo />
+        <Integrations />
+        <HowItWorks />
+        <OpenSource />
+        <Faq />
+        <Cta />
+      </main>
       <Footer />
     </div>
   );
