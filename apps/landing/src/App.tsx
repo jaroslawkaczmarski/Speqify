@@ -5,9 +5,9 @@ import { Icons, SpeqifyWordmark, Trackers } from "@speqify/ui";
  *  breakpoints (grid columns, stacking, nav collapse, hero shot) are driven
  *  from JS; fluid sizing (font sizes, paddings) uses CSS clamp() in-place. */
 function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() =>
-    typeof window !== "undefined" ? window.matchMedia(query).matches : false,
-  );
+  // Start from a fixed default so the prerendered HTML and the first client
+  // render agree (no hydration mismatch); the real value is read in useEffect.
+  const [matches, setMatches] = useState(false);
   useEffect(() => {
     const mql = window.matchMedia(query);
     const onChange = () => setMatches(mql.matches);
