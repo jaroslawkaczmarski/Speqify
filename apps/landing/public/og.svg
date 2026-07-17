@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Speqify — talk to your tracker</title>
+  <desc id="desc">Speqify turns captured web context and voice notes into structured tracker tickets.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#fafaf9"/>
+      <stop offset="1" stop-color="#eef2ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="1035" cy="80" r="270" fill="#4f46e5" opacity=".08"/>
+  <circle cx="1120" cy="560" r="220" fill="#4338ca" opacity=".08"/>
+  <g transform="translate(92 92)">
+    <rect width="72" height="72" rx="18" fill="#4f46e5"/>
+    <path d="M23 22h27v8H31v8h16v8H31v8h19v8H23z" fill="#fff"/>
+    <text x="94" y="54" fill="#1c1917" font-family="system-ui, -apple-system, sans-serif" font-size="54" font-weight="750">Speqify</text>
+  </g>
+  <text x="92" y="310" fill="#1c1917" font-family="system-ui, -apple-system, sans-serif" font-size="70" font-weight="750" letter-spacing="-2">Talk to your tracker.</text>
+  <text x="92" y="395" fill="#4f46e5" font-family="system-ui, -apple-system, sans-serif" font-size="70" font-weight="750" letter-spacing="-2">Speqify writes the ticket.</text>
+  <text x="92" y="486" fill="#57534e" font-family="system-ui, -apple-system, sans-serif" font-size="28">Open source · local first · Jira · GitHub · Linear · GitLab</text>
+</svg>
