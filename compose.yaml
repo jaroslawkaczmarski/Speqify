@@ -30,20 +30,20 @@ x-node: &node
 services:
   install:
     <<: *node
-    command: ["bash", "-lc", "corepack pnpm install --frozen-lockfile --store-dir=/pnpm-store"]
+    command: ["bash", "-lc", "mkdir -p /tmp/corepack-bin && corepack enable --install-directory /tmp/corepack-bin && export PATH=/tmp/corepack-bin:$PATH && pnpm install --frozen-lockfile --store-dir=/pnpm-store"]
   build:
     <<: *node
-    command: ["bash", "-lc", "corepack pnpm build"]
+    command: ["bash", "-lc", "mkdir -p /tmp/corepack-bin && corepack enable --install-directory /tmp/corepack-bin && export PATH=/tmp/corepack-bin:$PATH && pnpm build"]
   ext-build:
     <<: *node
-    command: ["bash", "-lc", "corepack pnpm ext:build"]
+    command: ["bash", "-lc", "mkdir -p /tmp/corepack-bin && corepack enable --install-directory /tmp/corepack-bin && export PATH=/tmp/corepack-bin:$PATH && pnpm ext:build"]
   landing-dev:
     <<: *node
     ports: ["5173:5173"]
-    command: ["bash", "-lc", "corepack pnpm --filter @speqify/landing exec vite --host 0.0.0.0 --port 5173"]
+    command: ["bash", "-lc", "mkdir -p /tmp/corepack-bin && corepack enable --install-directory /tmp/corepack-bin && export PATH=/tmp/corepack-bin:$PATH && pnpm --filter @speqify/landing exec vite --host 0.0.0.0 --port 5173"]
   audit:
     <<: *node
-    command: ["bash", "-lc", "corepack pnpm audit || true"]
+    command: ["bash", "-lc", "mkdir -p /tmp/corepack-bin && corepack enable --install-directory /tmp/corepack-bin && export PATH=/tmp/corepack-bin:$PATH && pnpm audit || true"]
   shell:
     <<: *node
     stdin_open: true

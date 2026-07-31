@@ -28,15 +28,30 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "Speqify",
-        "url": "https://speqify.app/",
-        "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "Chrome, Edge, Brave, Arc, Opera, Firefox",
-        "description": "A local-first browser sidebar that captures web context and turns voice or typed notes into structured tracker tickets.",
-        "isAccessibleForFree": true,
-        "license": "https://opensource.org/license/mit",
-        "codeRepository": "https://github.com/jaroslawkaczmarski/Speqify"
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://speqify.app/#website",
+            "name": "Speqify",
+            "url": "https://speqify.app/",
+            "description": "A local-first browser sidebar that captures web context and turns voice or typed notes into structured tracker tickets.",
+            "inLanguage": "en"
+          },
+          {
+            "@type": "SoftwareSourceCode",
+            "@id": "https://speqify.app/#source",
+            "name": "Speqify",
+            "url": "https://speqify.app/",
+            "description": "Open-source code for the Speqify browser extension.",
+            "codeRepository": "https://github.com/jaroslawkaczmarski/Speqify",
+            "license": "https://opensource.org/license/mit",
+            "programmingLanguage": "TypeScript",
+            "runtimePlatform": "Chrome, Edge, Brave, Arc, Opera, Firefox",
+            "isPartOf": {
+              "@id": "https://speqify.app/#website"
+            }
+          }
+        ]
       }
     </script>
     <link
