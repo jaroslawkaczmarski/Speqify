@@ -15,8 +15,11 @@ tracker tokens and AI keys live only in `chrome.storage.local`.
 (Whisper for speech-to-text + a small Qwen3 instruct model — 0.6B/1.7B ONNX — for drafting; nothing downloads until
 the user opts into a tier in Settings). The alternative is a **remote OpenAI-compatible endpoint**
 the user supplies as a URL + key (OpenAI, OpenRouter, Ollama, or any compatible gateway): drafting
-via `/chat/completions`, optional transcription via `/audio/transcriptions`. There is no separate
-Anthropic/Google/Chrome provider path — use OpenRouter for hosted Claude/Gemini.
+via `/chat/completions`, optional transcription via `/audio/transcriptions`. In local mode,
+drafting prefers **Chrome's built-in Gemini Nano** (Prompt API, `src/ai/chrome-ai.ts`) when the
+browser reports it available, and falls back to the downloaded Qwen model; transcription always
+uses Whisper or the remote endpoint. There is no separate hosted Anthropic/Google provider path —
+use OpenRouter for hosted Claude/Gemini.
 
 **Stack:** pnpm 9.15 + Turborepo · Node ≥22 · TypeScript (strict) · React 19 · WXT (extension) ·
 Vite (landing) · Zustand · Tailwind v4 · Vitest.
@@ -34,20 +37,46 @@ Dependency flow: `extension → core + ui`, `landing → ui`, `core` is standalo
 
 ## Commands
 
+Install deps and build/test in the containers (`compose.yaml`; deps live in named volumes, no
+host `pnpm install`). Use podman when it is installed and working, otherwise `docker compose`.
+
 ```bash
-pnpm install
+podman compose run --rm install      # pnpm install --frozen-lockfile
+podman compose run --rm build        # turbo build (everything)
+podman compose run --rm ext-build    # pnpm ext:build → apps/extension/.output/chrome-mv3/
+podman compose up landing-dev        # landing (vite) → http://localhost:5173
+podman compose run --rm audit        # pnpm audit
+podman compose run --rm shell        # shell; run other scripts as `corepack pnpm <script>`
+```
+
+Root scripts (run in the container, e.g. `podman compose run --rm shell bash -lc "corepack pnpm test"`):
+
+```bash
 pnpm dev | pnpm build | pnpm lint | pnpm typecheck | pnpm test   # all via turbo
 pnpm format            # prettier --write .
 
 # Extension (filtered to @speqify/extension)
-pnpm ext:dev           # WXT dev — launches Chrome with the extension loaded
 pnpm ext:build         # → apps/extension/.output/chrome-mv3/
-pnpm ext:zip           # → .output/speqify.zip  (Web Store submission)
-pnpm landing:dev
+pnpm ext:build:firefox # → .output/firefox-mv3/ (MV3, sidebar_action, gecko id)
+pnpm ext:build:opera   # → .output/opera-mv3/ (sidebar_action instead of side_panel)
+pnpm ext:zip           # → .output/speqifyextension-<ver>-chrome.zip (Chrome/Edge)
+pnpm ext:zip:firefox   # → …-firefox.zip + …-sources.zip (AMO source upload)
+pnpm ext:zip:opera     # → …-opera.zip
 
 # Single package / single test
 pnpm --filter @speqify/core test
 ```
+
+`pnpm ext:dev` (WXT dev) launches a browser, which the container doesn't have — build in the
+container and load `.output/<browser>-mv3/` unpacked on the host instead. Store packaging and
+per-store steps: `apps/extension/store/PUBLISHING.md`.
+
+**Landing deploy:** `apps/landing/wrangler.jsonc` is an assets-only Cloudflare Worker named
+`speqify` serving `apps/landing/dist` (`html_handling: drop-trailing-slash`,
+`not_found_handling: 404-page`). `pnpm --filter @speqify/landing build` = `vite build` + SSR build +
+`prerender.mjs` (static HTML) — never deploy a bare `vite build`. The worker name was aligned
+with the Cloudflare build connected to this repo, so assume a push to `main` deploys the landing
+(confirm in the Cloudflare dashboard). `wrangler` is not a workspace dependency.
 
 Turbo task graph (`turbo.json`): `build`/`zip`/`typecheck`/`test` all `dependsOn: ["^build"]`
 (workspace deps build first); `dev` is `persistent`, non-cached.
@@ -64,9 +93,12 @@ Turbo task graph (`turbo.json`): `build`/`zip`/`typecheck`/`test` all `dependsOn
   click coords during a capture) and `inject.content.ts` (hooks `console`/`fetch`/`XHR`/errors,
   relays via `window.postMessage`).
 - **AI layer (`src/ai/`)** is the real model client (core has none): `local.ts` (Transformers.js
-  Whisper + Qwen, WebGPU), `remote.ts` (OpenAI-compatible chat + transcription), `prompt.ts`
-  (`buildDraftSystem`/`buildDraftUser` — honors `autoLabels`, `translateTo`, and injects per-type
-  Templates), `index.ts` (`draftTicket`/`transcribeAudio`). Edit AI behaviour here, not in core.
+  Whisper + Qwen, WebGPU, run off-thread by `local-worker.ts` → `engine.ts`), `chrome-ai.ts`
+  (Chrome's built-in Gemini Nano via the Prompt API — `probeNano`/`nanoGenerate`, preferred for
+  local drafting with a JSON `responseConstraint`), `remote.ts` (OpenAI-compatible chat +
+  transcription), `prompt.ts` (`buildDraftSystem`/`buildDraftUser` — honors `autoLabels`,
+  `translateTo`, and injects per-type Templates), `download-store.ts` (local model download state),
+  `index.ts` (`draftTicket`/`transcribeAudio`). Edit AI behaviour here, not in core.
 - **Recording (`src/panel/recorder.ts`)** honors the source picker: `quality`→height constraint,
   `tab`/`area`/`element`→`preferCurrentTab`, `window`→raw surface. For `area`/`element` (and for
   click rings when cursor highlight is on) frames are piped through a canvas to crop + draw rings;
@@ -87,12 +119,8 @@ relaxes `verbatimModuleSyntax` for re-exports). ESLint flat config (`eslint.conf
 (width 100, double quotes). Dev container builds inside the container, but **load the unpacked
 extension on the host browser** (the browser isn't in the container).
 
-## Skills — note before adding
+## Skills
 
-This repo's **`.gitignore` ignores `.claude/`** (line 27), so a `.claude/skills/` folder would
-**not** ship with the code. To commit project-local skills, first narrow the ignore, e.g.:
-
-```gitignore
-.claude/*
-!.claude/skills/
-```
+`.gitignore` ignores `.claude/*` **except `.claude/skills/`**, so project-local skills under
+`.claude/skills/` can be committed with the code (`release-extension` and `test-core` are tracked);
+other `.claude/` files (`launch.json`, `settings.local.json`) stay local.
