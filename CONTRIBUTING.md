@@ -23,7 +23,7 @@ Inside the container (note: `corepack enable pnpm` first if `pnpm` isn't on PATH
 
 ```bash
 pnpm -r typecheck        # type-check every package
-pnpm -r lint             # ESLint (flat config)
+pnpm lint                # oxlint (one run over the whole repo)
 pnpm --filter @speqify/core test   # Vitest
 pnpm ext:build           # build the extension → apps/extension/.output/chrome-mv3
 pnpm --filter @speqify/landing build
@@ -35,11 +35,12 @@ pnpm --filter @speqify/landing build
 
 ## Before opening a PR
 
-- `pnpm -r typecheck && pnpm -r lint && pnpm --filter @speqify/core test` all pass.
+- `.githooks/pre-push` passes (oxlint + typecheck + Vitest in the container; enable it with
+  `git config core.hooksPath .githooks` and it runs on `git push`). There is no CI test run.
 - `pnpm format` (Prettier — width 100, double quotes) is clean.
 - Keep changes focused; match the surrounding code style.
 - If your change touches capture/AI/trackers, smoke-test the relevant flow in the
-  browser (the on-device model + WebGPU bits can't be covered by CI).
+  browser (the on-device model + WebGPU bits can't be covered by automated checks).
 
 ## Security
 

@@ -4,6 +4,7 @@
 #   podman compose run --rm ext-build    # build MV3 extension → apps/extension/.output/
 #   podman compose up landing-dev        # landing (vite) → http://localhost:5173
 #   podman compose run --rm build        # turbo build (everything)
+#   podman compose run --rm check        # oxlint + typecheck + test (what .githooks/pre-push runs)
 #   podman compose run --rm audit
 #   podman compose run --rm shell
 #
@@ -41,6 +42,11 @@ services:
     <<: *node
     ports: ["5173:5173"]
     command: ["bash", "-lc", "mkdir -p /tmp/corepack-bin && corepack enable --install-directory /tmp/corepack-bin && export PATH=/tmp/corepack-bin:$PATH && pnpm --filter @speqify/landing exec vite --host 0.0.0.0 --port 5173"]
+  # Pre-push checks (.githooks/pre-push): oxlint, then typecheck + test for the packages
+  # picked by CHECK_FILTER (turbo --filter args; unset = every package).
+  check:
+    <<: *node
+    command: ["bash", "-lc", "mkdir -p /tmp/corepack-bin && corepack enable --install-directory /tmp/corepack-bin && export PATH=/tmp/corepack-bin:$PATH && pnpm lint && pnpm turbo run typecheck test $${CHECK_FILTER:-}"]
   audit:
     <<: *node
     command: ["bash", "-lc", "mkdir -p /tmp/corepack-bin && corepack enable --install-directory /tmp/corepack-bin && export PATH=/tmp/corepack-bin:$PATH && pnpm audit || true"]

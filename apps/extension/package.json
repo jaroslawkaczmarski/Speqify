@@ -16,8 +16,7 @@
     "zip:firefox": "pnpm assets && wxt zip -b firefox",
     "zip:opera": "pnpm assets && wxt zip -b opera",
     "postinstall": "wxt prepare",
-    "typecheck": "wxt prepare && tsc --noEmit",
-    "lint": "eslint ."
+    "typecheck": "wxt prepare && tsc --noEmit"
   },
   "dependencies": {
     "@fontsource/geist-mono": "^5.2.8",

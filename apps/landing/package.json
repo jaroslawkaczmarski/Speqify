@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "vite build && vite build --ssr src/entry-server.tsx --outDir dist/ssr-tmp && node prerender.mjs",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@speqify/ui": "workspace:*",
