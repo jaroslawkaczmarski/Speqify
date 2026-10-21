@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Pre-push gate. CI does not run tests or lint; this hook runs them once, in
+# containers, for the parts of the repository the pushed commits change.
+#   Enable once per clone:  git config core.hooksPath .githooks
+#   Run by hand:            .githooks/pre-push   (working tree vs. the upstream branch)
+#   Show the plan only:     PRE_PUSH_DRY_RUN=1 .githooks/pre-push
+#   Skip in an emergency:   git push --no-verify
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+CR=$(command -v podman || command -v docker) || {
+  echo "pre-push: podman or docker is required" >&2
+  exit 1
+}
+
+# Paths changed by the push (git passes "<local ref> <local sha> <remote ref> <remote sha>"
+# lines on stdin), or by the working tree when run by hand. ALL = could not tell.
+changed=""
+pushed=false
+if [ ! -t 0 ]; then
+  while read -r _ local_sha _ remote_sha; do
+    pushed=true
+    [[ $local_sha =~ ^0+$ ]] && continue # deleting a remote branch
+    base=$remote_sha
+    if [[ $remote_sha =~ ^0+$ ]] || ! git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+      base=$(git merge-base "$local_sha" origin/HEAD 2>/dev/null || true)
+    fi
+    if [ -z "$base" ]; then changed=ALL; break; fi
+    changed+=$(git diff --name-only "$base" "$local_sha")$'\n'
+  done
+fi
+if ! $pushed; then
+  base=$(git merge-base HEAD '@{u}' 2>/dev/null || git merge-base HEAD origin/HEAD 2>/dev/null || true)
+  if [ -z "$base" ]; then
+    changed=ALL
+  else
+    changed=$(git diff --name-only "$base"; git ls-files --others --exclude-standard)
+  fi
+fi
+
+# changed_in <extended regex>: true when a changed path matches (always true for ALL).
+changed_in() { [ "$changed" = ALL ] || grep -qE "$1" <<<"$changed"; }
+
+run() {
+  echo "pre-push: $*" >&2
+  [ -n "${PRE_PUSH_DRY_RUN:-}" ] || "$@"
+}
+
+# Documentation-only pushes need no checks.
+if [ "$changed" != ALL ] && ! grep -qvE '\.md$|^docs/|^$' <<<"$changed"; then
+  echo "pre-push: only documentation changed, nothing to check" >&2
+  exit 0
+fi
+
+# --- project checks -----------------------------------------------------------
+# One container run: oxlint over the whole repo (fast), then turbo typecheck + test for the
+# changed packages and their dependents (extension -> core + ui, landing -> ui).
+root='^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig(\.base)?\.json|\.oxlintrc\.json|compose\.yaml)$'
+filters=()
+if ! changed_in "$root"; then
+  if changed_in '^packages/core/'; then filters+=("--filter=...@speqify/core"); fi
+  if changed_in '^packages/ui/'; then filters+=("--filter=...@speqify/ui"); fi
+  if changed_in '^apps/extension/'; then filters+=("--filter=@speqify/extension"); fi
+  if changed_in '^apps/landing/'; then filters+=("--filter=@speqify/landing"); fi
+  if [ ${#filters[@]} -eq 0 ]; then
+    echo "pre-push: no package or workspace config changed, nothing to check" >&2
+    exit 0
+  fi
+fi
+
+# Refresh the node_modules volume when dependencies changed.
+if changed_in '(^|/)package\.json$|^pnpm-lock\.yaml$'; then
+  run "$CR" compose run --rm install
+fi
+
+if [ ${#filters[@]} -eq 0 ]; then
+  run "$CR" compose run --rm check
+else
+  run "$CR" compose run --rm -e "CHECK_FILTER=${filters[*]}" check
+fi
+
+echo "pre-push: checks passed" >&2

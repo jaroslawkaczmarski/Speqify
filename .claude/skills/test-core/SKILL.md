@@ -1,6 +1,6 @@
 ---
 name: test-core
-description: Run the Speqify @speqify/core Vitest suite — the ticket schema, AI text helpers (JSON extraction, step descriptions), and tracker formatting (Markdown, Jira ADF, screenshot embedding). Use when the user runs `/test-core`, or after changing anything in packages/core, to confirm the domain logic still passes.
+description: Run the Speqify @speqify/core Vitest suite — the ticket schema, AI text helpers (JSON extraction, step descriptions), and tracker formatting (Markdown, Jira ADF, screenshot embedding). Use when the user runs `/test-core`, or to diagnose a failing core test (the pre-push hook runs the suite on `git push`).
 disable-model-invocation: true
 ---
 

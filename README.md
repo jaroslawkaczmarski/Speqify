@@ -54,7 +54,7 @@ packages/
 ## Toolchain
 
 - Node `>=22`, pnpm `9.15`, Turborepo
-- TypeScript (strict), ESLint (flat config), Prettier
+- TypeScript (strict), oxlint, Prettier
 - Extension: [WXT](https://wxt.dev) (Vite-native, cross-browser MV3)
 
 ## Develop in a container (recommended)
@@ -86,7 +86,7 @@ pnpm ext:dev          # run the extension in dev (launches Chrome with it loaded
 pnpm ext:build        # production extension build → apps/extension/.output/chrome-mv3
 pnpm ext:zip          # zip for the Web Store
 pnpm landing:dev      # landing dev server
-pnpm -r typecheck     # typecheck all · pnpm -r lint · pnpm --filter @speqify/core test
+pnpm -r typecheck     # typecheck all · pnpm lint (oxlint) · pnpm --filter @speqify/core test
 ```
 
 > In the container, run `corepack enable pnpm` first if `pnpm` isn't on PATH.

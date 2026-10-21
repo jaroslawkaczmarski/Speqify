@@ -37,9 +37,8 @@ published one, or the store rejects the upload.
    previous store release (`CHANGELOG.md`, Git history) and apply the rule above, unless the user
    passed an explicit level or version. Keep it valid semver and add a `CHANGELOG.md` entry.
 2. **Verify it's green first** in the container (podman when installed and working, otherwise
-   docker): `podman compose run --rm install`, then
-   `podman compose run --rm shell bash -lc "corepack pnpm --filter @speqify/extension typecheck && corepack pnpm --filter @speqify/extension lint"`
-   (or `/test-core` for the domain logic). Don't package a failing build.
+   docker): `podman compose run --rm install`, then `podman compose run --rm check` (oxlint +
+   typecheck + Vitest, the same run as `.githooks/pre-push`). Don't package a failing build.
 3. **Build + zip** in the container:
    `podman compose run --rm shell bash -lc "corepack pnpm ext:zip && corepack pnpm ext:zip:firefox && corepack pnpm ext:zip:opera"`
    (each runs `assets` → `wxt build` → `wxt zip`). For a debug build without zipping,

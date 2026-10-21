@@ -45,6 +45,7 @@ podman compose run --rm install      # pnpm install --frozen-lockfile
 podman compose run --rm build        # turbo build (everything)
 podman compose run --rm ext-build    # pnpm ext:build → apps/extension/.output/chrome-mv3/
 podman compose up landing-dev        # landing (vite) → http://localhost:5173
+podman compose run --rm check        # oxlint + typecheck + test (CHECK_FILTER=<turbo --filter args>)
 podman compose run --rm audit        # pnpm audit
 podman compose run --rm shell        # shell; run other scripts as `corepack pnpm <script>`
 ```
@@ -52,7 +53,8 @@ podman compose run --rm shell        # shell; run other scripts as `corepack pnp
 Root scripts (run in the container, e.g. `podman compose run --rm shell bash -lc "corepack pnpm test"`):
 
 ```bash
-pnpm dev | pnpm build | pnpm lint | pnpm typecheck | pnpm test   # all via turbo
+pnpm dev | pnpm build | pnpm typecheck | pnpm test   # all via turbo
+pnpm lint              # oxlint, one run over the whole repo (.oxlintrc.json)
 pnpm format            # prettier --write .
 
 # Extension (filtered to @speqify/extension)
@@ -79,7 +81,17 @@ with the Cloudflare build connected to this repo, so assume a push to `main` dep
 (confirm in the Cloudflare dashboard). `wrangler` is not a workspace dependency.
 
 Turbo task graph (`turbo.json`): `build`/`zip`/`typecheck`/`test` all `dependsOn: ["^build"]`
-(workspace deps build first); `dev` is `persistent`, non-cached.
+(workspace deps build first); `dev` is `persistent`, non-cached. Lint is not a turbo task.
+
+## Checks
+
+CI does not run tests, lint or typecheck (there is no GitHub CI). `.githooks/pre-push` runs the
+checks for the changed packages once, in containers, on `git push` (oxlint + typecheck + Vitest
+via `podman compose run --rm check`; enable once per clone: `git config core.hooksPath .githooks`;
+run by hand: `.githooks/pre-push`). Do not run checks after every change or add a test for every
+small addition; run them when shipping (`/ship`), or one focused test when diagnosing a bug.
+Before a release, also run by hand: `podman compose run --rm audit`, and smoke-test the built
+extension in the host browser (capture/AI/tracker flows).
 
 ## Extension specifics
 
@@ -115,7 +127,8 @@ Turbo task graph (`turbo.json`): `build`/`zip`/`typecheck`/`test` all `dependsOn
 ## Conventions
 
 Strict TS from `tsconfig.base.json` (`noUncheckedIndexedAccess`, `verbatimModuleSyntax`, etc.; `ui`
-relaxes `verbatimModuleSyntax` for re-exports). ESLint flat config (`eslint.config.js`), Prettier
+relaxes `verbatimModuleSyntax` for re-exports). oxlint (`.oxlintrc.json`, migrated from the old
+ESLint recommended + typescript-eslint recommended set), Prettier
 (width 100, double quotes). Dev container builds inside the container, but **load the unpacked
 extension on the host browser** (the browser isn't in the container).
 
